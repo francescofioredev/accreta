@@ -19,3 +19,10 @@ export type { DriftReport, StalePage, UnresolvableRevision } from "./source/drif
 export { detectDrift } from "./source/drift.ts";
 export type { SourceDeclaration, SourceFactory } from "./source/registry.ts";
 export { SourceRegistry, parseSourceDeclaration } from "./source/registry.ts";
+
+export type { SearchHit, SearchOptions } from "./query/search.ts";
+export { searchPages } from "./query/search.ts";
+export type { CanonicalMatch, PageRecord, Relation } from "./query/page.ts";
+export { findCanonical, findRelated, getPage } from "./query/page.ts";
+export type { LintFinding, LintReport } from "./query/lint.ts";
+export { lint } from "./query/lint.ts";

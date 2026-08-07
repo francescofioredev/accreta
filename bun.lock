@@ -34,6 +34,18 @@
         "@accreta/core": "workspace:*",
       },
     },
+    "packages/cli": {
+      "name": "@accreta/cli",
+      "version": "0.0.0",
+      "bin": {
+        "accreta": "./src/main.ts",
+      },
+      "dependencies": {
+        "@accreta/adapter-fs": "workspace:*",
+        "@accreta/adapter-git": "workspace:*",
+        "@accreta/core": "workspace:*",
+      },
+    },
     "packages/core": {
       "name": "@accreta/core",
       "version": "0.0.0",
@@ -48,6 +60,8 @@
     "@accreta/adapter-git": ["@accreta/adapter-git@workspace:packages/adapters/git"],
 
     "@accreta/adapter-tests": ["@accreta/adapter-tests@workspace:packages/adapters"],
+
+    "@accreta/cli": ["@accreta/cli@workspace:packages/cli"],
 
     "@accreta/core": ["@accreta/core@workspace:packages/core"],
 
