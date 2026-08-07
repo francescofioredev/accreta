@@ -1,0 +1,24 @@
+{
+  "name": "accreta",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "A knowledge base an agent writes and maintains, with provenance to the sources and drift detection when they change.",
+  "workspaces": [
+    "packages/*",
+    "packages/adapters/*"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint packages",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14",
+    "oxlint": "^1.14.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.9.3"
+  }
+}

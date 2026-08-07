@@ -1,0 +1,14 @@
+{
+  "name": "@accreta/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Parsing, link graph, indexing and search. Knows nothing about where sources come from.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "yaml": "^2.7.0"
+  }
+}
