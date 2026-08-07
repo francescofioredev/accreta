@@ -221,21 +221,26 @@ describe("buildIndex", () => {
     after.close();
   });
 
-  test("a connection held across a swap fails loudly instead of serving stale rows", () => {
-    // Worth pinning down, because the tempting claim — that an in-flight reader
-    // keeps its old inode and finishes undisturbed — is not what SQLite does.
-    // It revalidates the file behind the handle and fails with SQLITE_IOERR.
-    // A caller must reopen after a rebuild. Loud beats silently stale.
+  test("a reopened connection sees the new index after a swap", () => {
+    // What a caller may rely on: reopen after a rebuild and you get the new
+    // data. What it may *not* rely on is the fate of a handle held across the
+    // swap — that is platform-dependent. On Linux the unlinked inode stays
+    // alive behind the open descriptor and the stale handle keeps serving the
+    // old rows; on macOS SQLite revalidates the file and fails the connection
+    // with SQLITE_IOERR. Neither is asserted here, because pinning either one
+    // would encode one platform's filesystem semantics as a promise.
     writePage("a.md", "# A\n");
     build();
 
-    const stale = openIndex(indexPath, { readonly: true });
-    expect(stale.query("SELECT COUNT(*) AS n FROM pages").get()).toEqual({ n: 1 });
+    const first = openIndex(indexPath, { readonly: true });
+    expect(first.query("SELECT COUNT(*) AS n FROM pages").get()).toEqual({ n: 1 });
+    first.close();
 
     writePage("b.md", "# B\n");
     build();
 
-    expect(() => stale.query("SELECT COUNT(*) AS n FROM pages").get()).toThrow();
-    stale.close();
+    const second = openIndex(indexPath, { readonly: true });
+    expect(second.query("SELECT COUNT(*) AS n FROM pages").get()).toEqual({ n: 2 });
+    second.close();
   });
 });

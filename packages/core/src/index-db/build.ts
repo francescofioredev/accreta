@@ -66,13 +66,13 @@ export function buildIndex(options: BuildOptions): BuildResult {
   // a half-rebuilt index: at any instant the path names the whole old database
   // or the whole new one.
   //
-  // What this does *not* buy is transparency for a connection that outlives the
-  // swap. SQLite revalidates the file behind an open handle and fails that
-  // connection with SQLITE_IOERR once the inode beneath it changes, whether the
-  // old file was unlinked first or replaced by the rename. A long-lived reader
-  // therefore has to reopen after a rebuild; it does not silently keep serving
-  // stale rows, which is the safer of the two failure modes and the reason the
-  // error is worth surfacing rather than papering over.
+  // What this does *not* buy is a defined outcome for a connection that outlives
+  // the swap, and the difference is platform-dependent: on Linux the unlinked
+  // inode stays alive behind the open descriptor and the stale handle keeps
+  // serving the old rows, while on macOS SQLite revalidates the file and fails
+  // that connection with SQLITE_IOERR. Both were observed in CI against the
+  // same code. A long-lived reader must therefore reopen after a rebuild rather
+  // than assume either behaviour.
   //
   // The staging file sits beside the target, not in the system temp directory:
   // rename(2) across filesystems fails with EXDEV, and /tmp is very often a
