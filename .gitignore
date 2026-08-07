@@ -40,3 +40,7 @@ coverage/
 *.log
 npm-debug.log*
 bun-debug.log*
+
+# Local agent scratch space: session notes and working files that are not
+# project artifacts. Anything worth keeping graduates to docs/ or an issue.
+.scratch/
