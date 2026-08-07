@@ -140,8 +140,17 @@ transaction. At this corpus size delta tracking would add failure modes to save 
 
 For hosted deployments the rebuild happens beside the live index and is moved into place with
 `rename(2)`, which is atomic within a filesystem. A reader either sees the whole old index or
-the whole new one, and a query already in flight keeps its file descriptor on the old inode
-until it finishes.
+the whole new one; the path never names a half-rebuilt database.
+
+A connection that outlives the swap is a different matter, and the outcome depends on the
+platform. On Linux the unlinked inode stays alive behind the open descriptor, so a stale
+handle keeps serving the old rows; on macOS SQLite revalidates the file and fails that
+connection with `SQLITE_IOERR`. Both behaviours were observed against the same code, one
+locally and one in CI.
+
+A long-lived reader therefore has to reopen after a rebuild rather than rely on either. The
+tests assert only what holds everywhere — reopen and you see the new index — because pinning
+the rest would encode one platform's filesystem semantics as a promise.
 
 ## Surfaces
 
