@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import type { AccretaConfig } from "../config.ts";
 import { extractLinks, tryResolveWikilink } from "../links.ts";
@@ -60,13 +60,54 @@ function toPosix(path: string): string {
 export function buildIndex(options: BuildOptions): BuildResult {
   const started = performance.now();
   const { root, config, indexPath } = options;
-  const db = openIndex(indexPath);
 
+  // Build beside the live index rather than into it, then move the finished file
+  // into place. rename(2) is atomic within a filesystem, so no reader ever opens
+  // a half-rebuilt index: at any instant the path names the whole old database
+  // or the whole new one.
+  //
+  // What this does *not* buy is transparency for a connection that outlives the
+  // swap. SQLite revalidates the file behind an open handle and fails that
+  // connection with SQLITE_IOERR once the inode beneath it changes, whether the
+  // old file was unlinked first or replaced by the rename. A long-lived reader
+  // therefore has to reopen after a rebuild; it does not silently keep serving
+  // stale rows, which is the safer of the two failure modes and the reason the
+  // error is worth surfacing rather than papering over.
+  //
+  // The staging file sits beside the target, not in the system temp directory:
+  // rename(2) across filesystems fails with EXDEV, and /tmp is very often a
+  // different filesystem.
+  const stagingPath = `${indexPath}.building`;
+  removeIndexFiles(stagingPath);
+
+  const db = openIndex(stagingPath);
+  let result: BuildResult;
   try {
-    return runBuild(db, root, config, started);
-  } finally {
+    result = runBuild(db, root, config, started);
     sealForReading(db);
+  } finally {
     db.close();
+  }
+
+  // Rename *over* the target rather than unlinking it first. rename(2) replaces
+  // the destination atomically, and unlinking beforehand is what breaks the
+  // guarantee: a reader holding the old file gets "disk I/O error" the moment
+  // its inode is dropped, instead of quietly finishing against the old data.
+  renameSync(stagingPath, indexPath);
+
+  // The staging sidecars are not covered by the rename; the sealed database
+  // needs none of them.
+  for (const suffix of ["-wal", "-shm"]) {
+    rmSync(`${stagingPath}${suffix}`, { force: true });
+  }
+
+  return { ...result, ms: performance.now() - started };
+}
+
+/** Remove a stale staging index and any sidecars left beside it. */
+function removeIndexFiles(path: string): void {
+  for (const suffix of ["", "-wal", "-shm"]) {
+    rmSync(`${path}${suffix}`, { force: true });
   }
 }
 

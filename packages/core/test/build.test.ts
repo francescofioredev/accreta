@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_CONFIG, type AccretaConfig } from "../src/config.ts";
@@ -195,5 +195,47 @@ describe("buildIndex", () => {
     expect(meta.page_count).toBe("1");
     expect(meta.knowledge_base).toBe("knowledge");
     db.close();
+  });
+
+  test("the rebuild leaves no staging file behind", () => {
+    writePage("a.md", "# A\n");
+    build();
+    expect(existsSync(`${indexPath}.building`)).toBe(false);
+  });
+
+  test("a rebuild swaps in the new index atomically", () => {
+    // rename(2) guarantees no reader ever opens a half-rebuilt index: the path
+    // names the whole old database or the whole new one.
+    writePage("a.md", "# A\n");
+    build();
+
+    const before = openIndex(indexPath, { readonly: true });
+    expect(before.query("SELECT COUNT(*) AS n FROM pages").get()).toEqual({ n: 1 });
+    before.close();
+
+    writePage("b.md", "# B\n");
+    build();
+
+    const after = openIndex(indexPath, { readonly: true });
+    expect(after.query("SELECT COUNT(*) AS n FROM pages").get()).toEqual({ n: 2 });
+    after.close();
+  });
+
+  test("a connection held across a swap fails loudly instead of serving stale rows", () => {
+    // Worth pinning down, because the tempting claim — that an in-flight reader
+    // keeps its old inode and finishes undisturbed — is not what SQLite does.
+    // It revalidates the file behind the handle and fails with SQLITE_IOERR.
+    // A caller must reopen after a rebuild. Loud beats silently stale.
+    writePage("a.md", "# A\n");
+    build();
+
+    const stale = openIndex(indexPath, { readonly: true });
+    expect(stale.query("SELECT COUNT(*) AS n FROM pages").get()).toEqual({ n: 1 });
+
+    writePage("b.md", "# B\n");
+    build();
+
+    expect(() => stale.query("SELECT COUNT(*) AS n FROM pages").get()).toThrow();
+    stale.close();
   });
 });
