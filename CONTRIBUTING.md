@@ -53,13 +53,22 @@ All four must pass before a pull request is ready. CI enforces them.
 
 ## Pull requests
 
-- Branch off `main`; `main` is protected and takes no direct pushes (including from the
-  maintainer).
+- Branch off `main`; `main` is protected and takes no direct pushes.
 - One logical change per pull request. Two unrelated fixes are two pull requests.
 - Explain *why* in the description, not only *what* — the diff already shows what.
 - Link the issue the pull request resolves (`Fixes #N`). Note that GitHub does not honor
   the keyword inside backticks.
 - Merges are squashed, keeping history linear and readable as a narrative.
+- Your pull request needs one approving review from a code owner. Force pushes and branch
+  deletion on `main` are blocked outright.
+
+> **On the maintainer's own pull requests.** GitHub does not allow anyone to approve their
+> own pull request, so with a single maintainer the review requirement would deadlock every
+> change. Until there is a second reviewer, the maintainer merges their own work using an
+> admin override, and the requirement stands for everyone else. This is written down rather
+> than left implicit because a rule that is quietly bypassed is worse than one that is
+> honestly scoped — and when a second maintainer arrives, the override stops being used and
+> nothing else has to change.
 
 ## Reporting a bug
 

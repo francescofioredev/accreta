@@ -89,7 +89,12 @@ The roadmap is six phases, one epic each, tracked on the
 | 6 | Demo knowledge base, docs, v0.1.0 | [#6](https://github.com/francescofioredev/accreta/issues/6) |
 
 Open a task issue under the relevant epic, branch, PR, squash merge. `main` is protected and
-takes no direct pushes — including from the maintainer, verified.
+takes no direct pushes; force pushes and deletion are blocked.
+
+A code-owner review is required, but GitHub does not let anyone approve their own pull
+request — so with one maintainer that rule would block every change. Until there is a second
+reviewer, the maintainer merges with `gh pr merge --admin`. The scope of that exception is
+written down in `CONTRIBUTING.md`; keep it there rather than letting it become folklore.
 
 ## 6. This repository is public
 
