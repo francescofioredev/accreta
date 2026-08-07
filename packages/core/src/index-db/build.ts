@@ -1,0 +1,184 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative, sep } from "node:path";
+import type { AccretaConfig } from "../config.ts";
+import { extractLinks, tryResolveWikilink } from "../links.ts";
+import { parsePage } from "../page.ts";
+import { openIndex, sealForReading, type Database } from "./db.ts";
+
+export interface BuildResult {
+  pages: number;
+  links: number;
+  brokenLinks: number;
+  ms: number;
+}
+
+export interface BuildOptions {
+  /** Root the knowledge base is resolved against and paths are recorded relative to. */
+  root: string;
+  config: AccretaConfig;
+  /** Where to write the index. */
+  indexPath: string;
+}
+
+function* walkMarkdown(dir: string): Generator<string> {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    // A knowledge base that does not exist yet is an empty one, not a crash:
+    // `init` writes the config before there is anything to index.
+    return;
+  }
+  for (const entry of entries) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
+      yield* walkMarkdown(full);
+    } else if (entry.isFile() && entry.name.endsWith(".md")) {
+      yield full;
+    }
+  }
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+/** Record paths with `/` regardless of platform: they are identifiers, not filesystem locations. */
+function toPosix(path: string): string {
+  return sep === "/" ? path : path.split(sep).join("/");
+}
+
+/**
+ * Rebuild the whole index.
+ *
+ * Not incremental by design: a DELETE and reinsert of every page inside one
+ * transaction. At the corpus sizes this targets, delta tracking buys
+ * milliseconds and costs a class of staleness bugs where the index disagrees
+ * with the knowledge base and nothing notices.
+ */
+export function buildIndex(options: BuildOptions): BuildResult {
+  const started = performance.now();
+  const { root, config, indexPath } = options;
+  const db = openIndex(indexPath);
+
+  try {
+    return runBuild(db, root, config, started);
+  } finally {
+    sealForReading(db);
+    db.close();
+  }
+}
+
+function runBuild(db: Database, root: string, config: AccretaConfig, started: number): BuildResult {
+  const insertPage = db.prepare(`
+    INSERT INTO pages (
+      path, type, title, source, canonical_source,
+      last_verified_revision, last_ingest_revision, last_ingest_at,
+      frontmatter_json, body, mtime
+    ) VALUES (
+      $path, $type, $title, $source, $canonical_source,
+      $last_verified_revision, $last_ingest_revision, $last_ingest_at,
+      $frontmatter_json, $body, $mtime
+    )
+  `);
+  const insertFts = db.prepare(`
+    INSERT INTO pages_fts (title, body, path, type, source)
+    VALUES ($title, $body, $path, $type, $source)
+  `);
+  const insertLink = db.prepare(
+    `INSERT OR IGNORE INTO links (src_path, dst_path, kind) VALUES ($src, $dst, $kind)`,
+  );
+  const insertBroken = db.prepare(
+    `INSERT OR IGNORE INTO broken_links (src_path, target, kind, reason)
+     VALUES ($src, $target, $kind, $reason)`,
+  );
+  const upsertMeta = db.prepare(
+    `INSERT INTO meta (key, value) VALUES ($key, $value)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+  );
+
+  let pages = 0;
+  let links = 0;
+  let brokenLinks = 0;
+  let maxMtime = 0;
+
+  const knowledgeDir = join(root, config.knowledgeBase);
+
+  db.exec("BEGIN");
+  try {
+    db.exec("DELETE FROM pages");
+    db.exec("DELETE FROM pages_fts");
+    db.exec("DELETE FROM links");
+    db.exec("DELETE FROM broken_links");
+
+    for (const absolute of walkMarkdown(knowledgeDir)) {
+      const path = toPosix(relative(root, absolute));
+      const raw = readFileSync(absolute, "utf-8");
+      const mtime = statSync(absolute).mtimeMs;
+      if (mtime > maxMtime) maxMtime = mtime;
+
+      const fallbackTitle = path.replace(/\.md$/, "");
+      const { frontmatter, body, title } = parsePage(raw, fallbackTitle);
+
+      // An unrecognised type is recorded as-is rather than coerced: the page
+      // exists and `lint` should be able to name what is wrong with it.
+      const type = asString(frontmatter.type) ?? "unknown";
+      const source = asString(frontmatter.source);
+
+      insertPage.run({
+        $path: path,
+        $type: type,
+        $title: title,
+        $source: source,
+        $canonical_source: asString(frontmatter.canonical_source),
+        $last_verified_revision: asString(frontmatter.last_verified_revision),
+        $last_ingest_revision: asString(frontmatter.last_ingest_revision),
+        $last_ingest_at: asString(frontmatter.last_ingest_at),
+        $frontmatter_json: JSON.stringify(frontmatter),
+        $body: body,
+        $mtime: Math.floor(mtime),
+      });
+
+      insertFts.run({
+        $title: title,
+        $body: body,
+        $path: path,
+        $type: type,
+        $source: source ?? "",
+      });
+
+      for (const link of extractLinks(frontmatter, body, config)) {
+        const resolved = tryResolveWikilink(link.target, config);
+        if (resolved.ok) {
+          insertLink.run({ $src: path, $dst: resolved.path, $kind: link.kind });
+          links++;
+        } else {
+          // Kept, not dropped. Every silent-edge-loss defect in this phase came
+          // from a link disappearing with nothing to show for it.
+          insertBroken.run({
+            $src: path,
+            $target: resolved.target,
+            $kind: link.kind,
+            $reason: resolved.reason,
+          });
+          brokenLinks++;
+        }
+      }
+
+      pages++;
+    }
+
+    upsertMeta.run({ $key: "last_reindex_at", $value: new Date().toISOString() });
+    upsertMeta.run({ $key: "page_count", $value: String(pages) });
+    upsertMeta.run({ $key: "max_mtime", $value: String(Math.floor(maxMtime)) });
+    upsertMeta.run({ $key: "knowledge_base", $value: config.knowledgeBase });
+
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+
+  return { pages, links, brokenLinks, ms: performance.now() - started };
+}
