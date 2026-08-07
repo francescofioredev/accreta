@@ -1,0 +1,13 @@
+{
+  "name": "@accreta/adapter-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Cross-adapter tests: the same core code driven by every adapter.",
+  "dependencies": {
+    "@accreta/core": "workspace:*",
+    "@accreta/adapter-fs": "workspace:*",
+    "@accreta/adapter-git": "workspace:*"
+  }
+}
