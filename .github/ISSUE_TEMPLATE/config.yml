@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/francescofioredev/accreta/security/advisories/new
+    about: Report privately. Please do not open a public issue for a security problem.
+  - name: Question or idea
+    url: https://github.com/francescofioredev/accreta/discussions
+    about: For open-ended discussion that is not yet a bug or a concrete proposal.

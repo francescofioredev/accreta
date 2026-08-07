@@ -1,0 +1,44 @@
+name: Feature request
+description: Propose a change or an addition that is not a new source adapter
+title: "feature: <short description>"
+labels: ["kind:feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Proposing support for a new kind of source? Use the **adapter proposal** template
+        instead — it asks the specific questions an adapter has to answer.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: >
+        Describe the situation you are in, not the solution you have in mind. The most
+        useful feature requests describe a problem well enough that a better solution than
+        the one proposed can be found.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What do you propose?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What alternatives did you consider?
+      description: Including "do nothing" — sometimes it wins.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      description: See CONTRIBUTING.md.
+      options:
+        - label: This does not change the core method (provenance, drift, negative rules). If it does, I will make the case for it in this issue and expect to write an ADR.

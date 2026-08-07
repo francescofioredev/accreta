@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# The index is a derived artifact: it is rebuilt from the knowledge base in
+# ~150ms. Committing it would put a binary blob in every diff and would go
+# stale the moment anyone edits a page.
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.accreta-index*
+
+# Secrets. This repository is public and its history cannot be retracted:
+# prevention is the only control that works here.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.yaml
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Test and coverage
+coverage/
+.nyc_output/
+
+# Logs
+*.log
+npm-debug.log*
+bun-debug.log*

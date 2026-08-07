@@ -1,0 +1,48 @@
+name: Bug report
+description: Something behaves differently from what is documented
+title: "bug: <short description>"
+labels: ["kind:bug"]
+body:
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      description: If documentation states the expected behavior, link to it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead?
+      description: Paste the actual output. For indexing or drift problems, `accreta lint` output is usually the fastest diagnosis.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Smallest reproduction
+      description: >
+        A minimal knowledge base or a sequence of commands. Silent failures are the hardest
+        class of bug in this project — if something produced a wrong answer rather than an
+        error, say so explicitly, because that changes where we look.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: "accreta 0.1.0, or a commit SHA"
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: "macOS 15 / Bun 1.2 — or Linux / Node 22"
+    validations:
+      required: true

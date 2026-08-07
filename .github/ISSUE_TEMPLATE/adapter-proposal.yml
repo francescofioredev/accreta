@@ -1,0 +1,75 @@
+name: Adapter proposal
+description: Propose support for a new kind of source (an API, a document store, a database…)
+title: "adapter: <source type>"
+labels: ["kind:feature", "adapter"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Adapters are the natural extension point of accreta, and the most useful thing you
+        can contribute.
+
+        A source is anything that has a **revision** and can tell you **what changed**. The
+        three questions below are exactly what the `SourceAdapter` interface requires. If
+        all three have good answers, the adapter will work; if one does not, that is worth
+        discovering now rather than halfway through the implementation.
+
+  - type: input
+    id: source-type
+    attributes:
+      label: What kind of source?
+      placeholder: "Notion workspace, Confluence space, S3 bucket, Postgres table, RSS feed…"
+    validations:
+      required: true
+
+  - type: textarea
+    id: revision
+    attributes:
+      label: What is a revision?
+      description: >
+        A stable identifier for "the state of this source right now". Git uses a commit SHA;
+        the filesystem adapter uses a hash of modification times. It has to change when the
+        content changes, and not otherwise.
+      placeholder: "e.g. the workspace's last_edited_time, an ETag, a monotonic version number"
+    validations:
+      required: true
+
+  - type: textarea
+    id: change-detection
+    attributes:
+      label: How do you detect what changed between two revisions?
+      description: >
+        Given an older revision, the adapter must return the paths that have changed since.
+        If the only option is re-reading everything and diffing, say so — that is workable,
+        just more expensive, and worth knowing up front.
+      placeholder: "e.g. the API exposes a changes endpoint since a cursor; or: full scan + content hashing"
+    validations:
+      required: true
+
+  - type: textarea
+    id: citation
+    attributes:
+      label: What does a citation look like?
+      description: >
+        Provenance is the core of the project: every claim points back at a precise location
+        in a source. For code that is `path#L10-L25`. What is the equivalent here, and can it
+        be linked to?
+      placeholder: "e.g. page ID + block ID, addressable as a URL"
+    validations:
+      required: true
+
+  - type: textarea
+    id: auth
+    attributes:
+      label: Authentication and rate limits
+      description: Credentials required, and any rate limiting that would constrain ingest.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: intent
+    attributes:
+      label: Intent
+      options:
+        - label: I am willing to implement this myself
+        - label: I am proposing it for someone else to pick up
