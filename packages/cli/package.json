@@ -1,0 +1,19 @@
+{
+  "name": "@accreta/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "The human-facing surface: init, reindex, lint, drift, search.",
+  "bin": {
+    "accreta": "./src/main.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@accreta/core": "workspace:*",
+    "@accreta/adapter-fs": "workspace:*",
+    "@accreta/adapter-git": "workspace:*"
+  }
+}
