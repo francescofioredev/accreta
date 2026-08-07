@@ -140,8 +140,13 @@ transaction. At this corpus size delta tracking would add failure modes to save 
 
 For hosted deployments the rebuild happens beside the live index and is moved into place with
 `rename(2)`, which is atomic within a filesystem. A reader either sees the whole old index or
-the whole new one, and a query already in flight keeps its file descriptor on the old inode
-until it finishes.
+the whole new one; the path never names a half-rebuilt database.
+
+A connection that outlives the swap is a different matter. SQLite revalidates the file behind
+an open handle and fails that connection with `SQLITE_IOERR` once the inode beneath it
+changes, so a long-lived reader has to reopen after a rebuild rather than carrying on
+transparently. That is the safer of the two behaviours — it cannot silently serve rows from a
+database that no longer exists — and it is pinned by a test in `packages/core`.
 
 ## Surfaces
 
