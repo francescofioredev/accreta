@@ -1,0 +1,24 @@
+# The vocabulary of this knowledge base.
+#
+# Page types and link fields live here rather than in the code so that a
+# knowledge base about any subject can describe itself in its own terms. The
+# code-oriented vocabulary (module, api, usecase, endpoint) is a preset, not the
+# default, precisely because it is not universal.
+
+knowledge_base: knowledge
+
+page_types:
+  - note
+  - source
+  - concept
+  - decision
+  - synthesis
+
+link_fields:
+  - related
+  - supersedes
+  - superseded_by
+  - discussed_in
+
+provenance:
+  format: "{source} @ {rev} · {path}#L{start}-L{end}"
