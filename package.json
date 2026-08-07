@@ -6,6 +6,7 @@
   "description": "A knowledge base an agent writes and maintains, with provenance to the sources and drift detection when they change.",
   "workspaces": [
     "packages/*",
+    "packages/adapters",
     "packages/adapters/*"
   ],
   "scripts": {

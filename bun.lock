@@ -11,6 +11,29 @@
         "typescript": "^5.9.3",
       },
     },
+    "packages/adapters": {
+      "name": "@accreta/adapter-tests",
+      "version": "0.0.0",
+      "dependencies": {
+        "@accreta/adapter-fs": "workspace:*",
+        "@accreta/adapter-git": "workspace:*",
+        "@accreta/core": "workspace:*",
+      },
+    },
+    "packages/adapters/fs": {
+      "name": "@accreta/adapter-fs",
+      "version": "0.0.0",
+      "dependencies": {
+        "@accreta/core": "workspace:*",
+      },
+    },
+    "packages/adapters/git": {
+      "name": "@accreta/adapter-git",
+      "version": "0.0.0",
+      "dependencies": {
+        "@accreta/core": "workspace:*",
+      },
+    },
     "packages/core": {
       "name": "@accreta/core",
       "version": "0.0.0",
@@ -20,6 +43,12 @@
     },
   },
   "packages": {
+    "@accreta/adapter-fs": ["@accreta/adapter-fs@workspace:packages/adapters/fs"],
+
+    "@accreta/adapter-git": ["@accreta/adapter-git@workspace:packages/adapters/git"],
+
+    "@accreta/adapter-tests": ["@accreta/adapter-tests@workspace:packages/adapters"],
+
     "@accreta/core": ["@accreta/core@workspace:packages/core"],
 
     "@oxlint/binding-android-arm-eabi": ["@oxlint/binding-android-arm-eabi@1.77.0", "", { "os": "android", "cpu": "arm" }, "sha512-E06sKWS6PiI6HRxS1wyQg22HvApt01hI7fV+T3wUk3OSbaaP4a3hYGY/MIQDmASqCiRjBdpRQYkgMkqH82cWmQ=="],

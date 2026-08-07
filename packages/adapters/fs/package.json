@@ -1,0 +1,14 @@
+{
+  "name": "@accreta/adapter-fs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Source adapter for a directory of documents. Revision is a hash of modification times.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@accreta/core": "workspace:*"
+  }
+}

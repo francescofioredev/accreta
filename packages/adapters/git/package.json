@@ -1,0 +1,14 @@
+{
+  "name": "@accreta/adapter-git",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Source adapter for a git repository. Revision is a commit SHA.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@accreta/core": "workspace:*"
+  }
+}
