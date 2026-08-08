@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "../src/main.ts";
@@ -49,6 +49,34 @@ describe("accreta init", () => {
     expect(existsSync(join(root, "accreta.config.yaml"))).toBe(true);
     expect(existsSync(join(root, "knowledge"))).toBe(true);
     expect(existsSync(join(root, "sources"))).toBe(true);
+  });
+
+  test("writes a constitution alongside the configuration", async () => {
+    await cli("init");
+    expect(existsSync(join(root, "AGENTS.md"))).toBe(true);
+    expect(readFileSync(join(root, "AGENTS.md"), "utf-8")).toContain(
+      "Every non-trivial claim carries a citation",
+    );
+  });
+
+  test("a preset selects both the vocabulary and the constitution", async () => {
+    expect(await cli("init", "--preset", "research")).toBe(0);
+    expect(readFileSync(join(root, "accreta.config.yaml"), "utf-8")).toContain("contradiction");
+    expect(readFileSync(join(root, "AGENTS.md"), "utf-8")).toContain("Preset: research literature");
+  });
+
+  test("an unknown preset is refused before anything is written", async () => {
+    expect(await cli("init", "--preset", "nonsense")).toBe(1);
+    expect(stderr()).toContain("Unknown preset");
+    expect(existsSync(join(root, "accreta.config.yaml"))).toBe(false);
+  });
+
+  test("an existing agent file is never overwritten", async () => {
+    // Somebody's AGENTS.md is somebody's work.
+    writeFileSync(join(root, "AGENTS.md"), "my own instructions", "utf-8");
+    await cli("init");
+    expect(readFileSync(join(root, "AGENTS.md"), "utf-8")).toBe("my own instructions");
+    expect(stderr()).toContain("Not overwriting");
   });
 
   test("refuses to overwrite an existing configuration", async () => {
