@@ -1,0 +1,13 @@
+# The git adapter, not fs, and deliberately so.
+#
+# An fs revision is a hash of modification times, which do not survive a clone:
+# every checkout would produce a different revision and every page would report
+# as unresolvable on a fresh machine. This repository is a git repository, so
+# the sources have real commit SHAs, and the demo's provenance verifies for
+# anyone who clones it.
+#
+# The fs adapter is exercised in bench/corpus instead, where the corpus is
+# rebuilt in-process and mtime revisions are exactly right.
+id: ipcc-ar6-wg1
+type: git
+root: ../..

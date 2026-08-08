@@ -1,0 +1,26 @@
+# Vocabulary for a research corpus. Note what is absent: no `module`, no `api`,
+# no `endpoint`. This knowledge base describes scientific reports and has no
+# reason to borrow terms invented for source code.
+
+knowledge_base: knowledge
+
+page_types:
+  - source
+  - concept
+  - finding
+  - method
+  - contradiction
+  - synthesis
+
+link_fields:
+  - cites
+  - cited_by
+  - supports
+  - contradicts
+  - supersedes
+  - superseded_by
+  - related
+  - discussed_in
+
+provenance:
+  format: "{source} @ {rev} · {path}#L{start}-L{end}"

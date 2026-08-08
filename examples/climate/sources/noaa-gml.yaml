@@ -1,0 +1,4 @@
+# See ipcc-ar6-wg1.yaml for why this is git rather than fs.
+id: noaa-gml
+type: git
+root: ../..
