@@ -1,19 +1,41 @@
 {
-  "name": "@accreta/cli",
-  "version": "0.0.0",
-  "private": true,
+  "name": "accreta",
+  "version": "0.1.1",
   "type": "module",
   "license": "MIT",
-  "description": "The human-facing surface: init, reindex, lint, drift, search.",
+  "description": "A knowledge base an agent writes and maintains, with provenance to the sources and drift detection when they change.",
+  "homepage": "https://github.com/francescofioredev/accreta#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/francescofioredev/accreta.git",
+    "directory": "packages/cli"
+  },
+  "bugs": "https://github.com/francescofioredev/accreta/issues",
+  "engines": {
+    "bun": ">=1.3.13"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "accreta": "./src/main.ts"
   },
   "exports": {
     ".": "./src/index.ts"
   },
+  "files": [
+    "src",
+    "scripts",
+    "templates",
+    "skills"
+  ],
   "dependencies": {
     "@accreta/core": "workspace:*",
     "@accreta/adapter-fs": "workspace:*",
     "@accreta/adapter-git": "workspace:*"
+  },
+  "scripts": {
+    "prepack": "bun run ./scripts/copy-assets.ts",
+    "postpack": "bun run ./scripts/copy-assets.ts --clean"
   }
 }

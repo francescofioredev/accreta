@@ -92,6 +92,18 @@ become load-bearing before anyone has tested them.
 Progress is tracked on the [project board](https://github.com/users/francescofioredev/projects/1),
 one epic per phase.
 
+## Install
+
+```bash
+bun add -g accreta
+```
+
+> **accreta runs on [Bun](https://bun.sh), not Node.** It ships as TypeScript and uses
+> `bun:sqlite`, so there is no build step and no Node build to fall back to. The `engines`
+> field says so, but neither npm nor Bun enforces it: installed under Node, the CLI fails on
+> the first import rather than with a useful message. This is a real limitation, not an
+> oversight — see [ADR-0005](docs/adr/0005-ship-typescript-for-bun.md).
+
 ## Try it
 
 ```bash

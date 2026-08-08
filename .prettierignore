@@ -5,3 +5,8 @@ node_modules/
 # Prose is hand-wrapped for readability and reflowing it produces noisy diffs
 # that bury the actual change. Formatting is enforced on code, not on writing.
 *.md
+
+# Copies made at pack time; formatting them would produce a confusing diff
+# against the originals they were copied from.
+/packages/cli/templates/
+/packages/cli/skills/
