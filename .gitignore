@@ -25,6 +25,12 @@ build/
 *.key
 secrets.yaml
 
+# Copied into the CLI package by `prepack` so it ships its own templates, and
+# removed again by `postpack`. Committing them would create a second copy that
+# drifts from the originals at the repository root with nothing reporting it.
+/packages/cli/templates/
+/packages/cli/skills/
+
 # Editors / OS
 .DS_Store
 .idea/

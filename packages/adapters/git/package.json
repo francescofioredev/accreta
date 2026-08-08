@@ -1,13 +1,28 @@
 {
   "name": "@accreta/adapter-git",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.1",
   "type": "module",
   "license": "MIT",
   "description": "Source adapter for a git repository. Revision is a commit SHA.",
+  "homepage": "https://github.com/francescofioredev/accreta#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/francescofioredev/accreta.git",
+    "directory": "packages/adapters/git"
+  },
+  "bugs": "https://github.com/francescofioredev/accreta/issues",
+  "engines": {
+    "bun": ">=1.3.13"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
     ".": "./src/index.ts"
   },
+  "files": [
+    "src"
+  ],
   "dependencies": {
     "@accreta/core": "workspace:*"
   }

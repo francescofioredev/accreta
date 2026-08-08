@@ -1,21 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-
-/**
- * Where the shipped templates live.
- *
- * Resolved relative to this module rather than to the working directory, so the
- * generator works from anywhere and from an installed package.
- */
-const TEMPLATES = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "..",
-  "..",
-  "..",
-  "templates",
-  "constitution",
-);
+import { join } from "node:path";
+import { resolveAsset } from "./assets.ts";
 
 export const PRESETS = ["codebase", "research"] as const;
 export type Preset = (typeof PRESETS)[number];
@@ -63,7 +48,10 @@ export function composeConstitution(options: ComposeOptions = {}): string {
 }
 
 function readTemplate(relativePath: string): string {
-  const path = join(TEMPLATES, relativePath);
+  // Resolved per read rather than once at import. A bad install should fail
+  // when someone runs `init`, not when the module loads and takes `--help`
+  // and `search` down with it.
+  const path = join(resolveAsset("templates"), "constitution", relativePath);
   if (!existsSync(path)) {
     throw new Error(`Constitution template not found: ${relativePath}`);
   }
