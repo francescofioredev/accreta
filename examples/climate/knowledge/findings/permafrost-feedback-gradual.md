@@ -1,8 +1,8 @@
 ---
 type: finding
 source: ipcc-ar6-wg1
-canonical_source: "ipcc-ar6-wg1:chapter-05.md#L7"
-last_verified_revision: 8d185e8f2e4f
+canonical_source: "ipcc-ar6-wg1:examples/climate/sources/ipcc-ar6-wg1/chapter-05.md#L7"
+last_verified_revision: a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d
 contradicts: [[findings/permafrost-feedback-abrupt]]
 discussed_in: [[contradictions/permafrost-feedback-strength]]
 ---
@@ -16,5 +16,5 @@ The assessment states that it excludes abrupt thaw processes such as thermokarst
 which are not represented in most Earth system models.[^scope] That exclusion is what the
 [[contradictions/permafrost-feedback-strength|disagreement]] is about.
 
-[^value]: ipcc-ar6-wg1 @ 8d185e8f2e4f · chapter-05.md#L7-L10
-[^scope]: ipcc-ar6-wg1 @ 8d185e8f2e4f · chapter-05.md#L11-L12
+[^value]: ipcc-ar6-wg1 @ a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d · examples/climate/sources/ipcc-ar6-wg1/chapter-05.md#L7-L10
+[^scope]: ipcc-ar6-wg1 @ a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d · examples/climate/sources/ipcc-ar6-wg1/chapter-05.md#L11-L12

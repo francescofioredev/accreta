@@ -2,8 +2,8 @@
 type: concept
 source: ipcc-ar6-wg1
 aliases: ["effective radiative forcing", "ERF", "climate forcing"]
-canonical_source: "ipcc-ar6-wg1:chapter-07.md#L7"
-last_verified_revision: 8d185e8f2e4f
+canonical_source: "ipcc-ar6-wg1:examples/climate/sources/ipcc-ar6-wg1/chapter-07.md#L7"
+last_verified_revision: a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d
 related: [[concepts/climate-sensitivity]]
 discussed_in: [[synthesis/energy-balance]]
 ---
@@ -20,5 +20,5 @@ Doubling carbon dioxide from pre-industrial concentrations corresponds to approx
 Forcing is the input to [[concepts/climate-sensitivity]]: how much warming results depends on
 the feedbacks that respond to it.
 
-[^def]: ipcc-ar6-wg1 @ 8d185e8f2e4f · chapter-07.md#L7-L12
-[^co2]: ipcc-ar6-wg1 @ 8d185e8f2e4f · chapter-07.md#L9-L11
+[^def]: ipcc-ar6-wg1 @ a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d · examples/climate/sources/ipcc-ar6-wg1/chapter-07.md#L7-L12
+[^co2]: ipcc-ar6-wg1 @ a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d · examples/climate/sources/ipcc-ar6-wg1/chapter-07.md#L9-L11

@@ -4,10 +4,10 @@
 
 > `accretion` *(n.)* — growth by the gradual accumulation of matter.
 
-> [!WARNING]
-> **Status: early development.** The design is settled and the engine it is extracted from
-> runs in production, but this repository is being built in public and there is no release
-> yet. Nothing here is stable. See the [roadmap](#roadmap).
+> [!NOTE]
+> **Status: `v0.1.0`.** All six roadmap phases are complete and the pipeline runs end to end —
+> see the [worked example](examples/climate/). The API is not yet stable, and two deliberately
+> deferred pieces are listed in the [roadmap](#roadmap).
 
 ---
 
@@ -44,7 +44,7 @@ accreta gives you the machinery around it:
   can search, fetch pages, resolve canonical definitions, and run impact analysis;
 - **source adapters** — a source is anything with a revision and a way to detect change.
   Git repositories are one kind. Directories of documents are another;
-- a **CLI** — `init`, `ingest`, `reindex`, `lint`, `serve`;
+- a **CLI** — `init`, `reindex`, `lint`, `drift`, `search`, `show`, `consumers`, `canonical`;
 - a **constitution** — the operating rules the agent follows when writing pages, versioned
   as a template rather than pasted into a chat.
 
@@ -62,29 +62,70 @@ accreta was extracted from a system that documented a 17-repository backend, so 
 best-tested case — but the core knows nothing about code. It knows about *sources* that have
 a revision and can report what changed.
 
-A companion repository, `accreta-example-climate`, will demonstrate the same machinery over
-IPCC reports and open climate datasets: no symbols, no call graph, no commits. If the model
-holds there, the abstraction is real. That is the point of building it.
+[`examples/climate/`](examples/climate/) demonstrates the same machinery over scientific
+reports: no symbols, no call graph, no imports. Ten pages, two sources, `lint` clean and
+`drift` verifying — including a
+[contradiction page](examples/climate/knowledge/contradictions/permafrost-feedback-strength.md)
+that records a factor-of-three disagreement between two sources and refuses to resolve it.
+
+The vocabulary there is `source`, `concept`, `finding`, `contradiction`, `synthesis`. No
+`module`, no `api`, no `endpoint` — page types are configuration, not code
+([ADR-0003](docs/adr/0003-vocabulary-is-configuration.md)).
 
 ## Roadmap
 
 | Phase | What | Status |
 |---|---|---|
-| 1 | Core: indexer, frontmatter, link graph | in progress |
-| 2 | `SourceAdapter` interface, `git` and `fs` adapters | planned |
-| 3 | MCP server and CLI | planned |
-| 4 | Hybrid search (lexical + optional semantic) | planned |
-| 5 | Constitution templates and setup skill | planned |
-| 6 | Demo knowledge base, docs, `v0.1.0` | planned |
+| 1 | Core: indexer, frontmatter, link graph | done |
+| 2 | `SourceAdapter` interface, `git` and `fs` adapters | done |
+| 3 | MCP server and CLI | done |
+| 4 | Hybrid search — measured, and **decided against** | done |
+| 5 | Constitution templates and setup skill | done |
+| 6 | Demo knowledge base, docs, `v0.1.0` | done |
 
-Progress is tracked on the [project board](https://github.com/francescofioredev/accreta/projects),
+Two pieces are deferred rather than built, each with a reason and an issue:
+[hosted deployment auth and the sync loop](https://github.com/francescofioredev/accreta/issues/21),
+and [skill distribution](https://github.com/francescofioredev/accreta/issues/26). Both serve
+a deployment story that does not exist yet, and building them now would encode guesses that
+become load-bearing before anyone has tested them.
+
+Progress is tracked on the [project board](https://github.com/users/francescofioredev/projects/1),
 one epic per phase.
+
+## Try it
+
+```bash
+bun install
+cd examples/climate
+bun run ../../packages/cli/src/main.ts reindex   # 10 pages, 27 links
+bun run ../../packages/cli/src/main.ts lint      # clean
+bun run ../../packages/cli/src/main.ts drift     # up to date, both sources
+bun run ../../packages/cli/src/main.ts canonical "ECS"
+```
+
+To start your own:
+
+```bash
+accreta init --preset research    # or codebase, or neither
+```
 
 ## Design decisions
 
-Architectural decisions are recorded as ADRs in [`docs/adr/`](docs/adr/) as they are made.
-The first one is why search is lexical by default and semantic only as an opt-in — a
-deliberate choice, not a missing feature.
+Four ADRs in [`docs/adr/`](docs/adr/):
+
+- **[0001](docs/adr/0001-lexical-search-first.md)** — search is lexical, and semantic search
+  is **not built**. The benchmark said 85% recall@1 without it. It also found a bug in our own
+  index first: aliases were not being indexed, which cost 15 points and looked exactly like
+  evidence that lexical search cannot handle synonyms.
+- **[0002](docs/adr/0002-source-adapter-interface.md)** — a source is four methods, and
+  `changedSince()` must be able to say *I cannot tell*.
+- **[0003](docs/adr/0003-vocabulary-is-configuration.md)** — page types and link fields are
+  configuration; the schema follows the same rule.
+- **[0004](docs/adr/0004-markdown-source-of-truth.md)** — markdown is the source of truth and
+  the index is disposable.
+
+Further reading: [architecture](docs/architecture.md),
+[writing an adapter](docs/writing-an-adapter.md).
 
 ## Contributing
 

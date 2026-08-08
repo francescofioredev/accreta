@@ -1,8 +1,8 @@
 ---
 type: source
 source: ipcc-ar6-wg1
-canonical_source: "ipcc-ar6-wg1:chapter-07.md#L1"
-last_verified_revision: 8d185e8f2e4f
+canonical_source: "ipcc-ar6-wg1:examples/climate/sources/ipcc-ar6-wg1/chapter-07.md#L1"
+last_verified_revision: a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d
 cited_by: [[concepts/climate-sensitivity]]
 ---
 
