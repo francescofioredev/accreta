@@ -52,7 +52,7 @@ export function searchPages(db: Database, options: SearchOptions): SearchHit[] {
          p.type AS type,
          p.title AS title,
          p.source AS source,
-         snippet(pages_fts, 1, '<<', '>>', ' … ', 16) AS snippet,
+         snippet(pages_fts, 2, '<<', '>>', ' … ', 16) AS snippet,
          p.last_verified_revision AS lastVerifiedRevision
        FROM pages_fts
        JOIN pages p ON p.path = pages_fts.path

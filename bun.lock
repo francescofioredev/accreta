@@ -11,6 +11,13 @@
         "typescript": "^5.9.3",
       },
     },
+    "bench": {
+      "name": "@accreta/bench",
+      "version": "0.0.0",
+      "dependencies": {
+        "@accreta/core": "workspace:*",
+      },
+    },
     "packages/adapters": {
       "name": "@accreta/adapter-tests",
       "version": "0.0.0",
@@ -74,6 +81,8 @@
     "@accreta/adapter-git": ["@accreta/adapter-git@workspace:packages/adapters/git"],
 
     "@accreta/adapter-tests": ["@accreta/adapter-tests@workspace:packages/adapters"],
+
+    "@accreta/bench": ["@accreta/bench@workspace:bench"],
 
     "@accreta/cli": ["@accreta/cli@workspace:packages/cli"],
 

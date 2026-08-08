@@ -75,6 +75,21 @@ describe("searchPages", () => {
     expect(hits.map((h) => h.source)).toEqual(["ipcc"]);
   });
 
+  test("a declared alias is searchable, because the index keeps it", () => {
+    // Measured, not assumed: with aliases outside the FTS table, alias queries
+    // scored 40% recall@1 over bench/; with them indexed, 100%. The editorial
+    // work of declaring an alias is signal a curated corpus has, and discarding
+    // it at index time is how a system argues itself into needing embeddings.
+    writePage(
+      "concepts/sensitivity.md",
+      '---\ntype: concept\naliases: ["ECS", "equilibrium climate sensitivity"]\n---\n\n# Climate sensitivity\n\nWarming after doubling.\n',
+    );
+    reindex();
+    expect(searchPages(db, { query: "ECS" }).map((h) => h.path)).toEqual([
+      "knowledge/concepts/sensitivity.md",
+    ]);
+  });
+
   test("a filter on a type no page uses returns nothing", () => {
     expect(searchPages(db, { query: "tropopause", types: ["nonexistent"] })).toEqual([]);
   });

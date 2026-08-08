@@ -27,8 +27,16 @@ CREATE TABLE IF NOT EXISTS pages (
 CREATE INDEX IF NOT EXISTS idx_pages_type ON pages(type);
 CREATE INDEX IF NOT EXISTS idx_pages_source ON pages(source);
 
+-- `aliases` is indexed alongside title and body because the name a question
+-- arrives under is rarely the name the page was filed under. Leaving it out
+-- measurably hurt retrieval: alias queries scored 40% recall@1 with it absent
+-- and 100% with it present (bench/, 20 queries). The editorial work of
+-- declaring an alias is exactly the signal a curated corpus has and a scraped
+-- one does not, and discarding it at index time then blaming lexical search is
+-- how a system argues itself into needing embeddings it does not need.
 CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
   title,
+  aliases,
   body,
   path UNINDEXED,
   type UNINDEXED,

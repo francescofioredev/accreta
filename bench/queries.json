@@ -1,0 +1,128 @@
+{
+  "note": "Relevance judgments written by hand against corpus/knowledge. Each query names the one page a correct system should return first. Query classes are mixed on purpose: the average is less interesting than where lexical and semantic disagree.",
+  "queries": [
+    {
+      "id": "q01",
+      "class": "exact-term",
+      "query": "tropopause",
+      "relevant": "knowledge/concepts/radiative-forcing.md"
+    },
+    {
+      "id": "q02",
+      "class": "exact-term",
+      "query": "watts per square metre",
+      "relevant": "knowledge/concepts/radiative-forcing.md"
+    },
+    {
+      "id": "q03",
+      "class": "exact-term",
+      "query": "permafrost",
+      "relevant": "knowledge/concepts/permafrost-feedback.md"
+    },
+    {
+      "id": "q04",
+      "class": "exact-term",
+      "query": "sea ice",
+      "relevant": "knowledge/concepts/albedo.md"
+    },
+    {
+      "id": "q05",
+      "class": "exact-term",
+      "query": "cumulative emissions",
+      "relevant": "knowledge/concepts/carbon-budget.md"
+    },
+    {
+      "id": "q06",
+      "class": "exact-term",
+      "query": "deep ocean equilibrates",
+      "relevant": "knowledge/concepts/ocean-heat-uptake.md"
+    },
+
+    {
+      "id": "q07",
+      "class": "alias",
+      "query": "climate forcing",
+      "relevant": "knowledge/concepts/radiative-forcing.md"
+    },
+    {
+      "id": "q08",
+      "class": "alias",
+      "query": "ECS",
+      "relevant": "knowledge/concepts/climate-sensitivity.md"
+    },
+    {
+      "id": "q09",
+      "class": "alias",
+      "query": "planetary reflectivity",
+      "relevant": "knowledge/concepts/albedo.md"
+    },
+    {
+      "id": "q10",
+      "class": "alias",
+      "query": "thermal inertia",
+      "relevant": "knowledge/concepts/ocean-heat-uptake.md"
+    },
+    {
+      "id": "q11",
+      "class": "alias",
+      "query": "remaining carbon budget",
+      "relevant": "knowledge/concepts/carbon-budget.md"
+    },
+
+    {
+      "id": "q12",
+      "class": "paraphrase",
+      "query": "how much hotter if CO2 doubles",
+      "relevant": "knowledge/concepts/climate-sensitivity.md"
+    },
+    {
+      "id": "q13",
+      "class": "paraphrase",
+      "query": "how much sunlight bounces back to space",
+      "relevant": "knowledge/concepts/albedo.md"
+    },
+    {
+      "id": "q14",
+      "class": "paraphrase",
+      "query": "why does warming lag behind emissions",
+      "relevant": "knowledge/concepts/ocean-heat-uptake.md"
+    },
+    {
+      "id": "q15",
+      "class": "paraphrase",
+      "query": "how much more can we burn",
+      "relevant": "knowledge/concepts/carbon-budget.md"
+    },
+    {
+      "id": "q16",
+      "class": "paraphrase",
+      "query": "thawing ground makes warming worse",
+      "relevant": "knowledge/concepts/permafrost-feedback.md"
+    },
+    {
+      "id": "q17",
+      "class": "paraphrase",
+      "query": "why use several futures instead of one",
+      "relevant": "knowledge/decisions/scenario-choice.md"
+    },
+
+    {
+      "id": "q18",
+      "class": "conceptual",
+      "query": "energy in versus energy out",
+      "relevant": "knowledge/synthesis/energy-balance.md"
+    },
+    {
+      "id": "q19",
+      "class": "conceptual",
+      "query": "a process that amplifies itself",
+      "relevant": "knowledge/concepts/permafrost-feedback.md"
+    },
+    {
+      "id": "q20",
+      "class": "conceptual",
+      "query": "where the extra heat actually goes",
+      "relevant": "knowledge/concepts/ocean-heat-uptake.md"
+    }
+  ]
+}
