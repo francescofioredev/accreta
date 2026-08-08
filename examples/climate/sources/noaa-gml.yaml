@@ -1,4 +1,6 @@
-# See ipcc-ar6-wg1.yaml for why this is git rather than fs.
+# See ipcc-ar6-wg1.yaml for why this is git rather than fs, and why `paths`
+# scopes the source to its own documents.
 id: noaa-gml
 type: git
 root: ../..
+paths: [examples/climate/sources/noaa-gml]

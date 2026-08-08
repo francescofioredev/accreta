@@ -56,6 +56,7 @@ function loadSources(root: string, config: AccretaConfig): Map<string, SourceAda
           id: d.id,
           root: join(root, String(d.options.root ?? ".")),
           citationFormat: config.provenanceFormat,
+          paths: Array.isArray(d.options.paths) ? (d.options.paths as string[]) : undefined,
         }),
     );
 

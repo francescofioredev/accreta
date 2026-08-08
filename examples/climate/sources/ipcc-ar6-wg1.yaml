@@ -1,13 +1,19 @@
 # The git adapter, not fs, and deliberately so.
 #
-# An fs revision is a hash of modification times, which do not survive a clone:
-# every checkout would produce a different revision and every page would report
-# as unresolvable on a fresh machine. This repository is a git repository, so
-# the sources have real commit SHAs, and the demo's provenance verifies for
-# anyone who clones it.
+# An fs revision is a hash of modification times, and modification times do not
+# survive a clone: every checkout would produce a different revision and every
+# page would report as unresolvable on a fresh machine. This repository is a git
+# repository, so the sources have real commit SHAs and the demo's provenance
+# verifies for anyone who clones it.
+#
+# `paths` scopes the source to the documents it actually contains. Without it
+# the source is the whole repository, and any commit touching anything — a
+# README, a test — reads as drift for pages whose sources never moved. A drift
+# report full of false positives is one people learn to ignore.
 #
 # The fs adapter is exercised in bench/corpus instead, where the corpus is
 # rebuilt in-process and mtime revisions are exactly right.
 id: ipcc-ar6-wg1
 type: git
 root: ../..
+paths: [examples/climate/sources/ipcc-ar6-wg1]

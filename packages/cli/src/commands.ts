@@ -52,6 +52,7 @@ function buildRegistry(workspace: Workspace): SourceRegistry {
           id: d.id,
           root: join(workspace.root, String(d.options.root ?? ".")),
           citationFormat: format,
+          paths: Array.isArray(d.options.paths) ? (d.options.paths as string[]) : undefined,
         }),
     );
 }

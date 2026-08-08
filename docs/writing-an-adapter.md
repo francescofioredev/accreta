@@ -59,6 +59,13 @@ Real cases: rewritten history, a shallow clone that lacks the commit, a revision
 different source, and — for `fs` — any revision from a previous process, since a hash cannot
 be inverted.
 
+**Scope the source to what it actually contains.** If several sources live inside one
+repository or one tree, a source that reports the whole tree's revision drifts every page
+whenever anything changes, however unrelated. `GitSource` takes a `paths` option for exactly
+this, and computes its revision as the last commit that touched those paths rather than HEAD.
+A drift report full of false positives is one people learn to ignore, which costs more than
+having no report.
+
 Returning *every* path is a valid answer for a source that cannot compute a difference. It is
 less useful, not incorrect.
 
