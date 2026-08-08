@@ -44,6 +44,19 @@ function asString(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+/**
+ * Flatten declared aliases into one searchable string.
+ *
+ * Which field holds them is not configurable: `aliases` is part of the page
+ * schema rather than the domain vocabulary, in the same way `type` is.
+ */
+function aliasesOf(frontmatter: Record<string, unknown>): string {
+  const value = frontmatter.aliases;
+  if (typeof value === "string") return value;
+  if (!Array.isArray(value)) return "";
+  return value.filter((a): a is string => typeof a === "string").join(" ");
+}
+
 /** Record paths with `/` regardless of platform: they are identifiers, not filesystem locations. */
 function toPosix(path: string): string {
   return sep === "/" ? path : path.split(sep).join("/");
@@ -124,8 +137,8 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
     )
   `);
   const insertFts = db.prepare(`
-    INSERT INTO pages_fts (title, body, path, type, source)
-    VALUES ($title, $body, $path, $type, $source)
+    INSERT INTO pages_fts (title, aliases, body, path, type, source)
+    VALUES ($title, $aliases, $body, $path, $type, $source)
   `);
   const insertLink = db.prepare(
     `INSERT OR IGNORE INTO links (src_path, dst_path, kind) VALUES ($src, $dst, $kind)`,
@@ -183,6 +196,7 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
 
       insertFts.run({
         $title: title,
+        $aliases: aliasesOf(frontmatter),
         $body: body,
         $path: path,
         $type: type,

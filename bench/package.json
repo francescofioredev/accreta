@@ -1,0 +1,11 @@
+{
+  "name": "@accreta/bench",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Retrieval benchmark. The numbers ADR-0001 rests on.",
+  "dependencies": {
+    "@accreta/core": "workspace:*"
+  }
+}
