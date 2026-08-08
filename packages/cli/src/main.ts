@@ -6,7 +6,8 @@ const USAGE = `accreta — a knowledge base an agent writes and keeps current
 
 Usage: accreta <command> [arguments]
 
-  init                     Create accreta.config.yaml, knowledge/ and sources/
+  init [--preset <name>]   Create accreta.config.yaml, knowledge/, sources/ and
+                           a constitution. Presets: codebase, research
   reindex                  Rebuild the index from the knowledge base
   lint                     Report unresolvable links, missing provenance, unknown types
   drift                    Report which pages their sources have moved out from under
@@ -25,10 +26,14 @@ function parseArgs(argv: string[]): {
   positional: string[];
   types: string[];
   includeInline: boolean;
+  preset?: string;
+  agentFile?: string;
 } {
   const positional: string[] = [];
   const types: string[] = [];
   let includeInline = false;
+  let preset: string | undefined;
+  let agentFile: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--type" || arg === "-t") {
@@ -40,14 +45,22 @@ function parseArgs(argv: string[]): {
       includeInline = true;
       continue;
     }
+    if (arg === "--preset") {
+      preset = argv[++i];
+      continue;
+    }
+    if (arg === "--agent-file") {
+      agentFile = argv[++i];
+      continue;
+    }
     if (arg !== undefined) positional.push(arg);
   }
-  return { positional, types, includeInline };
+  return { positional, types, includeInline, preset, agentFile };
 }
 
 export async function run(argv: string[], ctx: CommandContext): Promise<number> {
   const [command, ...rest] = argv;
-  const { positional, types, includeInline } = parseArgs(rest);
+  const { positional, types, includeInline, preset, agentFile } = parseArgs(rest);
 
   switch (command) {
     case undefined:
@@ -57,7 +70,7 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
       ctx.out(USAGE);
       return 0;
     case "init":
-      return init(ctx);
+      return init(ctx, { preset, agentFile });
     case "reindex":
       return reindex(ctx);
     case "lint":

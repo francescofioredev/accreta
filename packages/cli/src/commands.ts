@@ -16,6 +16,7 @@ import {
 import { FsSource } from "@accreta/adapter-fs";
 import { GitSource } from "@accreta/adapter-git";
 import { CONFIG_FILENAME, findWorkspace, indexPathFor, type Workspace } from "./workspace.ts";
+import { composeConstitution, isPreset, PRESETS, type Preset } from "./constitution.ts";
 
 export interface CommandContext {
   cwd: string;
@@ -70,6 +71,66 @@ function loadSources(workspace: Workspace): SourceAdapter[] {
   return out;
 }
 
+function configTemplateFor(preset?: Preset): string {
+  if (preset === "codebase") return CONFIG_CODEBASE;
+  if (preset === "research") return CONFIG_RESEARCH;
+  return CONFIG_TEMPLATE;
+}
+
+const CONFIG_CODEBASE = `# The vocabulary of this knowledge base — the "codebase" preset.
+
+knowledge_base: knowledge
+
+page_types:
+  - repository
+  - module
+  - api
+  - usecase
+  - concept
+  - decision
+  - integration
+  - synthesis
+
+link_fields:
+  - consumers
+  - consumed_by
+  - delegates_to
+  - implements
+  - supersedes
+  - superseded_by
+  - related
+  - discussed_in
+
+provenance:
+  format: "{source} @ {rev} · {path}#L{start}-L{end}"
+`;
+
+const CONFIG_RESEARCH = `# The vocabulary of this knowledge base — the "research" preset.
+
+knowledge_base: knowledge
+
+page_types:
+  - source
+  - concept
+  - finding
+  - method
+  - contradiction
+  - synthesis
+
+link_fields:
+  - cites
+  - cited_by
+  - supports
+  - contradicts
+  - supersedes
+  - superseded_by
+  - related
+  - discussed_in
+
+provenance:
+  format: "{source} @ {rev} · {path}#L{start}-L{end}"
+`;
+
 const CONFIG_TEMPLATE = `# The vocabulary of this knowledge base.
 #
 # Page types and link fields live here rather than in the code, so a knowledge
@@ -107,7 +168,13 @@ root: sources/example
 extensions: [".md"]
 `;
 
-export function init(ctx: CommandContext): number {
+export interface InitOptions {
+  preset?: string;
+  /** Filename for the generated constitution. */
+  agentFile?: string;
+}
+
+export function init(ctx: CommandContext, options: InitOptions = {}): number {
   const root = ctx.cwd;
   const configPath = join(root, CONFIG_FILENAME);
 
@@ -116,14 +183,36 @@ export function init(ctx: CommandContext): number {
     return 1;
   }
 
-  writeFileSync(configPath, CONFIG_TEMPLATE, "utf-8");
+  let preset: Preset | undefined;
+  if (options.preset !== undefined) {
+    if (!isPreset(options.preset)) {
+      ctx.err(`Unknown preset "${options.preset}". Available: ${PRESETS.join(", ")}.`);
+      return 1;
+    }
+    preset = options.preset;
+  }
+
+  writeFileSync(configPath, configTemplateFor(preset), "utf-8");
   mkdirSync(join(root, "knowledge"), { recursive: true });
   mkdirSync(join(root, "sources"), { recursive: true });
 
   const examplePath = join(root, "sources", "example.yaml");
   if (!existsSync(examplePath)) writeFileSync(examplePath, SOURCE_TEMPLATE, "utf-8");
 
-  ctx.out(`Created ${CONFIG_FILENAME}, knowledge/ and sources/.`);
+  // The constitution is written only if nothing is there to overwrite. An
+  // existing AGENTS.md or CLAUDE.md is somebody's work, and init is not the
+  // place to discover that the hard way.
+  const agentFile = options.agentFile ?? "AGENTS.md";
+  const agentPath = join(root, agentFile);
+  if (existsSync(agentPath)) {
+    ctx.err(`${agentFile} already exists. Not overwriting it.`);
+    ctx.err(`The composed constitution would have gone there; write it by hand if you want it.`);
+  } else {
+    writeFileSync(agentPath, composeConstitution({ preset, filename: agentFile }), "utf-8");
+  }
+
+  ctx.out(`Created ${CONFIG_FILENAME}, knowledge/, sources/ and ${agentFile}.`);
+  if (preset) ctx.out(`Vocabulary and constitution use the "${preset}" preset.`);
   ctx.out("Describe a source in sources/, then run `accreta reindex`.");
   return 0;
 }
