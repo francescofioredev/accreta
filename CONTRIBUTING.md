@@ -92,6 +92,23 @@ and push it; `.github/workflows/publish.yml` does the rest.
 `packages/adapters` and `bench` stay private: they are a test harness and a benchmark, not
 things anyone installs.
 
+Publishing uses npm's trusted publishing (OIDC): the workflow proves its identity to the
+registry and receives a short-lived token, so there is no secret to store or rotate. It has to
+be configured once per package on npmjs.com, under the package's *Settings → Trusted
+publisher*, naming this repository and `.github/workflows/publish.yml`.
+
+That is also why the publish step runs `npm publish` rather than `bun publish`, in an
+otherwise entirely Bun repository: bun cannot do the OIDC exchange
+([oven-sh/bun#22423](https://github.com/oven-sh/bun/issues/22423)), and npm is withdrawing the
+2FA-bypass tokens that were the alternative — sensitive operations in August 2026, direct
+publishing in January 2027.
+
+It costs one thing worth knowing about. `bun publish` rewrites `workspace:*` to real versions
+when it packs; `npm publish` copies the string through untouched, and a published package
+carrying `workspace:*` cannot be installed by anybody. So the internal dependencies name plain
+versions, and a test in `packages/cli/test/packaging.test.ts` fails if the protocol ever comes
+back. Bumping a version means bumping it in every manifest that names it.
+
 ## Reporting a bug
 
 Use the bug template and include: what you expected, what happened, and the smallest

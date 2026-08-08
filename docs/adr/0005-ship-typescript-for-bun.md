@@ -53,12 +53,25 @@ the config scaffolds. It removes asset resolution entirely, and it turns a const
 to be read and edited into a 7KB string literal. The templates are a product surface; they
 should stay markdown.
 
-**OIDC trusted publishing**, which would give provenance attestations and no long-lived token.
-[Bun does not support npm's OIDC exchange in Actions](https://github.com/oven-sh/bun/issues/22423),
-and npm's flow needs npm CLI 11.5.1+ — so this would mean installing Node purely to publish,
-against the point of the decision above. Publishing uses an `NPM_TOKEN` secret and defers
-provenance. This is the weakest part of the decision and should be revisited when that issue
-closes.
+**A long-lived npm token.** This was the original decision here, on the grounds that
+[bun cannot do npm's OIDC exchange in Actions](https://github.com/oven-sh/bun/issues/22423) and
+using `npm publish` would mean installing Node purely to publish. The first release attempt
+made the cost concrete: a token without *Bypass two-factor authentication* sends `bun publish`
+into an interactive browser login, and the job hangs on a prompt nobody can answer. Ticking
+that box fixes it and is now a dead end — npm is
+[withdrawing 2FA-bypass tokens](https://github.blog/changelog/2026-07-08-npm-install-time-security-and-gat-bypass2fa-deprecation/),
+which lose sensitive-operation privileges in August 2026 and direct publishing in January 2027.
+
+So the publish step runs `npm publish` under trusted publishing, and Node is installed in that
+one workflow to do it. This contradicts the decision above and is worth stating plainly rather
+than hiding: the repository is Bun, the publish step is not, because the registry's
+authentication is not something the project gets to choose.
+
+The concrete cost is that `npm publish` does not rewrite `workspace:*` the way `bun publish`
+does — it copies the string into the tarball, and a package published that way cannot be
+installed by anyone. Internal dependencies therefore name plain versions, and a test fails if
+the protocol reappears. Verified that `npm pack` runs `prepack` and produces the same twelve
+files as `bun pm pack`, so nothing about the package contents changes.
 
 ## Consequences
 

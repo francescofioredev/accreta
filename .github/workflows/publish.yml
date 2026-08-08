@@ -8,6 +8,9 @@ on:
 
 permissions:
   contents: read
+  # Trusted publishing: the registry gets a short-lived token minted for this
+  # workflow instead of a secret we store. Nothing to leak and nothing to rotate.
+  id-token: write
 
 jobs:
   publish:
@@ -20,40 +23,46 @@ jobs:
         with:
           bun-version: 1.3.13
 
+      # Node is here only to run `npm publish`. Everything else — tests,
+      # typecheck, the package contents — is bun. The split exists because bun
+      # cannot do OIDC (oven-sh/bun#22423) and npm's 2FA-bypass tokens are being
+      # withdrawn: they lose sensitive-operation privileges in August 2026 and
+      # direct publishing in January 2027. Building on one now would mean
+      # migrating under a deadline.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm 11.5.1 or newer for the token exchange.
+      - name: Use an npm that can do trusted publishing
+        run: npm install -g npm@latest && npm --version
+
       - name: Install
         run: bun install --frozen-lockfile
 
-      # npm will not let a version be republished, so everything that could make
-      # this release unusable has to fail before the publish step, not after.
+      # npm refuses to republish a version, so anything that could make this
+      # release unusable has to fail before the publish step, not after.
       - name: Test
         run: bun test
 
       - name: Typecheck
         run: bun run typecheck
 
-      # The tag names a version; the manifests name a version. If they disagree,
-      # this publishes the wrong number and it cannot be taken back.
+      # The tag names a version; the manifests name a version. If they disagree
+      # this publishes the wrong number, and it cannot be taken back.
       - name: Check the tag against the manifests
         run: bun run ./scripts/check-version.ts "${GITHUB_REF_NAME#v}"
 
-      # Authentication is a token rather than OIDC trusted publishing, which
-      # would be the better choice and is not available: bun does not support
-      # npm's OIDC exchange in Actions (oven-sh/bun#22423). Doing it properly
-      # would mean installing Node purely to run `npm publish`, against the
-      # point of a Bun-only package. This also defers provenance attestations.
-      # Revisit when that issue closes.
+      # Order is dependency order. A dependent published before its dependency
+      # is a broken install for anyone who runs `npm i` in that window.
+      #
+      # `npm publish` runs prepack, which copies templates/ and skills/ into the
+      # CLI package. Verified to produce the same 12 files as `bun pm pack`.
       - name: Publish
-        env:
-          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
-        # Published from the directory, never from a tarball: `bun publish
-        # ./x.tgz` runs no lifecycle scripts, so prepack would not copy the
-        # templates in and the CLI would ship without its constitution.
-        #
-        # Order is dependency order. A dependent published before its dependency
-        # is a broken install for anyone who runs `bun add` in that window.
         run: |
           for package in packages/core packages/adapters/fs packages/adapters/git packages/cli packages/mcp-server; do
             echo "::group::$package"
-            (cd "$package" && bun publish --access public)
+            (cd "$package" && npm publish --access public)
             echo "::endgroup::"
           done

@@ -30,9 +30,9 @@
     "skills"
   ],
   "dependencies": {
-    "@accreta/core": "workspace:*",
-    "@accreta/adapter-fs": "workspace:*",
-    "@accreta/adapter-git": "workspace:*"
+    "@accreta/core": "0.1.1",
+    "@accreta/adapter-fs": "0.1.1",
+    "@accreta/adapter-git": "0.1.1"
   },
   "scripts": {
     "prepack": "bun run ./scripts/copy-assets.ts",
