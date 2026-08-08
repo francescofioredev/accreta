@@ -1,0 +1,59 @@
+name: Publish
+
+# A tag is the trigger, but it is not a review: by the time this runs the tag
+# already exists, so every gate has to be inside this workflow.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: publish to npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      # npm will not let a version be republished, so everything that could make
+      # this release unusable has to fail before the publish step, not after.
+      - name: Test
+        run: bun test
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      # The tag names a version; the manifests name a version. If they disagree,
+      # this publishes the wrong number and it cannot be taken back.
+      - name: Check the tag against the manifests
+        run: bun run ./scripts/check-version.ts "${GITHUB_REF_NAME#v}"
+
+      # Authentication is a token rather than OIDC trusted publishing, which
+      # would be the better choice and is not available: bun does not support
+      # npm's OIDC exchange in Actions (oven-sh/bun#22423). Doing it properly
+      # would mean installing Node purely to run `npm publish`, against the
+      # point of a Bun-only package. This also defers provenance attestations.
+      # Revisit when that issue closes.
+      - name: Publish
+        env:
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # Published from the directory, never from a tarball: `bun publish
+        # ./x.tgz` runs no lifecycle scripts, so prepack would not copy the
+        # templates in and the CLI would ship without its constitution.
+        #
+        # Order is dependency order. A dependent published before its dependency
+        # is a broken install for anyone who runs `bun add` in that window.
+        run: |
+          for package in packages/core packages/adapters/fs packages/adapters/git packages/cli packages/mcp-server; do
+            echo "::group::$package"
+            (cd "$package" && bun publish --access public)
+            echo "::endgroup::"
+          done

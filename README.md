@@ -87,7 +87,9 @@ Two pieces are deferred rather than built, each with a reason and an issue:
 [hosted deployment auth and the sync loop](https://github.com/francescofioredev/accreta/issues/21),
 and [skill distribution](https://github.com/francescofioredev/accreta/issues/26). Both serve
 a deployment story that does not exist yet, and building them now would encode guesses that
-become load-bearing before anyone has tested them.
+become load-bearing before anyone has tested them. Skill distribution waited specifically on
+there being a package to install from; that now exists, so the guessing is over and the issue
+can proceed on evidence.
 
 Progress is tracked on the [project board](https://github.com/users/francescofioredev/projects/1),
 one epic per phase.
