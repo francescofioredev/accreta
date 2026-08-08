@@ -46,3 +46,37 @@ jobs:
       - name: Format
         if: ${{ !cancelled() }}
         run: bun run format:check
+
+  demo:
+    name: demo knowledge base
+    runs-on: ubuntu-latest
+    steps:
+      # The demo's citations name a commit, and its pages claim to be verified
+      # against it. Left unchecked that decays silently — which is precisely the
+      # failure this project exists to detect, so it would be a poor look.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Reindex
+        working-directory: examples/climate
+        run: bun run ../../packages/cli/src/main.ts reindex
+
+      # lint exits non-zero on a broken link, a missing citation, or a page type
+      # outside the configured vocabulary.
+      - name: Lint
+        working-directory: examples/climate
+        run: bun run ../../packages/cli/src/main.ts lint
+
+      # `drift` is deliberately not run here. The demo's pages are verified
+      # against the commit that introduced them, so every later commit to this
+      # repository makes them legitimately stale — the tool would be reporting
+      # correctly and CI would be red for it. Re-verifying the demo is an
+      # editorial act, not something a build should paper over.
