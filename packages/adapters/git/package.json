@@ -24,6 +24,6 @@
     "src"
   ],
   "dependencies": {
-    "@accreta/core": "workspace:*"
+    "@accreta/core": "0.1.1"
   }
 }

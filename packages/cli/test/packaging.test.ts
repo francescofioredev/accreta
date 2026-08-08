@@ -143,3 +143,20 @@ test("an installed core carries the schema its index is built from", () => {
     rmSync(project, { recursive: true, force: true });
   }
 });
+
+test("the published manifests name real versions, not workspace protocols", () => {
+  // npm is what publishes, and unlike bun it does not rewrite `workspace:*` —
+  // it copies the string into the tarball verbatim. A published package
+  // carrying `workspace:*` cannot be installed by anyone, and npm does not
+  // allow the version to be republished. So the protocol must never reach a
+  // manifest in the first place.
+  for (const pkg of PUBLISHABLE) {
+    const manifest = JSON.parse(readFileSync(join(REPO_ROOT, pkg, "package.json"), "utf-8")) as {
+      dependencies?: Record<string, string>;
+    };
+
+    for (const [name, range] of Object.entries(manifest.dependencies ?? {})) {
+      expect(`${pkg} → ${name}: ${range}`).not.toContain("workspace:");
+    }
+  }
+});
