@@ -42,9 +42,46 @@ jobs:
       # would mean installing Node purely to run `npm publish`, against the
       # point of a Bun-only package. This also defers provenance attestations.
       # Revisit when that issue closes.
+      # Credentials go in an .npmrc, which is what bun reads. They are also
+      # checked against the registry here rather than at publish time: a token
+      # that is expired, revoked or missing a scope makes bun fall back to its
+      # interactive browser login, and the job then hangs on a prompt nobody can
+      # answer until the timeout. Failing here says which of those it was.
+      - name: Authenticate to npm
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NPM_TOKEN" ]; then
+            echo "::error::NPM_TOKEN is empty or unset. Add it under Settings → Secrets → Actions."
+            exit 1
+          fi
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+
+          user=$(curl -sf -H "Authorization: Bearer ${NPM_TOKEN}" \
+                   https://registry.npmjs.org/-/whoami | grep -o '"username":"[^"]*"' || true)
+          if [ -z "$user" ]; then
+            echo "::error::npm rejected the token. It is expired, revoked, or not an automation token."
+            exit 1
+          fi
+          echo "Authenticated to npm as ${user#*:}"
+
+          # Authenticating is not the same as being allowed to publish, and the
+          # gap is not permissions — it is 2FA. A granular token with read and
+          # write on the scope still gets asked for a one-time code unless it
+          # was created with "Bypass two-factor authentication" ticked, and in
+          # a workflow there is nobody to type one. That is what sent the first
+          # release into an interactive login. Neither /-/whoami nor
+          # `--dry-run` can see it: the first only proves identity, the second
+          # never contacts the registry at all. It surfaces at publish, so the
+          # note below is what turns that failure into an instruction.
+
       - name: Publish
         env:
-          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # Never prompt. Without this, a credential problem opens an interactive
+          # login and the job waits on stdin instead of reporting the problem.
+          CI: "true"
+        # `< /dev/null` is the belt to that braces: no prompt can block on stdin
+        # even if a future bun stops honouring CI.
         # Published from the directory, never from a tarball: `bun publish
         # ./x.tgz` runs no lifecycle scripts, so prepack would not copy the
         # templates in and the CLI would ship without its constitution.
@@ -52,8 +89,10 @@ jobs:
         # Order is dependency order. A dependent published before its dependency
         # is a broken install for anyone who runs `bun add` in that window.
         run: |
+          # If this fails with an authentication prompt, the token is missing
+          # "Bypass two-factor authentication" — regenerate it with that ticked.
           for package in packages/core packages/adapters/fs packages/adapters/git packages/cli packages/mcp-server; do
             echo "::group::$package"
-            (cd "$package" && bun publish --access public)
+            (cd "$package" && bun publish --access public < /dev/null)
             echo "::endgroup::"
           done

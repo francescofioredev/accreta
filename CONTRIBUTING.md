@@ -92,6 +92,14 @@ and push it; `.github/workflows/publish.yml` does the rest.
 `packages/adapters` and `bench` stay private: they are a test harness and a benchmark, not
 things anyone installs.
 
+The `NPM_TOKEN` secret must be a granular token with **read and write** on the `@accreta` scope
+**and "Bypass two-factor authentication" ticked**. That last one is the part that looks
+optional and is not: without it npm asks for a one-time code on every publish, and since no
+one is there to type it into a workflow, bun falls back to an interactive browser login and
+the job hangs on a prompt until it times out. Nothing in the token's own page reads as wrong
+when this happens — it authenticates, it has the right scope — so it is worth checking first
+rather than last.
+
 ## Reporting a bug
 
 Use the bug template and include: what you expected, what happened, and the smallest
