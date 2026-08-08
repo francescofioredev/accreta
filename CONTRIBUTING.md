@@ -70,6 +70,28 @@ All four must pass before a pull request is ready. CI enforces them.
 > honestly scoped — and when a second maintainer arrives, the override stops being used and
 > nothing else has to change.
 
+## Releasing
+
+Publishing is triggered by a tag and gated on the full suite, because a tag is not a review and
+npm will not let a version be republished. Before tagging:
+
+```bash
+bun test                                  # includes the packed-tarball test
+bun run scripts/check-version.ts 0.1.2    # the tag you are about to push, without the v
+cd packages/cli && bun pm pack --dry-run  # eyeball the file list
+```
+
+The `--dry-run` is worth the ten seconds. It prints exactly what would ship, which is the one
+moment where an accidentally included secret or an oversized directory is cheap to notice.
+
+Bump all five publishable packages in one commit — `@accreta/core`, the two adapters, `accreta`
+and `@accreta/mcp-server`. They depend on each other by version, and `workspace:*` is resolved
+at publish time, so one left behind names a version that was never published. Then tag `vX.Y.Z`
+and push it; `.github/workflows/publish.yml` does the rest.
+
+`packages/adapters` and `bench` stay private: they are a test harness and a benchmark, not
+things anyone installs.
+
 ## Reporting a bug
 
 Use the bug template and include: what you expected, what happened, and the smallest
