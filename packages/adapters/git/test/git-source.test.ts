@@ -123,3 +123,70 @@ describe("GitSource", () => {
     expect(git.citation("a.md", [1, 3])).toContain(first);
   });
 });
+
+describe("GitSource scoped to paths", () => {
+  function scoped(paths: string[]) {
+    return new GitSource({
+      id: "repo",
+      root,
+      citationFormat: "{source} @ {rev} · {path}",
+      paths,
+    });
+  }
+
+  beforeEach(async () => {
+    write("docs/a.md", "one");
+    write("other/b.md", "two");
+    await commit("first");
+  });
+
+  test("a commit outside the scoped paths does not move the revision", async () => {
+    // The false positive this exists to prevent: without scoping, a source is
+    // the whole repository, and a commit to an unrelated file drifts every page.
+    const scopedSource = scoped(["docs"]);
+    const before = await scopedSource.revision();
+
+    write("other/b.md", "changed");
+    await commit("touches only other/");
+
+    expect(await scopedSource.revision()).toBe(before);
+    expect(await scopedSource.changedSince(before)).toEqual([]);
+  });
+
+  test("a commit inside the scoped paths does move it", async () => {
+    const scopedSource = scoped(["docs"]);
+    const before = await scopedSource.revision();
+
+    write("docs/a.md", "changed");
+    await commit("touches docs/");
+
+    expect(await scopedSource.revision()).not.toBe(before);
+    expect(await scopedSource.changedSince(before)).toEqual(["docs/a.md"]);
+  });
+
+  test("changedSince reports only paths inside the scope", async () => {
+    const scopedSource = scoped(["docs"]);
+    const before = await scopedSource.revision();
+
+    write("docs/a.md", "changed");
+    write("other/b.md", "also changed");
+    await commit("touches both");
+
+    expect(await scopedSource.changedSince(before)).toEqual(["docs/a.md"]);
+  });
+
+  test("without paths the source is the whole repository", async () => {
+    const wholeRepo = new GitSource({ id: "repo", root, citationFormat: "x" });
+    const before = await wholeRepo.revision();
+
+    write("other/b.md", "changed");
+    await commit("anything");
+
+    expect(await wholeRepo.revision()).not.toBe(before);
+  });
+
+  test("paths that have no commits yet resolve to HEAD rather than failing", async () => {
+    const scopedSource = scoped(["nothing/here"]);
+    expect(await scopedSource.revision()).toMatch(/^[0-9a-f]{40}$/);
+  });
+});
