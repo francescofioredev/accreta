@@ -17,3 +17,16 @@ test("a tag that disagrees with the manifests is reported, with every package na
 test("the matching tag reports nothing", () => {
   expect(mismatches(versionOf("packages/cli"))).toEqual([]);
 });
+
+test("the workflow publishes the packages in dependency order", async () => {
+  // A dependent published before its dependency is a broken install for anyone
+  // who runs `npm i` in that window, and the window is real: npm takes the
+  // packages one at a time. The workflow's loop and this list have to agree.
+  const workflow = await Bun.file(
+    new URL("../.github/workflows/publish.yml", import.meta.url),
+  ).text();
+
+  const loop = workflow.match(/for package in ([^;]+);/);
+  expect(loop).not.toBeNull();
+  expect(loop![1]!.trim().split(/\s+/)).toEqual(PUBLISHABLE);
+});

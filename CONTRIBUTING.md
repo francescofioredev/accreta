@@ -103,6 +103,17 @@ otherwise entirely Bun repository: bun cannot do the OIDC exchange
 2FA-bypass tokens that were the alternative — sensitive operations in August 2026, direct
 publishing in January 2027.
 
+Publishing five packages is not atomic: npm takes them one at a time, and any of them can
+fail — a scope without a trusted publisher configured, a network blip. The workflow therefore
+skips whatever is already at the tag's version, so re-running a half-finished release picks up
+where it stopped instead of dying on the first package that already succeeded. Re-running is
+always safe; it is the intended way to finish a partial release.
+
+Each package needs its own trusted publisher on npmjs.com, including the unscoped `accreta` —
+configuring the `@accreta` org does not cover it, since it belongs to the user rather than the
+scope. A missing one shows up as `404 ... could not be found or you do not have permission`,
+which is npm's way of saying 403.
+
 It costs one thing worth knowing about. `bun publish` rewrites `workspace:*` to real versions
 when it packs; `npm publish` copies the string through untouched, and a published package
 carrying `workspace:*` cannot be installed by anybody. So the internal dependencies name plain
