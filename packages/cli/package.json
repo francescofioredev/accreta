@@ -1,6 +1,6 @@
 {
   "name": "accreta",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "license": "MIT",
   "description": "A knowledge base an agent writes and maintains, with provenance to the sources and drift detection when they change.",
@@ -30,9 +30,9 @@
     "skills"
   ],
   "dependencies": {
-    "@accreta/core": "0.1.1",
-    "@accreta/adapter-fs": "0.1.1",
-    "@accreta/adapter-git": "0.1.1"
+    "@accreta/core": "0.1.2",
+    "@accreta/adapter-fs": "0.1.2",
+    "@accreta/adapter-git": "0.1.2"
   },
   "scripts": {
     "prepack": "bun run ./scripts/copy-assets.ts",

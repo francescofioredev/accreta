@@ -82,6 +82,12 @@ cross-adapter test harness and the benchmark.
 `v0.1.0` was already tagged and released before any of this existed, so the first published
 version is `0.1.1`.
 
+That first release had to be published by hand. A trusted publisher is configured per package
+on a package's own settings page, and that page does not exist until the package does — so
+there is no way to have OIDC in place for a first publish. The workflow takes over from the
+second release onward, and the manual step is a one-off per new package rather than a standing
+exception.
+
 A test packs every publishable package, installs the tarballs outside the repository tree, and
 runs `init --preset research` and `reindex` against them. Installing outside the tree is what
 makes it a real test: inside it, the resolver's repository fallback would answer for a package
