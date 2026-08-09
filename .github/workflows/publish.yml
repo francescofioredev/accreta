@@ -61,8 +61,31 @@ jobs:
       # CLI package. Verified to produce the same 12 files as `bun pm pack`.
       - name: Publish
         run: |
+          version="${GITHUB_REF_NAME#v}"
+          published=0
+          skipped=0
+
           for package in packages/core packages/adapters/fs packages/adapters/git packages/cli packages/mcp-server; do
-            echo "::group::$package"
-            (cd "$package" && npm publish --access public)
+            name=$(node -p "require('./$package/package.json').name")
+            echo "::group::$name"
+
+            # Already at this version? Then a previous run got this far and
+            # stopped somewhere after it. Publishing five packages is not atomic
+            # — npm takes them one at a time and any of them can fail — so a
+            # re-run has to be able to pick up where the last one left off
+            # instead of dying on the first thing that already succeeded.
+            if npm view "$name@$version" version > /dev/null 2>&1; then
+              echo "$name@$version is already published, skipping."
+              skipped=$((skipped + 1))
+            else
+              (cd "$package" && npm publish --access public)
+              published=$((published + 1))
+            fi
+
             echo "::endgroup::"
           done
+
+          echo "Published $published package(s), skipped $skipped already at $version."
+          if [ "$published" -eq 0 ] && [ "$skipped" -gt 0 ]; then
+            echo "::notice::Everything was already published at $version. Nothing to do."
+          fi
