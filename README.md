@@ -97,7 +97,14 @@ one epic per phase.
 ## Install
 
 ```bash
-bun add -g accreta
+bun add -g accreta          # or: bunx accreta --help
+```
+
+Then, in a directory of your own:
+
+```bash
+accreta init --preset research   # or codebase, or neither
+accreta reindex && accreta lint
 ```
 
 > **accreta runs on [Bun](https://bun.sh), not Node.** It ships as TypeScript and uses
@@ -117,11 +124,9 @@ bun run ../../packages/cli/src/main.ts drift     # up to date, both sources
 bun run ../../packages/cli/src/main.ts canonical "ECS"
 ```
 
-To start your own:
-
-```bash
-accreta init --preset research    # or codebase, or neither
-```
+Those run against the repository. With `accreta` installed the same commands work anywhere,
+which is what [the packaged CLI is tested for](packages/cli/test/packaging.test.ts): the test
+packs the tarballs, installs them outside this repository, and drives the CLI from there.
 
 ## Design decisions
 

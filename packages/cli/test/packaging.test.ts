@@ -36,6 +36,10 @@ const PUBLISHABLE = [
   "packages/mcp-server",
 ];
 
+// Not safe to run concurrently with another copy of this suite: `prepack`
+// copies the assets into packages/cli/ and `postpack` removes them again, so two
+// runs racing each other see the directory appear and vanish underneath them.
+// The temp dirs below are per-run; the package directory is not.
 let staging = "";
 let consumer = "";
 let accreta = "";

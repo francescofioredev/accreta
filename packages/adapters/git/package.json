@@ -1,6 +1,6 @@
 {
   "name": "@accreta/adapter-git",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "license": "MIT",
   "description": "Source adapter for a git repository. Revision is a commit SHA.",
@@ -24,6 +24,6 @@
     "src"
   ],
   "dependencies": {
-    "@accreta/core": "0.1.1"
+    "@accreta/core": "0.1.2"
   }
 }
