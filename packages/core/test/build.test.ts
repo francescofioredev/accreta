@@ -53,6 +53,28 @@ describe("buildIndex", () => {
     db.close();
   });
 
+  // The end-to-end half of the quoted-wikilink defect. Parsing is asserted in
+  // page.test.ts; what mattered in practice is that the *indexed row* lost its
+  // provenance, because that is the row drift and lint read. A page that cites
+  // nothing can never be flagged as having drifted.
+  test("a quoted wikilink in the title does not cost the page its provenance", () => {
+    writePage(
+      "concepts/forcing.md",
+      '---\ntitle: "Radiative forcing, see also [[concepts/sensitivity]]"\ntype: concept\ncanonical_source: "ipcc:ch07.md#L320"\nlast_verified_revision: 9a4f2c1\n---\n\n# Radiative forcing\n',
+    );
+    writePage("concepts/sensitivity.md", "---\ntype: concept\n---\n\n# Sensitivity\n");
+    build();
+
+    const db = openIndex(indexPath, { readonly: true });
+    const row = db
+      .query("SELECT type, canonical_source, last_verified_revision FROM pages WHERE path = ?")
+      .get("knowledge/concepts/forcing.md") as Record<string, unknown>;
+    expect(row.type).toBe("concept");
+    expect(row.canonical_source).toBe("ipcc:ch07.md#L320");
+    expect(row.last_verified_revision).toBe("9a4f2c1");
+    db.close();
+  });
+
   test("nested directories are walked", () => {
     writePage("a.md", "# A\n");
     writePage("deep/b.md", "# B\n");
