@@ -393,9 +393,15 @@ export async function drift(ctx: CommandContext): Promise<number> {
       ctx.out(`${adapter.id} @ ${report.currentRevision}`);
 
       if (report.stale.length > 0) {
-        ctx.out(`  ${report.stale.length} page(s) may have drifted:`);
-        for (const page of report.stale) {
-          ctx.out(`    ${page.path} (verified at ${page.verifiedAt})`);
+        // Summed over the groups rather than taken from `report.stale.length`,
+        // which counts revisions now that the report is grouped. The reader is
+        // being told how many pages are in doubt.
+        const pageCount = report.stale.reduce((total, entry) => total + entry.pages.length, 0);
+        ctx.out(`  ${pageCount} page(s) may have drifted:`);
+        for (const entry of report.stale) {
+          for (const path of entry.pages) {
+            ctx.out(`    ${path} (verified at ${entry.revision})`);
+          }
         }
         exitCode = 1;
       }

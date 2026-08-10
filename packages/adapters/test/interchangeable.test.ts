@@ -121,7 +121,7 @@ for (const [name, makeFixture] of ADAPTERS) {
       await advance();
 
       const report = await detectDrift(db, adapter);
-      expect(report.stale.map((s) => s.path)).toEqual(["knowledge/a.md"]);
+      expect(report.stale.flatMap((entry) => entry.pages)).toEqual(["knowledge/a.md"]);
       expect(report.stale[0]?.changedPaths).toEqual(["chapter-07.md"]);
       expect(report.currentRevision).not.toBe(verifiedAt);
     });
