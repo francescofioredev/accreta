@@ -8,6 +8,12 @@ dist/
 build/
 *.tsbuildinfo
 
+# `bun pm pack` writes the tarball into the current directory unless told
+# otherwise, so a pack run from a package directory leaves one behind. One was
+# committed that way and sat in the tree at a version two releases old. The
+# packed-tarball test packs into a temporary directory and never needs these.
+*.tgz
+
 # The index is a derived artifact: it is rebuilt from the knowledge base in
 # ~150ms. Committing it would put a binary blob in every diff and would go
 # stale the moment anyone edits a page.
