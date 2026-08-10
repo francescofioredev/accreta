@@ -16,6 +16,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@accreta/core": "workspace:*",
+        "@accreta/mcp-server": "workspace:*",
       },
     },
     "packages/adapters": {
