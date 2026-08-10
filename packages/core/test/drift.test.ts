@@ -38,6 +38,9 @@ class ScriptedSource implements SourceAdapter {
   citation(path: string, lines?: LineRange): string {
     return lines ? `${this.id}:${path}#${lines[0]}` : `${this.id}:${path}`;
   }
+
+  // This source's citations carry no revision, so there is nothing to pin.
+  pinRevision(): void {}
 }
 
 let root = "";

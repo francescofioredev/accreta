@@ -123,4 +123,15 @@ describe("FsSource", () => {
     expect(cite).not.toContain("{start}");
     expect(cite).not.toContain("undefined");
   });
+
+  test("a citation names the pinned revision, not the tree's current hash", async () => {
+    const fs = source();
+    const verifiedAt = await fs.revision();
+    fs.pinRevision(verifiedAt);
+
+    write("chapter-07.md", "rewritten after the claim was checked", 3000);
+    expect(await fs.revision()).not.toBe(verifiedAt);
+
+    expect(fs.citation("chapter-07.md", [142, 158])).toContain(verifiedAt);
+  });
 });

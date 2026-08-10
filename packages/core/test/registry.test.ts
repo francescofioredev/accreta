@@ -19,6 +19,8 @@ class StubSource implements SourceAdapter {
   citation(path: string, lines?: LineRange) {
     return lines ? `${this.id}:${path}#${lines[0]}` : `${this.id}:${path}`;
   }
+  // This stub's citations carry no revision, so there is nothing to pin.
+  pinRevision() {}
 }
 
 describe("parseSourceDeclaration", () => {

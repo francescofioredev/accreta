@@ -25,6 +25,7 @@ interface SourceAdapter {
   changedSince(revision: string): Promise<string[]>;
   read(path: string): Promise<string>;
   citation(path: string, lines?: LineRange): string;
+  pinRevision(revision: string): void;
 }
 ```
 
@@ -44,6 +45,28 @@ Returning `[]` would mean "nothing changed", and drift detection would render a 
 verified when it has no way to know. **"I cannot tell" and "nothing changed" are different
 claims, and only one of them is safe to show as a green check.** `DriftReport` keeps them in
 separate fields for the same reason.
+
+### A citation names the revision it was checked against, so pinning is on the interface
+
+*Amended 2026-08-10 — this method was added after the original decision. See below.*
+
+`citation()` renders a revision, but only the caller knows which revision a claim was
+verified against. `pinRevision` is how the caller says so, and it is the interface's one
+mutator.
+
+It was originally a `GitSource`-only method, on the reasoning that pinning was a git
+concern. That was wrong in a way worth recording, because the cost was not the asymmetry
+itself: **a property that is not on the interface cannot be asserted by the conformance
+suite.** `fs` shipped a `citation()` that rendered `rev="unknown"` for every citation ever
+produced — provenance that was present, well-formed and false — and passed its own
+adapter tests, because the shared suite could only check the path and line tail. The
+defect and the reason it went undetected were the same fact.
+
+The unpinned fallback is shared (`UNPINNED_REVISION`) rather than per-adapter for the same
+reason. `git` fell back to `"HEAD"`, which reads as a real revision and so states something
+the source cannot support; `fs` fell back to `"unknown"`. An adapter that has not been told
+what to cite against must say so, identically, or the reader cannot tell which kind of
+source produced the claim.
 
 ### Sources register by name; the registry never learns their names
 
@@ -72,6 +95,14 @@ Rejected: capability flags are `if (adapter === 'fs')` wearing a disguise. The b
 from the call site into a boolean, and the core is once again reasoning about what kind of
 source it holds.
 
+**Fixing the `fs` citation without touching the interface.** Assign the revision inside
+`fs`'s own `revision()` and leave `SourceAdapter` at four methods — a one-line change that
+closes the visible bug. Rejected: it makes the citation name whatever the last drift check
+happened to compute rather than what the claim was checked against, which is the guess this
+interface exists to prevent. It also leaves the real defect in place, since the conformance
+suite still could not express the property, and the next adapter would be free to
+reintroduce it.
+
 **Letting `fs` hash contents rather than mtimes.** Would make `fs` revisions robust to
 mtime-preserving edits. Rejected for now: it turns `revision()` from a stat walk into a full
 read of the corpus, and `revision()` is called on every drift check. The trade-off is
@@ -86,6 +117,9 @@ should be versioned by something that versions contents, which is what the git a
   diff against and a hash cannot be inverted. It reports `UnknownRevisionError` rather than
   guessing, which is the honest answer and the one a caller can act on.
 - Adding a source type touches no existing file except the one that registers it.
+- An adapter must be pinned before its citations mean anything. Unpinned it renders
+  `UNPINNED_REVISION`, which is checkable and honest, rather than a plausible-looking
+  revision that is neither.
 - The test that matters is `packages/adapters/test/interchangeable.test.ts`: the same
   assertions, run against a real filesystem directory and a real git repository. If the two
   ever need different expectations, the abstraction is leaking and this ADR is wrong.

@@ -2,7 +2,13 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { detectDrift, openIndex, type Database, type SourceAdapter } from "@accreta/core";
+import {
+  detectDrift,
+  openIndex,
+  UNPINNED_REVISION,
+  type Database,
+  type SourceAdapter,
+} from "@accreta/core";
 import { FsSource } from "@accreta/adapter-fs";
 import { GitSource } from "@accreta/adapter-git";
 
@@ -140,6 +146,36 @@ for (const [name, makeFixture] of ADAPTERS) {
     test("a citation renders through the configured format", async () => {
       const { adapter } = await makeFixture();
       expect(adapter.citation("chapter-07.md", [142, 158])).toContain("chapter-07.md#L142-L158");
+    });
+
+    // The case above asserts only the path and line tail, which is how `fs`
+    // shipped a citation whose revision was the literal string "unknown" and
+    // passed its own conformance suite. Provenance is the project's first
+    // stated property; these two cases are what make it checkable.
+    test("a citation names the revision it was pinned to", async () => {
+      const { adapter, advance } = await makeFixture();
+      const verifiedAt = await adapter.revision();
+
+      adapter.pinRevision(verifiedAt);
+      await advance();
+
+      // Pinned before the source moved, so the citation must still name the
+      // revision the claim was checked against rather than where the source
+      // has since got to.
+      expect(adapter.citation("chapter-07.md", [142, 158])).toContain(verifiedAt);
+      expect(adapter.citation("chapter-07.md", [142, 158])).not.toContain(UNPINNED_REVISION);
+    });
+
+    test("an unpinned citation says so rather than inventing a revision", async () => {
+      const { adapter } = await makeFixture();
+      const current = await adapter.revision();
+
+      // Asked for its revision but never told what to cite against: the honest
+      // answer is the shared sentinel. Naming `current` here would be a guess
+      // dressed as provenance, and every adapter must guess identically or the
+      // reader cannot tell which it is holding.
+      expect(adapter.citation("chapter-07.md")).toContain(UNPINNED_REVISION);
+      expect(adapter.citation("chapter-07.md")).not.toContain(current);
     });
   });
 }

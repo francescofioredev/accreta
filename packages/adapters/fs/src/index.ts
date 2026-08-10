@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import {
   formatCitation,
+  UNPINNED_REVISION,
   UnknownRevisionError,
   type LineRange,
   type SourceAdapter,
@@ -103,13 +104,23 @@ export class FsSource implements SourceAdapter {
   citation(path: string, lines?: LineRange): string {
     return formatCitation(this.citationFormat, {
       source: this.id,
-      rev: this.lastRevision ?? "unknown",
+      rev: this.pinnedRevision ?? UNPINNED_REVISION,
       path,
       lines,
     });
   }
 
-  private lastRevision: string | undefined;
+  /**
+   * Revision used when rendering citations.
+   *
+   * A citation must name the revision the claim was verified against, not
+   * whatever the tree hashes to when the page is rendered later.
+   */
+  private pinnedRevision: string | undefined;
+
+  pinRevision(revision: string): void {
+    this.pinnedRevision = revision;
+  }
 
   private scan(): Entry[] {
     const out: Entry[] = [];

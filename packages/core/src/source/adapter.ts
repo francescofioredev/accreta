@@ -1,7 +1,7 @@
 /**
  * A source is anything that can answer three questions: what revision are you
  * at, what changed since a given revision, and how do I cite a location inside
- * you.
+ * you — plus one instruction: cite against *this* revision.
  *
  * Git answers with a commit SHA and `diff --name-only`. A directory of
  * documents answers with a hash of modification times and a scan. An API might
@@ -34,7 +34,35 @@ export interface SourceAdapter {
 
   /** Render a citation to a location, per the configured provenance format. */
   citation(path: string, lines?: LineRange): string;
+
+  /**
+   * Fix the revision that subsequent citations name.
+   *
+   * A citation must name the revision the claim was verified against, not
+   * whatever the source happens to be at when the page is rendered later —
+   * that is the difference between provenance and a guess. Only the caller
+   * knows which revision a claim was checked against, so only the caller can
+   * say.
+   *
+   * This is the interface's one mutator, and it is here rather than as a
+   * parameter on `citation` because pinning happens once per ingest while
+   * citations are rendered many times inside it.
+   *
+   * An adapter that has not been pinned must render `UNPINNED_REVISION` rather
+   * than inventing a plausible-looking revision: a citation that reads as true
+   * while naming nothing is worse than one that admits it knows nothing.
+   */
+  pinRevision(revision: string): void;
 }
+
+/**
+ * What a citation names before anything has been pinned.
+ *
+ * Shared by every adapter so the honest answer cannot vary by source type. The
+ * `fs` adapter shipped this sentinel while `git` shipped `"HEAD"`, which reads
+ * as a real revision and so states something the source cannot support.
+ */
+export const UNPINNED_REVISION = "unknown";
 
 export type LineRange = readonly [start: number, end: number];
 
