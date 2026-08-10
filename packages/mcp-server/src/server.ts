@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod/v3";
 
@@ -24,13 +26,33 @@ import {
   updateVerifiedRevisionTool,
 } from "./tools.ts";
 
+/**
+ * The version this server reports to a client during `initialize`.
+ *
+ * Read from the manifest rather than restated, because a restated version
+ * drifts: this was hardcoded at 0.1.0 for two releases while the package was at
+ * 0.1.2, so a client asking "which accreta am I talking to" got the wrong
+ * answer. `readFileSync` rather than a JSON import so no `resolveJsonModule` is
+ * needed across every package's shared tsconfig; `files` does not list the
+ * manifest, but npm always ships `package.json` at the tarball root, so this
+ * resolves both in the repository and in an installed copy.
+ *
+ * The *name* stays a literal on purpose: `accreta` is the protocol identity a
+ * client displays, not the npm package name `@accreta/mcp-server`.
+ */
+const VERSION = (
+  JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")) as {
+    version: string;
+  }
+).version;
+
 /** Wrap a result as MCP tool content. */
 function json(value: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }] };
 }
 
 export function createServer(ctx: ToolContext): McpServer {
-  const server = new McpServer({ name: "accreta", version: "0.1.0" });
+  const server = new McpServer({ name: "accreta", version: VERSION });
   const register = server.registerTool.bind(server) as <I>(
     name: string,
     config: { description: string; inputSchema: Record<string, unknown> },
