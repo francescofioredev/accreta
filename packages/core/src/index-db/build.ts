@@ -129,11 +129,11 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
     INSERT INTO pages (
       path, type, title, source, canonical_source,
       last_verified_revision, last_ingest_revision, last_ingest_at,
-      frontmatter_json, body, mtime
+      frontmatter_json, body, mtime, frontmatter_error
     ) VALUES (
       $path, $type, $title, $source, $canonical_source,
       $last_verified_revision, $last_ingest_revision, $last_ingest_at,
-      $frontmatter_json, $body, $mtime
+      $frontmatter_json, $body, $mtime, $frontmatter_error
     )
   `);
   const insertFts = db.prepare(`
@@ -173,7 +173,7 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
       if (mtime > maxMtime) maxMtime = mtime;
 
       const fallbackTitle = path.replace(/\.md$/, "");
-      const { frontmatter, body, title } = parsePage(raw, fallbackTitle);
+      const { frontmatter, body, title, frontmatterError } = parsePage(raw, fallbackTitle);
 
       // An unrecognised type is recorded as-is rather than coerced: the page
       // exists and `lint` should be able to name what is wrong with it.
@@ -192,6 +192,7 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
         $frontmatter_json: JSON.stringify(frontmatter),
         $body: body,
         $mtime: Math.floor(mtime),
+        $frontmatter_error: frontmatterError ?? null,
       });
 
       insertFts.run({

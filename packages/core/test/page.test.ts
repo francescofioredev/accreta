@@ -35,6 +35,22 @@ describe("parsePage", () => {
     expect(page.frontmatter).toEqual({});
     expect(page.title).toBe("Still a page");
     expect(page.body).toContain("# Still a page");
+    // The page is still indexed — refusing it would hide the one page most
+    // likely to need fixing — but why it is empty is no longer thrown away.
+    expect(page.frontmatterError).toBeTruthy();
+  });
+
+  test("a page that simply declares nothing is not an error", () => {
+    expect(parsePage("# A page\n", "fb").frontmatterError).toBeUndefined();
+    expect(parsePage("---\ntype: note\n---\n\n# A\n", "fb").frontmatterError).toBeUndefined();
+  });
+
+  test("a frontmatter that parses to a list rather than fields is recorded", () => {
+    // The quieter failure: nothing throws, and the page just arrives with no
+    // fields at all.
+    const page = parsePage("---\n- one\n- two\n---\n\n# A\n", "fb");
+    expect(page.frontmatter).toEqual({});
+    expect(page.frontmatterError).toContain("list");
   });
 
   test("aliases survive as a list", () => {

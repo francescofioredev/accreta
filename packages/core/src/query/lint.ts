@@ -7,7 +7,8 @@ export interface LintFinding {
     | "unknown-page-type"
     | "missing-provenance"
     | "unverified-page"
-    | "dangling-link";
+    | "dangling-link"
+    | "unparseable-frontmatter";
   path: string;
   detail: string;
 }
@@ -29,6 +30,7 @@ interface PageRow {
   type: string;
   canonical_source: string | null;
   last_verified_revision: string | null;
+  frontmatter_error: string | null;
 }
 
 /**
@@ -76,11 +78,28 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
   }
 
   const pages = db
-    .query(`SELECT path, type, canonical_source, last_verified_revision FROM pages ORDER BY path`)
+    .query(
+      `SELECT path, type, canonical_source, last_verified_revision, frontmatter_error
+       FROM pages ORDER BY path`,
+    )
     .all() as PageRow[];
 
   const knownTypes = new Set(config.pageTypes);
   for (const page of pages) {
+    // Reported first, and *alongside* the three below rather than instead of
+    // them. A page whose frontmatter would not load really does lack a type and
+    // provenance, so suppressing those would hide real gaps if this diagnosis
+    // were ever wrong. What was missing was the cause: an author told only that
+    // `canonical_source` is absent goes and adds a field that is already there,
+    // three lines above the one that actually broke.
+    if (page.frontmatter_error) {
+      findings.push({
+        kind: "unparseable-frontmatter",
+        path: page.path,
+        detail: `frontmatter was discarded and every field with it — ${page.frontmatter_error}`,
+      });
+    }
+
     if (!knownTypes.has(page.type)) {
       findings.push({
         kind: "unknown-page-type",
