@@ -15,7 +15,7 @@ export { openIndex, sealForReading } from "./index-db/db.ts";
 
 export type { LineRange, SourceAdapter } from "./source/adapter.ts";
 export { UNPINNED_REVISION, UnknownRevisionError, formatCitation } from "./source/adapter.ts";
-export type { DriftReport, StalePage, UnresolvableRevision } from "./source/drift.ts";
+export type { DriftReport, StaleRevision, UnresolvableRevision } from "./source/drift.ts";
 export { detectDrift } from "./source/drift.ts";
 export type { SourceDeclaration, SourceFactory } from "./source/registry.ts";
 export { SourceRegistry, parseSourceDeclaration } from "./source/registry.ts";

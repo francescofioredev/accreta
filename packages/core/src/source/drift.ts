@@ -5,8 +5,8 @@ export interface DriftReport {
   sourceId: string;
   /** The revision the source is at now. */
   currentRevision: string;
-  /** Pages whose recorded revision differs from the source's current one. */
-  stale: StalePage[];
+  /** Revisions that have moved, with the pages verified against them. */
+  stale: StaleRevision[];
   /**
    * Pages that record no revision at all. Not drift — something weaker and
    * worse: there is no revision to compare against, so nothing can be said
@@ -24,11 +24,22 @@ export interface DriftReport {
   unresolvable: UnresolvableRevision[];
 }
 
-export interface StalePage {
-  path: string;
-  verifiedAt: string;
+/**
+ * Pages that share a stale revision, with the change that stranded them.
+ *
+ * Grouped rather than one entry per page because `changedPaths` belongs to the
+ * revision, not to any page in it. Repeating it per page made the report the
+ * product of the two: a thousand pages against a hundred-file commit serialised
+ * to roughly four megabytes, most of it the same paths copied a thousand times.
+ * `UnresolvableRevision` was already shaped this way; now both grouped outcomes
+ * read alike.
+ */
+export interface StaleRevision {
+  revision: string;
   /** Source paths that changed since, when the source can say. */
   changedPaths: string[];
+  /** Pages recording this revision, sorted by path. */
+  pages: string[];
 }
 
 export interface UnresolvableRevision {
@@ -76,7 +87,7 @@ export async function detectDrift(db: Database, adapter: SourceAdapter): Promise
     else byRevision.set(revision, [row.path]);
   }
 
-  const stale: StalePage[] = [];
+  const stale: StaleRevision[] = [];
   const unresolvable: UnresolvableRevision[] = [];
 
   for (const [revision, pages] of byRevision) {
@@ -98,12 +109,17 @@ export async function detectDrift(db: Database, adapter: SourceAdapter): Promise
     // to ignore the report.
     if (changedPaths.length === 0) continue;
 
-    for (const path of pages) {
-      stale.push({ path, verifiedAt: revision, changedPaths });
-    }
+    stale.push({ revision, changedPaths, pages });
   }
 
-  stale.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  // Sorted by first page rather than by revision: a revision is an opaque
+  // string, so ordering by it would shuffle the report for no reason a reader
+  // could follow. `pages` arrives in path order from the query above.
+  stale.sort((a, b) => {
+    const left = a.pages[0] ?? "";
+    const right = b.pages[0] ?? "";
+    return left < right ? -1 : left > right ? 1 : 0;
+  });
 
   return { sourceId: adapter.id, currentRevision, stale, unverifiable, unresolvable };
 }

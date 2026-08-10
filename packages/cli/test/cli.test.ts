@@ -234,6 +234,57 @@ describe("accreta drift", () => {
     expect(await cli("drift")).toBe(0);
     expect(stdout()).toContain("No sources declared");
   });
+
+  // The report groups by revision, so the headline number has to be summed over
+  // the groups. Taking it from `stale.length` would still print a plausible
+  // count — of revisions, silently relabelled as pages.
+  //
+  // Driven through a git source because `fs` keeps its revision snapshots in
+  // memory: across two CLI invocations it can only answer "cannot place", which
+  // is the documented consequence in ADR-0002 and not the path under test here.
+  test("stale pages are counted and listed individually, not per revision", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+
+    const docs = join(root, "sources", "docs");
+    mkdirSync(docs, { recursive: true });
+    const git = async (...args: string[]) => {
+      const proc = Bun.spawn(["git", ...args], { cwd: docs, stdout: "pipe", stderr: "pipe" });
+      if ((await proc.exited) !== 0) throw new Error(await new Response(proc.stderr).text());
+    };
+    writeFileSync(join(docs, "a.md"), "text", "utf-8");
+    await git("init", "-q");
+    await git("config", "user.email", "t@example.invalid");
+    await git("config", "user.name", "Test");
+    await git("add", ".");
+    await git("commit", "-qm", "first");
+    const head = Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: docs });
+    const revision = head.stdout.toString().trim();
+
+    writeFileSync(
+      join(root, "sources", "docs.yaml"),
+      "id: docs\ntype: git\nroot: sources/docs\n",
+      "utf-8",
+    );
+    for (const name of ["one", "two", "three"]) {
+      writePage(
+        `${name}.md`,
+        `---\ntype: note\nsource: docs\nlast_verified_revision: ${revision}\n---\n\n# ${name}\n`,
+      );
+    }
+    await cli("reindex");
+
+    writeFileSync(join(docs, "a.md"), "rewritten", "utf-8");
+    await git("commit", "-qam", "second");
+    output = [];
+
+    expect(await cli("drift")).toBe(1);
+    // Three pages, one revision: the count must be the pages.
+    expect(stdout()).toContain("3 page(s) may have drifted");
+    for (const name of ["one", "two", "three"]) {
+      expect(stdout()).toContain(`knowledge/${name}.md`);
+    }
+  });
 });
 
 describe("accreta help", () => {
