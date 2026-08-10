@@ -89,4 +89,59 @@ describe("parsePage — wikilinks inside frontmatter", () => {
     expect(page.frontmatter.flag).toBe(true);
     expect(page.frontmatter.name).toBe("plain");
   });
+
+  // Quoting a scalar is a habit YAML actively encourages, and the constitution's
+  // own example quotes `canonical_source`. Quoting a wikilink inside one used to
+  // produce invalid YAML, so the page indexed with *zero* frontmatter: no type,
+  // no provenance, no verified revision, and nothing for drift to hold on to.
+  // These assert the whole record survives, not merely that parsing did not
+  // throw — the field that goes missing is the one that matters.
+  describe("a value the author already quoted", () => {
+    const cases: [string, string, unknown][] = [
+      ["a quoted scalar", 'title: "Radiative forcing, see also [[concepts/x]]"', undefined],
+      ["a quoted list item", 'aliases: ["forcing", "see [[concepts/x]]"]', undefined],
+      ["a defensively quoted wikilink", 'related: "[[concepts/x]]"', "[[concepts/x]]"],
+      ["a quoted source field", 'source: "ipcc:ch07.md [[note]]"', undefined],
+      ["a quoted block item", 'related:\n  - "[[concepts/x]]"', ["[[concepts/x]]"]],
+    ];
+
+    for (const [name, field, relatedValue] of cases) {
+      test(`${name} keeps every other key`, () => {
+        const page = parsePage(
+          `---\n${field}\ntype: concept\ncanonical_source: "ipcc:ch07.md#L320"\nlast_verified_revision: 9a4f2c1\n---\n\n# X\n`,
+          "fb",
+        );
+
+        expect(page.frontmatter.type).toBe("concept");
+        expect(page.frontmatter.last_verified_revision).toBe("9a4f2c1");
+        expect(page.frontmatter.canonical_source).toBeTruthy();
+        if (relatedValue !== undefined) expect(page.frontmatter.related).toEqual(relatedValue);
+      });
+    }
+
+    test("the quoted text is preserved verbatim, without injected quotes", () => {
+      const page = parsePage('---\ntitle: "see [[concepts/x]]"\n---\n\n# X\n', "fb");
+      expect(page.frontmatter.title).toBe("see [[concepts/x]]");
+    });
+
+    test("an escaped quote inside the value does not end it early", () => {
+      const page = parsePage(
+        '---\ntitle: "a \\" b [[concepts/x]]"\ntype: concept\n---\n\n# X\n',
+        "fb",
+      );
+      expect(page.frontmatter.type).toBe("concept");
+    });
+
+    // Single quotes are deliberately not tracked: YAML gives `'` no special
+    // meaning inside a plain scalar, so treating it as a delimiter would let the
+    // apostrophe here open a run that never closes and swallow the wikilink.
+    test("an apostrophe does not open a quoted run", () => {
+      const page = parsePage(
+        "---\ntitle: it's [[concepts/x]] here\ntype: concept\n---\n\n# X\n",
+        "fb",
+      );
+      expect(page.frontmatter.type).toBe("concept");
+      expect(String(page.frontmatter.title)).toContain("[[concepts/x]]");
+    });
+  });
 });

@@ -54,13 +54,64 @@ function isFlowSequence(value: string): boolean {
 }
 
 function quoteWikilinksInline(value: string): string {
-  // `(?!\[)` keeps the outer bracket of `[[[a]], [[b]]]` out of the match. Without
-  // it the regex starts at the sequence's own `[`, quotes it into the string, and
-  // produces `"[[[a]]", …]` — a sequence with one bracket too few, which fails to
-  // parse and silently drops the whole field.
-  return value.replace(/\[\[(?!\[)([^\]]+)\]\]/g, (_, inner: string) => {
-    return `"[[${inner.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}]]"`;
-  });
+  let out = "";
+  let index = 0;
+  let insideQuotedScalar = false;
+
+  while (index < value.length) {
+    const char = value[index] as string;
+
+    // A value the author already double-quoted is valid YAML exactly as written,
+    // and quoting a wikilink inside one produces `"a "[[x]]" b"` — unbalanced
+    // quotes, a parse error, and `parsePage` discarding *every* frontmatter key
+    // rather than the one field. So track the quoted runs and leave them alone.
+    // Link extraction does not suffer: `collectTargets` matches wikilinks inside
+    // string values, so one left quoted is still found.
+    //
+    // Only double quotes. YAML gives no special meaning to a `'` inside a
+    // double-quoted scalar or a plain one, so tracking single quotes would let
+    // an apostrophe in `title: it's [[a/b]] here` open a run that never closes
+    // and swallow the wikilink — breaking a shape that works today.
+    if (insideQuotedScalar) {
+      // A backslash escape carries its next character with it, so an escaped
+      // `\"` does not end the run.
+      if (char === "\\" && index + 1 < value.length) {
+        out += char + value[index + 1];
+        index += 2;
+        continue;
+      }
+      if (char === '"') insideQuotedScalar = false;
+      out += char;
+      index++;
+      continue;
+    }
+
+    if (char === '"') {
+      insideQuotedScalar = true;
+      out += char;
+      index++;
+      continue;
+    }
+
+    // `value[index + 2] !== "["` keeps the outer bracket of `[[[a]], [[b]]]` out
+    // of the match. Without it the scan starts at the sequence's own `[`, quotes
+    // it into the string, and produces `"[[[a]]", …]` — a sequence with one
+    // bracket too few, which fails to parse and silently drops the whole field.
+    if (value.startsWith("[[", index) && value[index + 2] !== "[") {
+      const close = value.indexOf("]]", index + 2);
+      if (close !== -1) {
+        const inner = value.slice(index + 2, close);
+        out += `"[[${inner.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}]]"`;
+        index = close + 2;
+        continue;
+      }
+    }
+
+    out += char;
+    index++;
+  }
+
+  return out;
 }
 
 /**
