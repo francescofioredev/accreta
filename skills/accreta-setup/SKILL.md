@@ -108,6 +108,10 @@ Expect findings on a first pass, and read them rather than silencing them:
 - **missing-provenance** — no `canonical_source`. The page cites nothing.
 - **unverified-page** — no `last_verified_revision`. The page can never drift, because
   nothing knows what it was checked against.
+- **unparseable-frontmatter** — the frontmatter block would not load, so every field in it
+  was discarded. Fix this one **first**: it is the cause of any `missing-provenance`,
+  `unverified-page` or `unknown-page-type` finding reported against the same page, and
+  those will clear on their own once the block parses. The detail names the line.
 
 Then:
 
@@ -174,5 +178,5 @@ pages verified against it.
 | `No accreta.config.yaml found` | not inside the knowledge base; `cd` there or set `ACCRETA_ROOT` |
 | `No index at …` | run `accreta reindex` |
 | everything reports `unresolvable` | expected for `fs` after a restart — re-verify, or use `git` |
-| a page is missing from search | check `accreta lint`; a page whose frontmatter will not parse still indexes but loses its fields |
+| a page is missing from search | check `accreta lint`; a page whose frontmatter will not parse still indexes but loses its fields — `unparseable-frontmatter` names the line |
 | `consumers` returns fewer pages than expected | broken links — `accreta lint` names them |

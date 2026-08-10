@@ -6,6 +6,16 @@ export interface ParsedPage {
   frontmatter: Frontmatter;
   body: string;
   title: string;
+  /**
+   * Why the frontmatter is empty, when it is empty because it would not load.
+   *
+   * Absent for a page that simply declares nothing. The distinction is the
+   * whole point: without it, a page whose frontmatter was discarded looks
+   * exactly like a page that never had any, and `lint` can only report the
+   * symptoms — no type, no provenance, no verified revision — while the author
+   * stares at the fields that are plainly right there.
+   */
+  frontmatterError?: string;
 }
 
 /**
@@ -187,6 +197,7 @@ function preprocessFrontmatter(yamlSource: string): string {
 export function parsePage(raw: string, fallbackTitle: string): ParsedPage {
   const match = raw.match(FRONTMATTER_RE);
   let frontmatter: Frontmatter = {};
+  let frontmatterError: string | undefined;
   let body = raw;
 
   if (match) {
@@ -194,9 +205,19 @@ export function parsePage(raw: string, fallbackTitle: string): ParsedPage {
       const loaded = parseYaml(preprocessFrontmatter(match[1] ?? ""));
       if (loaded && typeof loaded === "object" && !Array.isArray(loaded)) {
         frontmatter = loaded as Frontmatter;
+      } else if (loaded !== null && loaded !== undefined) {
+        // A fence that parses to a scalar or a sequence is the quieter of the
+        // two failures: nothing throws, and the page simply arrives with no
+        // fields. Recorded rather than ignored, for the same reason as below.
+        frontmatterError = `frontmatter is ${Array.isArray(loaded) ? "a list" : "a scalar"}, not a set of fields`;
       }
-    } catch {
+    } catch (error) {
       frontmatter = {};
+      // First line only, with the parser's trailing "…:" dropped: the rest of
+      // its message is a source excerpt that reads as noise once the finding
+      // already names the page.
+      const message = error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error);
+      frontmatterError = message.replace(/:\s*$/, "");
     }
     body = raw.slice(match[0].length);
   }
@@ -209,7 +230,7 @@ export function parsePage(raw: string, fallbackTitle: string): ParsedPage {
     heading?.[1]?.trim() ??
     fallbackTitle;
 
-  return { frontmatter, body, title };
+  return { frontmatter, body, title, ...(frontmatterError ? { frontmatterError } : {}) };
 }
 
 export { WIKILINK_RE };

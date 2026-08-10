@@ -21,7 +21,13 @@ CREATE TABLE IF NOT EXISTS pages (
 
   frontmatter_json TEXT NOT NULL,
   body TEXT NOT NULL,
-  mtime INTEGER NOT NULL
+  mtime INTEGER NOT NULL,
+
+  -- Set when the frontmatter fence was present but would not load. A page is
+  -- indexed anyway, so this is what separates "declares nothing" from "declares
+  -- things that were all discarded" — without it `lint` can only report the
+  -- symptoms of the second and never its cause.
+  frontmatter_error TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_pages_type ON pages(type);

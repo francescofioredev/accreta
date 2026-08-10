@@ -223,6 +223,29 @@ describe("lint", () => {
     expect(kinds).toContain("unverified-page");
   });
 
+  // Before this kind existed, such a page produced three findings that each
+  // described a symptom — no type, no provenance, no verified revision — and
+  // none that named the cause. An author reading "no canonical_source" would go
+  // and add a field that is already there.
+  test("a page whose frontmatter would not load is told why", () => {
+    writePage(
+      "a.md",
+      '---\ntype: note\ncanonical_source: "ipcc:ch07.md#L1"\nlast_verified_revision: abc123\nbroken: [unclosed\n---\n\n# A\n',
+    );
+    reindex();
+
+    const findings = lint(db, config).findings.filter((f) => f.path === "knowledge/a.md");
+    const cause = findings.filter((f) => f.kind === "unparseable-frontmatter");
+    expect(cause).toHaveLength(1);
+    expect(cause[0]?.detail).toContain("discarded");
+
+    // Reported alongside the symptoms, not instead of them: the page really
+    // does lack a type and provenance once its frontmatter is gone.
+    const kinds = findings.map((f) => f.kind);
+    expect(kinds).toContain("missing-provenance");
+    expect(kinds).toContain("unverified-page");
+  });
+
   test("a well-formed page produces no findings", () => {
     writePage(
       "a.md",
