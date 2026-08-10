@@ -44,8 +44,9 @@ second for a few hundred pages, so it is never committed and never migrated.
 
 ### `SourceAdapter`
 
-A source is anything that can answer three questions: what revision are you at, what changed
-since a given revision, and how do I cite a location inside you.
+A source is anything that can answer three questions — what revision are you at, what changed
+since a given revision, and how do I cite a location inside you — plus one instruction: cite
+against *this* revision.
 
 ```ts
 interface SourceAdapter {
@@ -54,6 +55,7 @@ interface SourceAdapter {
   changedSince(rev: string): Promise<string[]>;   // changed paths
   read(path: string): Promise<string>;
   citation(path: string, lines?: [number, number]): string;
+  pinRevision(rev: string): void;                 // what citations name
 }
 ```
 

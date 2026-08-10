@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   formatCitation,
+  UNPINNED_REVISION,
   UnknownRevisionError,
   type LineRange,
   type SourceAdapter,
@@ -116,7 +117,7 @@ export class GitSource implements SourceAdapter {
   citation(path: string, lines?: LineRange): string {
     return formatCitation(this.citationFormat, {
       source: this.id,
-      rev: this.pinnedRevision ?? "HEAD",
+      rev: this.pinnedRevision ?? UNPINNED_REVISION,
       path,
       lines,
     });

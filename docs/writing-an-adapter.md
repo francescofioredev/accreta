@@ -14,10 +14,11 @@ interface SourceAdapter {
   changedSince(revision: string): Promise<string[]>;
   read(path: string): Promise<string>;
   citation(path: string, lines?: LineRange): string;
+  pinRevision(revision: string): void;
 }
 ```
 
-Four methods. `packages/core` imports no adapter and never branches on which one it holds —
+Five methods. `packages/core` imports no adapter and never branches on which one it holds —
 if you find yourself wanting it to, the interface is missing something and the fix is to
 extend the interface. See [ADR-0002](adr/0002-source-adapter-interface.md).
 
@@ -77,9 +78,20 @@ less useful, not incorrect.
 rather than building the string yourself — it drops the `#L{start}-L{end}` decoration when a
 source has no line numbers, instead of emitting `undefined`.
 
+## `pinRevision()`
+
 A citation must name **the revision the claim was verified against**, not whatever the source
-is at when the page is rendered later. That is the difference between provenance and a guess;
-`GitSource.pinRevision()` exists for exactly this.
+is at when the page is rendered later. That is the difference between provenance and a guess.
+Only the caller knows which revision a claim was checked against, so `pinRevision()` is how
+it says so, and `citation()` renders whatever was last pinned.
+
+Until something pins you, render `UNPINNED_REVISION` from the core. Do not substitute your
+source's current revision, and do not invent a plausible-looking placeholder of your own:
+`git` used to fall back to `"HEAD"`, which reads as a real revision and so claims something
+the source cannot support. `fs` shipped a `citation()` that named no revision at all and
+still passed its adapter tests, because the shared suite checked only the path and line
+tail. Both are the same mistake — a citation that satisfies the shape without keeping the
+promise.
 
 ## Registration
 
@@ -113,7 +125,9 @@ That file runs **one set of assertions against every adapter** — deliberately 
 rather than per adapter. If your adapter needs different expectations from `fs` and `git`,
 the abstraction is leaking and that is worth knowing before the code merges.
 
-You provide a fixture: a source at an initial revision, and a way to move it forward.
+You provide a fixture: a source at an initial revision, and a way to move it forward. The
+suite pins your adapter, moves the source, and asserts the citation still names the pinned
+revision — so the property above is checked for you rather than left to your own tests.
 
 ## Before you write one
 
