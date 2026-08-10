@@ -29,21 +29,21 @@
     },
     "packages/adapters/fs": {
       "name": "@accreta/adapter-fs",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "dependencies": {
-        "@accreta/core": "workspace:*",
+        "@accreta/core": "0.1.2",
       },
     },
     "packages/adapters/git": {
       "name": "@accreta/adapter-git",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "dependencies": {
-        "@accreta/core": "workspace:*",
+        "@accreta/core": "0.1.2",
       },
     },
     "packages/cli": {
       "name": "accreta",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "bin": {
         "accreta": "./src/main.ts",
       },
@@ -55,21 +55,21 @@
     },
     "packages/core": {
       "name": "@accreta/core",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "dependencies": {
         "yaml": "^2.7.0",
       },
     },
     "packages/mcp-server": {
       "name": "@accreta/mcp-server",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "bin": {
         "accreta-mcp": "./src/main.ts",
       },
       "dependencies": {
-        "@accreta/adapter-fs": "workspace:*",
-        "@accreta/adapter-git": "workspace:*",
-        "@accreta/core": "workspace:*",
+        "@accreta/adapter-fs": "0.1.2",
+        "@accreta/adapter-git": "0.1.2",
+        "@accreta/core": "0.1.2",
         "@modelcontextprotocol/sdk": "^1.30.0",
         "zod": "^4.1.0",
       },
