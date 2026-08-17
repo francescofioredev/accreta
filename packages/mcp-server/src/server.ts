@@ -156,10 +156,10 @@ export function createServer(ctx: ToolContext): McpServer {
     "lint_knowledge_base",
     {
       description:
-        "Report what is wrong with the knowledge base: links that do not resolve, links to pages that do not exist, page types outside the configured vocabulary, and pages missing provenance or a verified revision.",
+        "Report what is wrong with the knowledge base: links that do not resolve, links to pages that do not exist, page types outside the configured vocabulary, pages missing provenance or a verified revision, and citations whose path or line range does not exist in the source.",
       inputSchema: {},
     },
-    async () => json(lintTool(ctx)),
+    async () => json(await lintTool(ctx)),
   );
 
   // The write tool is registered only when writes are enabled, so a read-only

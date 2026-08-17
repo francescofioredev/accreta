@@ -154,6 +154,8 @@ damaging thing you can do here.
 - **unknown page types** — a `type` outside the configured vocabulary
 - **missing provenance** — no `canonical_source`
 - **unverified pages** — no `last_verified_revision`
+- **citations that point at nothing** — a `canonical_source` naming a path the source does
+  not have, or a line range past the end of the file it names
 
 It exits non-zero, so it belongs in CI. Broken and dangling links deserve particular
 attention: **they fail silently in normal use.** The page renders, the link is blue, and only

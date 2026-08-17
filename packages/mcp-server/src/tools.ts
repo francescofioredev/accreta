@@ -7,6 +7,7 @@ import {
   findRelated,
   getPage,
   lint,
+  lintCitations,
   searchPages,
   type AccretaConfig,
   type Database,
@@ -121,12 +122,15 @@ export async function listRecentChangesTool(
   }
 }
 
-export function lintTool(ctx: ToolContext) {
-  const report = lint(ctx.db, ctx.config);
+export async function lintTool(ctx: ToolContext) {
+  const db = ctx.db;
+  const report = lint(db, ctx.config);
+  const citations = await lintCitations(db, ctx.sources);
+  const findings = [...report.findings, ...citations.findings];
   return {
     pages_checked: report.pagesChecked,
-    count: report.findings.length,
-    findings: report.findings,
+    count: findings.length,
+    findings,
   };
 }
 

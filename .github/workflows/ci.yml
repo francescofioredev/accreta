@@ -72,8 +72,9 @@ jobs:
         working-directory: examples/climate
         run: bun run ../../packages/cli/src/main.ts reindex
 
-      # lint exits non-zero on a broken link, a missing citation, or a page type
-      # outside the configured vocabulary.
+      # lint exits non-zero on a broken link, a missing citation, a page type
+      # outside the configured vocabulary, or a citation whose path or line range
+      # does not exist in the source it names.
       - name: Lint
         working-directory: examples/climate
         run: bun run ../../packages/cli/src/main.ts lint

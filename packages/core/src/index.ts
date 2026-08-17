@@ -13,8 +13,13 @@ export { buildIndex } from "./index-db/build.ts";
 export type { Database, OpenOptions } from "./index-db/db.ts";
 export { openIndex, sealForReading } from "./index-db/db.ts";
 
-export type { LineRange, SourceAdapter } from "./source/adapter.ts";
-export { UNPINNED_REVISION, UnknownRevisionError, formatCitation } from "./source/adapter.ts";
+export type { LineRange, ParsedCitation, SourceAdapter } from "./source/adapter.ts";
+export {
+  UNPINNED_REVISION,
+  UnknownRevisionError,
+  formatCitation,
+  parseCitation,
+} from "./source/adapter.ts";
 export type { DriftReport, StaleRevision, UnresolvableRevision } from "./source/drift.ts";
 export { detectDrift } from "./source/drift.ts";
 export type { SourceDeclaration, SourceFactory } from "./source/registry.ts";
@@ -25,4 +30,4 @@ export { searchPages } from "./query/search.ts";
 export type { CanonicalMatch, PageRecord, Relation } from "./query/page.ts";
 export { findCanonical, findRelated, getPage } from "./query/page.ts";
 export type { LintFinding, LintReport } from "./query/lint.ts";
-export { lint } from "./query/lint.ts";
+export { lint, lintCitations } from "./query/lint.ts";

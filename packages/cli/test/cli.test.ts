@@ -299,6 +299,48 @@ describe("accreta help", () => {
   });
 });
 
+describe("accreta lint — citations", () => {
+  function writeSource(name: string, contents: string): void {
+    mkdirSync(join(root, "src-docs"), { recursive: true });
+    writeFileSync(join(root, "src-docs", name), contents, "utf-8");
+    mkdirSync(join(root, "sources"), { recursive: true });
+    writeFileSync(
+      join(root, "sources", "docs.yaml"),
+      "id: docs\ntype: fs\nroot: src-docs\n",
+      "utf-8",
+    );
+  }
+
+  test("a fabricated line range is reported end to end", async () => {
+    // The issue's reproduction: a pointer into a real file, past its end. It
+    // passed every check the project had and was served as provenance.
+    writeSource("doc.md", "one\ntwo\nthree\n");
+    writePage(
+      "a.md",
+      '---\ntype: note\ncanonical_source: "docs:doc.md#L99999"\nlast_verified_revision: r\n---\n\n# A\n',
+    );
+    await cli("init");
+    await cli("reindex");
+
+    expect(await cli("lint")).toBe(1);
+    expect(stdout()).toContain("citation-range-out-of-bounds");
+    expect(stdout()).toContain("knowledge/a.md");
+  });
+
+  test("a citation that resolves is not reported", async () => {
+    writeSource("doc.md", "one\ntwo\nthree\n");
+    writePage(
+      "a.md",
+      '---\ntype: note\ncanonical_source: "docs:doc.md#L2"\nlast_verified_revision: r\n---\n\n# A\n',
+    );
+    await cli("init");
+    await cli("reindex");
+
+    await cli("lint");
+    expect(stdout()).not.toContain("citation-");
+  });
+});
+
 describe("accreta --version", () => {
   // Read back from the manifest rather than restated here: a literal in the
   // test drifts the same way the literal in the source did.
