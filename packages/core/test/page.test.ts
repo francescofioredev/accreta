@@ -135,6 +135,36 @@ describe("parsePage — wikilinks inside frontmatter", () => {
       });
     }
 
+    test("a single-quoted scalar keeps its text verbatim", () => {
+      const page = parsePage("---\ntitle: 'see [[concepts/x]]'\n---\n\n# X\n", "fb");
+      expect(page.frontmatter.title).toBe("see [[concepts/x]]");
+    });
+
+    test("a single-quoted scalar with an escaped apostrophe survives", () => {
+      const page = parsePage(
+        "---\ntitle: 'it''s [[concepts/x]] here'\ntype: concept\n---\n\n# X\n",
+        "fb",
+      );
+      expect(page.frontmatter.title).toBe("it's [[concepts/x]] here");
+      expect(page.frontmatter.type).toBe("concept");
+    });
+
+    test("a single-quoted scalar with a trailing comment keeps its text", () => {
+      const page = parsePage("---\ntitle: 'see [[concepts/x]]' # note\n---\n\n# X\n", "fb");
+      expect(page.frontmatter.title).toBe("see [[concepts/x]]");
+    });
+
+    test("a quote that opens mid-value is not treated as a quoted scalar", () => {
+      // `related: not '[[concepts/x]]'` is a plain scalar whose quote does not
+      // start the value, so it still needs the wikilink quoted to load.
+      const page = parsePage(
+        "---\nrelated: not '[[concepts/x]]'\ntype: concept\n---\n\n# X\n",
+        "fb",
+      );
+      expect(page.frontmatter.type).toBe("concept");
+      expect(String(page.frontmatter.related)).toContain("[[concepts/x]]");
+    });
+
     test("the quoted text is preserved verbatim, without injected quotes", () => {
       const page = parsePage('---\ntitle: "see [[concepts/x]]"\n---\n\n# X\n', "fb");
       expect(page.frontmatter.title).toBe("see [[concepts/x]]");
