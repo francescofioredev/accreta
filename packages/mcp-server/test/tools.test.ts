@@ -95,7 +95,24 @@ describe("read tools", () => {
 
   test("find_canonical resolves an alias", () => {
     const result = findCanonicalTool(ctx, { term: "climate forcing" });
-    expect(result.results[0]?.matchedOn).toBe("alias");
+    expect(result.results[0]?.matched_on).toBe("alias");
+  });
+
+  test("the records these tools return are snake_case throughout", () => {
+    // A model reading four tools' JSON should not have to switch conventions
+    // between them. These are core records crossing the boundary, so the
+    // mapping is shared rather than rewritten at each return site.
+    const page = getPageTool(ctx, { path: "knowledge/concepts/forcing.md" });
+    expect(page.found && page.page).toMatchObject({ canonical_source: expect.anything() });
+    expect(page.found && page.page).not.toHaveProperty("canonicalSource");
+    expect(page.found && page.page).not.toHaveProperty("lastVerifiedRevision");
+
+    const hit = searchPagesTool(ctx, { query: "forcing" }).results[0];
+    expect(hit).not.toHaveProperty("lastVerifiedRevision");
+
+    const match = findCanonicalTool(ctx, { term: "climate forcing" }).results[0];
+    expect(match).not.toHaveProperty("matchedOn");
+    expect(match).not.toHaveProperty("canonicalSource");
   });
 
   test("lint reports a page whose type is outside the vocabulary", async () => {
