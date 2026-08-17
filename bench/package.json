@@ -6,6 +6,7 @@
   "license": "MIT",
   "description": "Retrieval benchmark. The numbers ADR-0001 rests on.",
   "dependencies": {
-    "@accreta/core": "workspace:*"
+    "@accreta/core": "workspace:*",
+    "@accreta/mcp-server": "workspace:*"
   }
 }

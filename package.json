@@ -16,7 +16,9 @@
     "lint": "oxlint packages",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "bench": "bun run bench/search-bench.ts"
+    "bench": "bun run bench/search-bench.ts",
+    "bench:scale": "bun run bench/scale-bench.ts",
+    "bench:mcp": "bun run bench/mcp-budget.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",
