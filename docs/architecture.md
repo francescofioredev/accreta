@@ -150,9 +150,11 @@ handle keeps serving the old rows; on macOS SQLite revalidates the file and fail
 connection with `SQLITE_IOERR`. Both behaviours were observed against the same code, one
 locally and one in CI.
 
-A long-lived reader therefore has to reopen after a rebuild rather than rely on either. The
-tests assert only what holds everywhere — reopen and you see the new index — because pinning
-the rest would encode one platform's filesystem semantics as a promise.
+A long-lived reader therefore has to reopen after a rebuild rather than rely on either. The MCP
+server's context does this: it compares the index's `dev:ino` before each use and reopens when
+`rename(2)` has changed it, asking the filesystem rather than the connection — one that is
+already failing cannot be asked, and a stale one on Linux would answer with the old value. See
+[ADR-0010](adr/0010-readers-revalidate-by-inode.md).
 
 ## Surfaces
 

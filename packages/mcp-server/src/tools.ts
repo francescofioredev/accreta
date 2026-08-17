@@ -73,9 +73,13 @@ export async function checkDriftTool(ctx: ToolContext, input: { source?: string 
     };
   }
 
+  // Pinned once: the context reopens the index when a rebuild swaps it, and
+  // this loop spans awaits. Re-reading it per adapter could draw one report
+  // from two different indexes.
+  const db = ctx.db;
   const reports = [];
   for (const adapter of adapters) {
-    reports.push(await detectDrift(ctx.db, adapter));
+    reports.push(await detectDrift(db, adapter));
   }
 
   // Renamed here rather than in `DriftReport` itself: the CLI reads the core

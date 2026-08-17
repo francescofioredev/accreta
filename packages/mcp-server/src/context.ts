@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import {
   openIndex,
@@ -69,6 +69,21 @@ function loadSources(root: string, config: AccretaConfig): Map<string, SourceAda
 }
 
 /**
+ * The index's identity, or null if it cannot be stat'd.
+ *
+ * A rebuild is never observable as an absence — rename(2) replaces the path
+ * atomically — so a missing file means it is genuinely gone, not mid-swap.
+ */
+function inodeOf(path: string): string | null {
+  try {
+    const stat = statSync(path);
+    return `${stat.dev}:${stat.ino}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Assemble what the tools need.
  *
  * The index is opened read-only. The write tool edits markdown on disk and asks
@@ -88,8 +103,33 @@ export function createContext(cwd: string = process.cwd()): ToolContext {
     throw new Error(`No index at ${indexPath}. Run \`accreta reindex\` first.`);
   }
 
+  let db = openIndex(indexPath, { readonly: true });
+  let openedInode = inodeOf(indexPath);
+
   return {
-    db: openIndex(indexPath, { readonly: true }),
+    get db() {
+      const current = inodeOf(indexPath);
+      // A reindex replaces this file by rename(2), and a connection held across
+      // that swap is undefined by platform: macOS fails it with SQLITE_IOERR
+      // for the rest of the process, while Linux keeps serving the old rows off
+      // the unlinked inode — silently answering with pre-rebuild data, which is
+      // the worse half. build.ts says a long-lived reader must reopen; this is
+      // that reader.
+      //
+      // Identity is checked out of band, by asking the filesystem rather than
+      // the connection: a connection that is already failing cannot be asked
+      // anything, and a stale one on Linux would answer with the old value. A
+      // build id in `meta` would be blind in both of exactly those cases.
+      if (current !== null && current !== openedInode) {
+        // Open before closing, so a failed reopen leaves a working context
+        // rather than a permanently dead one.
+        const reopened = openIndex(indexPath, { readonly: true });
+        db.close();
+        db = reopened;
+        openedInode = current;
+      }
+      return db;
+    },
     config,
     root,
     sources: loadSources(root, config),
