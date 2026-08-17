@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -268,17 +269,22 @@ describe("buildIndex", () => {
     writeFileSync(
       script,
       `import { buildIndex } from ${JSON.stringify(join(import.meta.dir, "../src/index-db/build.ts"))};\n` +
-        `const [root, indexPath, gate] = process.argv.slice(2);\n` +
+        `const [root, indexPath, gate, ready] = process.argv.slice(2);\n` +
+        `await Bun.write(ready, "");\n` +
         `while (!(await Bun.file(gate).exists())) await Bun.sleep(1);\n` +
         `buildIndex({ root, indexPath, config: ${JSON.stringify(config)} });\n`,
       "utf-8",
     );
 
+    // Each child signals readiness and then waits on the gate, so both are
+    // released into the build together however long bun took to start. A fixed
+    // sleep here would race with the rest of the suite on a loaded machine.
     const gate = join(root, "go");
-    const spawn = () =>
-      Bun.spawn(["bun", script, root, indexPath, gate], { stderr: "pipe" });
-    const children = [spawn(), spawn()];
-    await Bun.sleep(300);
+    const ready = (n: number) => join(root, `ready${n}`);
+    const children = [0, 1].map((n) =>
+      Bun.spawn(["bun", script, root, indexPath, gate, ready(n)], { stderr: "pipe" }),
+    );
+    while (!(existsSync(ready(0)) && existsSync(ready(1)))) await Bun.sleep(5);
     writeFileSync(gate, "", "utf-8");
 
     const codes = await Promise.all(children.map((c) => c.exited));
