@@ -177,5 +177,22 @@ for (const [name, makeFixture] of ADAPTERS) {
       expect(adapter.citation("chapter-07.md")).toContain(UNPINNED_REVISION);
       expect(adapter.citation("chapter-07.md")).not.toContain(current);
     });
+
+    test("read serves a path inside the root", async () => {
+      const { adapter } = await makeFixture();
+      expect(await adapter.read("chapter-07.md")).toContain("one");
+    });
+
+    test("read refuses a path that climbs out of the root", async () => {
+      const { adapter } = await makeFixture();
+      // The argument is not always operator-written: a `canonical_source` is
+      // authored by a model and handed here by the citation checks, so an
+      // escaping path would turn "verify this citation" into "read this file".
+      writeFileSync(join(root, "outside.md"), "SECRET", "utf-8");
+
+      for (const escape of ["../outside.md", "./../outside.md", join(root, "outside.md")]) {
+        await expect(adapter.read(escape)).rejects.toThrow(/outside the source root/);
+      }
+    });
   });
 }

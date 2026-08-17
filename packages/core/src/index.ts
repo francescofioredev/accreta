@@ -19,6 +19,7 @@ export {
   UnknownRevisionError,
   formatCitation,
   parseCitation,
+  resolveInside,
 } from "./source/adapter.ts";
 export type { DriftReport, StaleRevision, UnresolvableRevision } from "./source/drift.ts";
 export { detectDrift } from "./source/drift.ts";

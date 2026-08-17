@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import {
   formatCitation,
+  resolveInside,
   UNPINNED_REVISION,
   UnknownRevisionError,
   type LineRange,
@@ -111,7 +111,7 @@ export class GitSource implements SourceAdapter {
   }
 
   async read(path: string): Promise<string> {
-    return readFile(join(this.root, path), "utf-8");
+    return readFile(resolveInside(this.root, path), "utf-8");
   }
 
   citation(path: string, lines?: LineRange): string {
