@@ -49,9 +49,9 @@
         "accreta": "./src/main.ts",
       },
       "dependencies": {
-        "@accreta/adapter-fs": "workspace:*",
-        "@accreta/adapter-git": "workspace:*",
-        "@accreta/core": "workspace:*",
+        "@accreta/adapter-fs": "0.1.2",
+        "@accreta/adapter-git": "0.1.2",
+        "@accreta/core": "0.1.2",
       },
     },
     "packages/core": {

@@ -24,8 +24,11 @@ jobs:
         with:
           bun-version: 1.3.13
 
-      # --frozen-lockfile: CI must fail on a stale lockfile rather than quietly
-      # resolving different versions than the ones that were reviewed.
+      # --frozen-lockfile catches a changed *registry* dependency, and does not
+      # catch a stale workspace member: bun resolves those by path, so the
+      # versions recorded beside them are informational and a lockfile naming
+      # the wrong one installs clean. test/lockfile.test.ts is the guard for
+      # that half.
       - name: Install
         run: bun install --frozen-lockfile
 
