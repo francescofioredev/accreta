@@ -295,7 +295,9 @@ describe("buildIndex", () => {
     expect(db.query("SELECT COUNT(*) AS n FROM pages").get()).toEqual({ n: PAGES });
     db.close();
     expect(stagingLeftovers()).toEqual([]);
-  });
+    // Two bun processes over a corpus big enough to overlap: the default 5s is
+    // not a budget this can hold on a machine running the rest of the suite.
+  }, 30_000);
 
   test("a rebuild swaps in the new index atomically", () => {
     // rename(2) guarantees no reader ever opens a half-rebuilt index: the path
