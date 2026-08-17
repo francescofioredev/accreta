@@ -63,6 +63,37 @@ function isFlowSequence(value: string): boolean {
   return false;
 }
 
+/**
+ * Whether the value is a single-quoted YAML scalar, as opposed to a plain one
+ * that merely contains an apostrophe.
+ *
+ * The difference decides whether the value needs touching at all: YAML gives
+ * `[` no meaning inside a single-quoted scalar, so `'see [[a/b]]'` already
+ * loads as written. What separates the two is what follows the closing quote —
+ * nothing, or a comment. `'a' and 'b' [[x]]` has prose after it, so it is a
+ * plain scalar that happens to contain quotes.
+ */
+function isSingleQuotedScalar(value: string): boolean {
+  const trimmed = value.trim();
+  if (trimmed.length < 2 || !trimmed.startsWith("'")) return false;
+
+  let index = 1;
+  while (index < trimmed.length) {
+    if (trimmed[index] === "'") {
+      // `''` is YAML's escape for a literal apostrophe; it does not close.
+      if (trimmed[index + 1] === "'") {
+        index += 2;
+        continue;
+      }
+      const rest = trimmed.slice(index + 1).trim();
+      return rest === "" || rest.startsWith("#");
+    }
+    index++;
+  }
+  // Unterminated: not a quoted scalar. Leave it to the scanner below.
+  return false;
+}
+
 function quoteWikilinksInline(value: string): string {
   let out = "";
   let index = 0;
@@ -82,6 +113,11 @@ function quoteWikilinksInline(value: string): string {
     // double-quoted scalar or a plain one, so tracking single quotes would let
     // an apostrophe in `title: it's [[a/b]] here` open a run that never closes
     // and swallow the wikilink — breaking a shape that works today.
+    //
+    // A single-quoted *scalar* is handled before this runs, by
+    // `isSingleQuotedScalar`. That test needs to know where the value begins,
+    // which this scanner does not — it is handed a value already split from its
+    // key, and by then the two cases are indistinguishable to it.
     if (insideQuotedScalar) {
       // A backslash escape carries its next character with it, so an escaped
       // `\"` does not end the run.
@@ -178,6 +214,15 @@ function preprocessFrontmatter(yamlSource: string): string {
     if (items.length > 0 && items.every((item) => /^\[\[[^\]]+\]\]$/.test(item))) {
       const quoted = items.map((item) => `"${item}"`).join(", ");
       out.push(`${indent}${key}: [${quoted}]`);
+      continue;
+    }
+
+    // A single-quoted scalar is already valid YAML with `[[` inside it, so
+    // quoting the wikilink only injects literal `"` into the author's text —
+    // and where the scalar holds an unescaped apostrophe, breaks the block and
+    // discards every key in it.
+    if (isSingleQuotedScalar(rawValue)) {
+      out.push(`${indent}${key}: ${rawValue}`);
       continue;
     }
 
