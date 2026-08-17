@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import type { AccretaConfig } from "../config.ts";
@@ -90,34 +91,51 @@ export function buildIndex(options: BuildOptions): BuildResult {
   // The staging file sits beside the target, not in the system temp directory:
   // rename(2) across filesystems fails with EXDEV, and /tmp is very often a
   // different filesystem.
-  const stagingPath = `${indexPath}.building`;
-  removeIndexFiles(stagingPath);
+  //
+  // The name carries a pid and a UUID because two rebuilds can be in flight at
+  // once — two agent sessions on one knowledge base is the tool's own loop, not
+  // an edge case. Under a fixed name the second build's pre-clean deleted the
+  // first's in-flight file, the first died with "disk I/O error", and the
+  // survivor was a *valid* database holding only its own pages: integrity_check
+  // returned ok, which is what made it silent. Measured across four timing
+  // skews, the slow session lost every time. A unique name is enough on its own
+  // because every rebuild is a full scan, so whichever rename lands last leaves
+  // a complete index; a lock would only buy a friendlier error, at the price of
+  // a stale lock wedging reindex.
+  const stagingPath = `${indexPath}.building.${process.pid}.${randomUUID()}`;
 
-  const db = openIndex(stagingPath);
-  let result: BuildResult;
   try {
-    result = runBuild(db, root, config, started);
-    sealForReading(db);
-  } finally {
-    db.close();
+    const db = openIndex(stagingPath);
+    let result: BuildResult;
+    try {
+      result = runBuild(db, root, config, started);
+      sealForReading(db);
+    } finally {
+      db.close();
+    }
+
+    // Rename *over* the target rather than unlinking it first. rename(2) replaces
+    // the destination atomically, and unlinking beforehand is what breaks the
+    // guarantee: a reader holding the old file gets "disk I/O error" the moment
+    // its inode is dropped, instead of quietly finishing against the old data.
+    renameSync(stagingPath, indexPath);
+
+    // The staging sidecars are not covered by the rename; the sealed database
+    // needs none of them.
+    for (const suffix of ["-wal", "-shm"]) {
+      rmSync(`${stagingPath}${suffix}`, { force: true });
+    }
+
+    return { ...result, ms: performance.now() - started };
+  } catch (error) {
+    // A unique name is never reused, so a leaked staging file is leaked for
+    // good rather than overwritten by the next run.
+    removeIndexFiles(stagingPath);
+    throw error;
   }
-
-  // Rename *over* the target rather than unlinking it first. rename(2) replaces
-  // the destination atomically, and unlinking beforehand is what breaks the
-  // guarantee: a reader holding the old file gets "disk I/O error" the moment
-  // its inode is dropped, instead of quietly finishing against the old data.
-  renameSync(stagingPath, indexPath);
-
-  // The staging sidecars are not covered by the rename; the sealed database
-  // needs none of them.
-  for (const suffix of ["-wal", "-shm"]) {
-    rmSync(`${stagingPath}${suffix}`, { force: true });
-  }
-
-  return { ...result, ms: performance.now() - started };
 }
 
-/** Remove a stale staging index and any sidecars left beside it. */
+/** Remove a staging index and any sidecars left beside it. */
 function removeIndexFiles(path: string): void {
   for (const suffix of ["", "-wal", "-shm"]) {
     rmSync(`${path}${suffix}`, { force: true });
