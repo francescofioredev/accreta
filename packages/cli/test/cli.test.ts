@@ -298,3 +298,22 @@ describe("accreta help", () => {
     expect(stderr()).toContain("Unknown command");
   });
 });
+
+describe("accreta --version", () => {
+  // Read back from the manifest rather than restated here: a literal in the
+  // test drifts the same way the literal in the source did.
+  const manifest = JSON.parse(
+    readFileSync(new URL("../package.json", import.meta.url), "utf-8"),
+  ) as { version: string };
+
+  test("the version is the one the package publishes", async () => {
+    expect(await cli("--version")).toBe(0);
+    expect(stdout()).toContain(manifest.version);
+    expect(manifest.version).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
+  test("-v is the same", async () => {
+    expect(await cli("-v")).toBe(0);
+    expect(stdout()).toContain(manifest.version);
+  });
+});

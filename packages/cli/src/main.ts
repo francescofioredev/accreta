@@ -1,4 +1,6 @@
 #!/usr/bin/env bun
+import { readFileSync } from "node:fs";
+
 import { canonical, consumers, drift, init, reindex, runLint, search, show } from "./commands.ts";
 import type { CommandContext } from "./commands.ts";
 
@@ -16,10 +18,23 @@ Usage: accreta <command> [arguments]
   consumers <path>         What links to this page, and what it links to (--inline)
   canonical <term>         Resolve a term to the page that defines it
 
+  --version, -v            Print the version
+
 Environment:
   ACCRETA_ROOT             Use this directory instead of searching upward
   ACCRETA_INDEX_PATH       Keep the index somewhere other than .accreta/
 `;
+
+/**
+ * Read from the manifest rather than restated, for the reason recorded in the
+ * MCP server's copy: a restated version drifts. npm always ships `package.json`
+ * at the tarball root, so this resolves in the repository and in an install.
+ */
+const VERSION = (
+  JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")) as {
+    version: string;
+  }
+).version;
 
 /** Collect repeated `--type x` flags, returning them with the positional rest. */
 function parseArgs(argv: string[]): {
@@ -68,6 +83,10 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
     case "--help":
     case "-h":
       ctx.out(USAGE);
+      return 0;
+    case "--version":
+    case "-v":
+      ctx.out(VERSION);
       return 0;
     case "init":
       return init(ctx, { preset, agentFile });
