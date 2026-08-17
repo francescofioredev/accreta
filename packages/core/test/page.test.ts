@@ -135,6 +135,26 @@ describe("parsePage — wikilinks inside frontmatter", () => {
       });
     }
 
+    test("an unquoted scalar keeps its text, without injected quotes", () => {
+      // Was `see "[[concepts/x]]"`: the wikilink alone was quoted, and the
+      // quotes then showed up in `show`, `search` and the exact title match.
+      const page = parsePage("---\ntitle: see [[concepts/x]]\n---\n\n# X\n", "fb");
+      expect(page.frontmatter.title).toBe("see [[concepts/x]]");
+    });
+
+    test("an unquoted scalar with a trailing comment keeps both apart", () => {
+      // The reason whole-value quoting was not attempted in #58: swallowing the
+      // comment into the title trades a cosmetic bug for a data-losing one.
+      const page = parsePage("---\ntitle: see [[concepts/x]] # note\n---\n\n# X\n", "fb");
+      expect(page.frontmatter.title).toBe("see [[concepts/x]]");
+    });
+
+    test("a hash with no space before it stays part of the value", () => {
+      // YAML opens a comment only when whitespace precedes the `#`.
+      const page = parsePage("---\ntitle: see [[concepts/x]]#frag\n---\n\n# X\n", "fb");
+      expect(page.frontmatter.title).toBe("see [[concepts/x]]#frag");
+    });
+
     test("a single-quoted scalar keeps its text verbatim", () => {
       const page = parsePage("---\ntitle: 'see [[concepts/x]]'\n---\n\n# X\n", "fb");
       expect(page.frontmatter.title).toBe("see [[concepts/x]]");
@@ -187,7 +207,8 @@ describe("parsePage — wikilinks inside frontmatter", () => {
         "fb",
       );
       expect(page.frontmatter.type).toBe("concept");
-      expect(String(page.frontmatter.title)).toContain("[[concepts/x]]");
+      // Was `it's "[[concepts/x]]" here` until plain scalars were quoted whole.
+      expect(page.frontmatter.title).toBe("it's [[concepts/x]] here");
     });
   });
 });
