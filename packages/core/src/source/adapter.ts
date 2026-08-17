@@ -1,3 +1,5 @@
+import { resolve, sep } from "node:path";
+
 /**
  * A source is anything that can answer three questions: what revision are you
  * at, what changed since a given revision, and how do I cite a location inside
@@ -81,6 +83,29 @@ export class UnknownRevisionError extends Error {
     super(`Source "${sourceId}" cannot resolve revision "${revision}"`);
     this.name = "UnknownRevisionError";
   }
+}
+
+/**
+ * Resolve a source-relative path, refusing one that climbs out of the root.
+ *
+ * The argument reaching `read` is not always something the operator wrote. A
+ * `canonical_source` is authored by a model into a markdown file and handed
+ * straight to this function by the citation checks, so a path that escapes the
+ * root turns "verify this citation" into "read this file". `join` alone does
+ * not stop it: `join(root, "../x")` is a path outside the root, and reading it
+ * succeeds whenever something happens to be there.
+ *
+ * Shared by every adapter so the answer cannot vary by source type — an
+ * adapter that confined its reads and one that did not would make the guarantee
+ * depend on which source a page happened to cite.
+ */
+export function resolveInside(root: string, path: string): string {
+  const full = resolve(root, path);
+  const base = resolve(root);
+  if (full !== base && !full.startsWith(base + sep)) {
+    throw new Error(`Path "${path}" resolves outside the source root`);
+  }
+  return full;
 }
 
 /** A `canonical_source` pointer, split into the parts a check can act on. */
