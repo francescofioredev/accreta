@@ -5,7 +5,8 @@
 > `accretion` *(n.)* — growth by the gradual accumulation of matter.
 
 > [!NOTE]
-> **Status: `v0.1.0`.** All six roadmap phases are complete and the pipeline runs end to end —
+> [![npm](https://img.shields.io/npm/v/accreta)](https://www.npmjs.com/package/accreta)
+> All six roadmap phases are complete and the pipeline runs end to end —
 > see the [worked example](examples/climate/). The API is not yet stable, and two deliberately
 > deferred pieces are listed in the [roadmap](#roadmap).
 
