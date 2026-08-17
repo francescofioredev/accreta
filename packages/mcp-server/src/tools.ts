@@ -77,7 +77,22 @@ export async function checkDriftTool(ctx: ToolContext, input: { source?: string 
   for (const adapter of adapters) {
     reports.push(await detectDrift(ctx.db, adapter));
   }
-  return { reports };
+
+  // Renamed here rather than in `DriftReport` itself: the CLI reads the core
+  // shape directly, so moving the names would break it to tidy this surface.
+  return {
+    reports: reports.map((report) => ({
+      source_id: report.sourceId,
+      current_revision: report.currentRevision,
+      stale: report.stale.map((entry) => ({
+        revision: entry.revision,
+        changed_paths: entry.changedPaths,
+        pages: entry.pages,
+      })),
+      unverifiable: report.unverifiable,
+      unresolvable: report.unresolvable,
+    })),
+  };
 }
 
 export async function listRecentChangesTool(

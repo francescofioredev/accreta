@@ -129,6 +129,16 @@ describe("source-backed tools", () => {
     expect(report?.stale).toEqual([]);
   });
 
+  test("check_drift names its fields the way every other tool does", async () => {
+    const report = (await checkDriftTool(ctx, {})).reports?.[0];
+    expect(report?.source_id).toBe("docs");
+    expect(report?.current_revision).toBeDefined();
+    // The consumer is a model reading JSON; two conventions in one server is a
+    // tax on every call.
+    expect(report).not.toHaveProperty("sourceId");
+    expect(report).not.toHaveProperty("currentRevision");
+  });
+
   test("list_recent_changes surfaces an unplaceable revision as such", async () => {
     // Returning an empty change list would read as "nothing changed", which is
     // a different claim from "I cannot tell".
