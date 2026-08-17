@@ -94,6 +94,26 @@ function isSingleQuotedScalar(value: string): boolean {
   return false;
 }
 
+/**
+ * Split a plain scalar from a trailing YAML comment.
+ *
+ * `#` opens a comment only when whitespace precedes it, so `a#b` is part of the
+ * value while `a #b` is not. Getting this wrong is the reason the whole-value
+ * quoting below was not attempted sooner: quoting `see [[a/b]] # note` entire
+ * would swallow the comment into the title, trading a cosmetic bug for a
+ * data-losing one.
+ */
+function splitTrailingComment(value: string): [scalar: string, comment: string] {
+  for (let index = 0; index < value.length; index++) {
+    if (value[index] !== "#") continue;
+    const before = value[index - 1];
+    if (index === 0 || before === " " || before === "\t") {
+      return [value.slice(0, index).trimEnd(), value.slice(index)];
+    }
+  }
+  return [value, ""];
+}
+
 function quoteWikilinksInline(value: string): string {
   let out = "";
   let index = 0;
@@ -223,6 +243,17 @@ function preprocessFrontmatter(yamlSource: string): string {
     // discards every key in it.
     if (isSingleQuotedScalar(rawValue)) {
       out.push(`${indent}${key}: ${rawValue}`);
+      continue;
+    }
+
+    // A plain scalar containing a wikilink is quoted whole rather than around
+    // the `[[…]]` alone. Both make the YAML load; only this one keeps the text
+    // the author wrote, and the value is what `show`, `search` and the exact
+    // title match in `find_canonical` all serve back.
+    const [scalar, comment] = splitTrailingComment(rawValue);
+    if (scalar.includes("[[") && !scalar.includes('"')) {
+      const quoted = `"${scalar.replace(/\\/g, "\\\\")}"`;
+      out.push(`${indent}${key}: ${quoted}${comment ? ` ${comment}` : ""}`);
       continue;
     }
 
