@@ -10,7 +10,11 @@ import {
   lintCitations,
   searchPages,
   type AccretaConfig,
+  type CanonicalMatch,
   type Database,
+  type PageRecord,
+  type Relation,
+  type SearchHit,
   type SourceAdapter,
 } from "@accreta/core";
 
@@ -23,12 +27,64 @@ export interface ToolContext {
   writesEnabled: boolean;
 }
 
+/**
+ * Shape a core record for the MCP boundary.
+ *
+ * The renames live here rather than in the core types because the CLI reads
+ * those directly — same constraint that kept `check_drift`'s rename at the
+ * boundary. What is new is that these are *records*, returned by three tools at
+ * once, so the mapping is shared rather than written at each return site.
+ */
+function pageOut(page: PageRecord) {
+  return {
+    path: page.path,
+    type: page.type,
+    title: page.title,
+    source: page.source,
+    canonical_source: page.canonicalSource,
+    last_verified_revision: page.lastVerifiedRevision,
+    frontmatter: page.frontmatter,
+    body: page.body,
+  };
+}
+
+function hitOut(hit: SearchHit) {
+  return {
+    path: hit.path,
+    type: hit.type,
+    title: hit.title,
+    source: hit.source,
+    snippet: hit.snippet,
+    last_verified_revision: hit.lastVerifiedRevision,
+  };
+}
+
+function matchOut(match: CanonicalMatch) {
+  return {
+    path: match.path,
+    title: match.title,
+    type: match.type,
+    canonical_source: match.canonicalSource,
+    matched_on: match.matchedOn,
+  };
+}
+
+function relationOut(relation: Relation) {
+  return {
+    path: relation.path,
+    kind: relation.kind,
+    direction: relation.direction,
+    type: relation.type,
+    title: relation.title,
+  };
+}
+
 export function searchPagesTool(
   ctx: ToolContext,
   input: { query: string; types?: string[]; source?: string; limit?: number },
 ) {
   const hits = searchPages(ctx.db, input);
-  return { count: hits.length, results: hits };
+  return { count: hits.length, results: hits.map(hitOut) };
 }
 
 export function getPageTool(ctx: ToolContext, input: { path: string }) {
@@ -36,7 +92,7 @@ export function getPageTool(ctx: ToolContext, input: { path: string }) {
   if (!page) {
     return { found: false as const, message: `No page matches "${input.path}".` };
   }
-  return { found: true as const, page };
+  return { found: true as const, page: pageOut(page) };
 }
 
 export function findConsumersTool(
@@ -51,13 +107,13 @@ export function findConsumersTool(
     target: result.target,
     target_exists: result.targetExists,
     count: result.relations.length,
-    results: result.relations,
+    results: result.relations.map(relationOut),
   };
 }
 
 export function findCanonicalTool(ctx: ToolContext, input: { term: string }) {
   const matches = findCanonical(ctx.db, input.term, ctx.config);
-  return { count: matches.length, results: matches };
+  return { count: matches.length, results: matches.map(matchOut) };
 }
 
 export async function checkDriftTool(ctx: ToolContext, input: { source?: string }) {
