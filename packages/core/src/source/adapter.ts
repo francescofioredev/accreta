@@ -83,6 +83,44 @@ export class UnknownRevisionError extends Error {
   }
 }
 
+/** A `canonical_source` pointer, split into the parts a check can act on. */
+export interface ParsedCitation {
+  sourceId: string;
+  path: string;
+  lines?: LineRange;
+}
+
+/**
+ * Read a `canonical_source` value back into its parts.
+ *
+ * This is deliberately *not* the inverse of `formatCitation`. That renders the
+ * configured `provenance.format`, which is prose a human reads in a footnote
+ * and which every knowledge base may shape differently. `canonical_source` is a
+ * fixed machine-readable convention — `source:path#Lstart[-Lend]` — documented
+ * in the constitution and in architecture.md, and it is the one a check can
+ * resolve without knowing how a given knowledge base likes its citations to
+ * read.
+ *
+ * Returns null rather than throwing: a value that does not parse is a finding
+ * to report, not an exception to propagate out of a lint pass.
+ */
+export function parseCitation(value: string): ParsedCitation | null {
+  const match = value.trim().match(/^([^\s:]+):([^\s#]+?)(?:#L(\d+)(?:-L?(\d+))?)?$/);
+  if (!match) return null;
+
+  const [, sourceId, path, start, end] = match;
+  if (!sourceId || !path) return null;
+
+  if (start === undefined) return { sourceId, path };
+
+  const from = Number(start);
+  const to = end === undefined ? from : Number(end);
+  // A descending range is a malformed pointer, not a range to check.
+  if (from < 1 || to < from) return null;
+
+  return { sourceId, path, lines: [from, to] };
+}
+
 /**
  * Render a citation from the configured template.
  *

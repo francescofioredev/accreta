@@ -7,7 +7,8 @@ import { buildIndex } from "../src/index-db/build.ts";
 import { openIndex, type Database } from "../src/index-db/db.ts";
 import { findCanonical, findRelated, getPage } from "../src/query/page.ts";
 import { searchPages } from "../src/query/search.ts";
-import { lint } from "../src/query/lint.ts";
+import { lint, lintCitations } from "../src/query/lint.ts";
+import { parseCitation, type SourceAdapter } from "../src/source/adapter.ts";
 
 let root = "";
 let indexPath = "";
@@ -253,5 +254,136 @@ describe("lint", () => {
     );
     reindex();
     expect(lint(db, config).findings).toEqual([]);
+  });
+});
+
+describe("parseCitation", () => {
+  test("a source, a path and a range", () => {
+    expect(parseCitation("ipcc:ch07.md#L142-L160")).toEqual({
+      sourceId: "ipcc",
+      path: "ch07.md",
+      lines: [142, 160],
+    });
+  });
+
+  test("a single line is a range of one", () => {
+    expect(parseCitation("ipcc:ch07.md#L142")).toEqual({
+      sourceId: "ipcc",
+      path: "ch07.md",
+      lines: [142, 142],
+    });
+  });
+
+  test("a citation may name no range at all", () => {
+    expect(parseCitation("ipcc:ch07.md")).toEqual({ sourceId: "ipcc", path: "ch07.md" });
+  });
+
+  test("nested paths survive", () => {
+    expect(parseCitation("s:a/b/c.md#L1")?.path).toBe("a/b/c.md");
+  });
+
+  test("a malformed pointer is null rather than a throw", () => {
+    // Reported as a finding by the caller; a lint pass should not explode on
+    // a value a model wrote.
+    for (const bad of ["", "no-colon", "s:", ":path", "s:p#L0", "s:p#L9-L2"]) {
+      expect(parseCitation(bad)).toBeNull();
+    }
+  });
+});
+
+/** The real adapter shape: `read` resolves a path or rejects. */
+function source(id: string, files: Record<string, string>): SourceAdapter {
+  return {
+    id,
+    revision: async () => "rev",
+    changedSince: async () => [],
+    read: async (path: string) => {
+      const text = files[path];
+      if (text === undefined) throw new Error(`ENOENT: ${path}`);
+      return text;
+    },
+    citation: () => "",
+    pinRevision: () => {},
+  };
+}
+
+const sources = (adapter: SourceAdapter) => new Map([[adapter.id, adapter]]);
+
+describe("lintCitations", () => {
+  const tenLines = Array.from({ length: 10 }, (_, i) => `line ${i + 1}`).join("\n");
+
+  test("a citation whose path does not exist in the source is reported", async () => {
+    writePage("a.md", '---\ntype: note\ncanonical_source: "s:gone.md#L1"\n---\n\n# A\n');
+    reindex();
+    const { findings } = await lintCitations(db, sources(source("s", { "there.md": tenLines })));
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.kind).toBe("citation-path-missing");
+    expect(findings[0]?.path).toBe("knowledge/a.md");
+  });
+
+  test("a line range past the end of the file is reported", async () => {
+    // The issue's own reproduction: a pointer into a file that exists, at a
+    // line that does not.
+    writePage("a.md", '---\ntype: note\ncanonical_source: "s:doc.md#L99999"\n---\n\n# A\n');
+    reindex();
+    const { findings } = await lintCitations(db, sources(source("s", { "doc.md": tenLines })));
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.kind).toBe("citation-range-out-of-bounds");
+    expect(findings[0]?.detail).toContain("10 line(s)");
+  });
+
+  test("a range that fits the file is not reported", async () => {
+    writePage("a.md", '---\ntype: note\ncanonical_source: "s:doc.md#L2-L9"\n---\n\n# A\n');
+    reindex();
+    const { findings } = await lintCitations(db, sources(source("s", { "doc.md": tenLines })));
+    expect(findings).toEqual([]);
+  });
+
+  test("a citation naming an unconfigured source is not a finding", async () => {
+    // Without an adapter the pointer cannot be checked, and reporting it would
+    // dress "I did not look" up as "I found something". Working against a
+    // subset of the declared sources is normal.
+    writePage("a.md", '---\ntype: note\ncanonical_source: "elsewhere:doc.md#L1"\n---\n\n# A\n');
+    reindex();
+    const { findings } = await lintCitations(db, sources(source("s", { "doc.md": tenLines })));
+    expect(findings).toEqual([]);
+  });
+
+  test("a citation that does not parse is reported rather than thrown", async () => {
+    writePage("a.md", '---\ntype: note\ncanonical_source: "not a pointer"\n---\n\n# A\n');
+    reindex();
+    const { findings } = await lintCitations(db, sources(source("s", {})));
+    expect(findings[0]?.kind).toBe("unparseable-citation");
+  });
+
+  test("a page citing nothing is not checked here", async () => {
+    // `lint` already reports missing provenance; reporting it twice would make
+    // one gap look like two.
+    writePage("a.md", "---\ntype: note\n---\n\n# A\n");
+    reindex();
+    const report = await lintCitations(db, sources(source("s", {})));
+    expect(report.findings).toEqual([]);
+    expect(report.pagesChecked).toBe(0);
+  });
+
+  test("one source file cited by many pages is read once", async () => {
+    let reads = 0;
+    const counting: SourceAdapter = {
+      ...source("s", { "doc.md": tenLines }),
+      read: async (path: string) => {
+        reads++;
+        if (path !== "doc.md") throw new Error("ENOENT");
+        return tenLines;
+      },
+    };
+    for (const name of ["a", "b", "c"]) {
+      writePage(
+        `${name}.md`,
+        `---\ntype: note\ncanonical_source: "s:doc.md#L1"\n---\n\n# ${name}\n`,
+      );
+    }
+    reindex();
+    await lintCitations(db, sources(counting));
+    expect(reads).toBe(1);
   });
 });

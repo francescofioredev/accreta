@@ -1,5 +1,6 @@
 import type { Database } from "../index-db/db.ts";
 import type { AccretaConfig } from "../config.ts";
+import { parseCitation, type SourceAdapter } from "../source/adapter.ts";
 
 export interface LintFinding {
   kind:
@@ -8,7 +9,10 @@ export interface LintFinding {
     | "missing-provenance"
     | "unverified-page"
     | "dangling-link"
-    | "unparseable-frontmatter";
+    | "unparseable-frontmatter"
+    | "unparseable-citation"
+    | "citation-path-missing"
+    | "citation-range-out-of-bounds";
   path: string;
   detail: string;
 }
@@ -124,6 +128,98 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
         kind: "unverified-page",
         path: page.path,
         detail: "no last_verified_revision: drift cannot be detected for this page",
+      });
+    }
+  }
+
+  return { findings, pagesChecked: pages.length };
+}
+
+interface CitationRow {
+  path: string;
+  canonical_source: string;
+}
+
+/**
+ * Check that citations point at things that exist.
+ *
+ * Provenance is the first property this project claims, and until now the only
+ * thing verified about `canonical_source` was that it was non-null. A pointer
+ * naming a file that was never there, or a line range past the end of one,
+ * passed every check the project had and was then served by `find_canonical` as
+ * the authoritative answer.
+ *
+ * Two checks, both deterministic and both needing only `SourceAdapter.read`,
+ * which is already on the interface — so the core still cannot tell one adapter
+ * from another.
+ *
+ * Separate from `lint` rather than folded into it because this one does I/O:
+ * `lint` reads the index and answers synchronously, and every caller of it
+ * depends on that. `detectDrift` is the same shape for the same reason.
+ *
+ * What this cannot do is judge whether a range that exists actually supports
+ * the claim. That needs reading both, and it is not attempted here.
+ */
+export async function lintCitations(
+  db: Database,
+  sources: Map<string, SourceAdapter>,
+): Promise<LintReport> {
+  const findings: LintFinding[] = [];
+
+  const pages = db
+    .query(
+      `SELECT path, canonical_source FROM pages
+       WHERE canonical_source IS NOT NULL AND canonical_source != ''
+       ORDER BY path`,
+    )
+    .all() as CitationRow[];
+
+  // One read per distinct file, not per citation: a knowledge base cites the
+  // same source document from many pages.
+  const lineCounts = new Map<string, number | null>();
+
+  for (const page of pages) {
+    const citation = parseCitation(page.canonical_source);
+    if (!citation) {
+      findings.push({
+        kind: "unparseable-citation",
+        path: page.path,
+        detail: `canonical_source "${page.canonical_source}" is not source:path#Lstart-Lend`,
+      });
+      continue;
+    }
+
+    const adapter = sources.get(citation.sourceId);
+    // A source that is not configured cannot be checked, and saying so as a
+    // finding would dress "I did not look" up as "I found something". Working
+    // against a subset of the declared sources is a normal thing to do.
+    if (!adapter) continue;
+
+    const key = `${citation.sourceId}\0${citation.path}`;
+    let lines = lineCounts.get(key);
+    if (lines === undefined) {
+      lines = await adapter
+        .read(citation.path)
+        .then((text) => text.split("\n").length)
+        .catch(() => null);
+      lineCounts.set(key, lines);
+    }
+
+    if (lines === null) {
+      findings.push({
+        kind: "citation-path-missing",
+        path: page.path,
+        detail: `${citation.path} does not exist in source "${citation.sourceId}"`,
+      });
+      continue;
+    }
+
+    const range = citation.lines;
+    if (range && range[1] > lines) {
+      findings.push({
+        kind: "citation-range-out-of-bounds",
+        path: page.path,
+        detail: `cites L${range[0]}-L${range[1]} but ${citation.path} has ${lines} line(s)`,
       });
     }
   }

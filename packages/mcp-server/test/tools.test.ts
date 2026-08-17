@@ -98,8 +98,9 @@ describe("read tools", () => {
     expect(result.results[0]?.matchedOn).toBe("alias");
   });
 
-  test("lint reports a page whose type is outside the vocabulary", () => {
-    expect(lintTool(ctx).findings.filter((f) => f.kind === "unknown-page-type")).toEqual([]);
+  test("lint reports a page whose type is outside the vocabulary", async () => {
+    const { findings } = await lintTool(ctx);
+    expect(findings.filter((f) => f.kind === "unknown-page-type")).toEqual([]);
   });
 });
 

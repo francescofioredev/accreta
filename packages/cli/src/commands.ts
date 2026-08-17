@@ -7,6 +7,7 @@ import {
   findRelated,
   getPage,
   lint,
+  lintCitations,
   openIndex,
   parseSourceDeclaration,
   searchPages,
@@ -254,30 +255,47 @@ function withIndex<T>(
   }
 }
 
-export function runLint(ctx: CommandContext): number {
-  return withIndex(ctx, (db, workspace) => {
+// Opens and closes the index itself rather than going through `withIndex`:
+// citation checks read from the sources, and `withIndex` closes the database in
+// a synchronous `finally` that would fire before the first await resolved.
+// `drift` has the same shape for the same reason.
+export async function runLint(ctx: CommandContext): Promise<number> {
+  const workspace = findWorkspace(ctx.cwd);
+  if (!existsSync(workspace.indexPath)) {
+    throw new Error(`No index at ${workspace.indexPath}. Run \`accreta reindex\` first.`);
+  }
+
+  const db = openIndex(workspace.indexPath, { readonly: true });
+  try {
     const report = lint(db, workspace.config);
-    if (report.findings.length === 0) {
+
+    const sources = new Map(loadSources(workspace).map((adapter) => [adapter.id, adapter]));
+    const citations = await lintCitations(db, sources);
+    const findings = [...report.findings, ...citations.findings];
+
+    if (findings.length === 0) {
       ctx.out(`${report.pagesChecked} page(s) checked, nothing to report.`);
       return 0;
     }
 
-    const byKind = new Map<string, typeof report.findings>();
-    for (const finding of report.findings) {
+    const byKind = new Map<string, typeof findings>();
+    for (const finding of findings) {
       const list = byKind.get(finding.kind);
       if (list) list.push(finding);
       else byKind.set(finding.kind, [finding]);
     }
 
-    for (const [kind, findings] of byKind) {
-      ctx.out(`\n${kind} (${findings.length})`);
-      for (const finding of findings) ctx.out(`  ${finding.path}: ${finding.detail}`);
+    for (const [kind, group] of byKind) {
+      ctx.out(`\n${kind} (${group.length})`);
+      for (const finding of group) ctx.out(`  ${finding.path}: ${finding.detail}`);
     }
-    ctx.out(`\n${report.findings.length} finding(s) across ${report.pagesChecked} page(s).`);
+    ctx.out(`\n${findings.length} finding(s) across ${report.pagesChecked} page(s).`);
 
     // A non-zero exit so CI can fail on an unresolvable link.
     return 1;
-  });
+  } finally {
+    db.close();
+  }
 }
 
 export function search(ctx: CommandContext, query: string, types?: string[]): number {

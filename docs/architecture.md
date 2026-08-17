@@ -131,6 +131,11 @@ answer "what depends on this" across either.
 `last_verified_revision` is what makes drift detectable. A page missing both still renders
 fine and is nearly useless.
 
+A pointer that *is* present is checked rather than trusted: `lint` resolves the path against
+the source it names and the line range against that file's length. Both are deterministic and
+need only `SourceAdapter.read`. What neither can tell is whether a range that exists supports
+the claim made from it — that needs reading both, and is not attempted.
+
 ## The index
 
 Three tables. `pages` holds frontmatter fields promoted to columns for filtering, plus the
