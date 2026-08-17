@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { DEFAULT_CONFIG, type AccretaConfig } from "../src/config.ts";
 import { buildIndex } from "../src/index-db/build.ts";
 import { openIndex } from "../src/index-db/db.ts";
@@ -219,10 +226,69 @@ describe("buildIndex", () => {
     db.close();
   });
 
+  /** Staging names carry a pid and a UUID, so this globs rather than guessing one. */
+  function stagingLeftovers(): string[] {
+    const prefix = `${basename(indexPath)}.building`;
+    return readdirSync(dirname(indexPath)).filter((name) => name.startsWith(prefix));
+  }
+
   test("the rebuild leaves no staging file behind", () => {
     writePage("a.md", "# A\n");
     build();
-    expect(existsSync(`${indexPath}.building`)).toBe(false);
+    expect(stagingLeftovers()).toEqual([]);
+  });
+
+  test("a failed rebuild leaves no staging file behind either", () => {
+    writePage("a.md", "# A\n");
+    // A unique staging name is never reused, so a leak is permanent rather than
+    // overwritten by the next run. An unreadable page fails the scan mid-build.
+    const unreadable = join(root, "knowledge", "locked.md");
+    writeFileSync(unreadable, "# L\n", "utf-8");
+    chmodSync(unreadable, 0o000);
+    try {
+      expect(() => build()).toThrow();
+      expect(stagingLeftovers()).toEqual([]);
+    } finally {
+      chmodSync(unreadable, 0o644);
+    }
+  });
+
+  test("two concurrent rebuilds both survive, and the winner's index is whole", async () => {
+    // Two sessions reindexing one knowledge base is the tool's own loop. Under
+    // a fixed staging name the slow one died with "disk I/O error" and the
+    // index kept only the fast one's pages, passing integrity_check.
+    //
+    // The corpus is large enough that a build outlasts bun's startup jitter:
+    // both children are spawned together and synchronise on a start file, so
+    // their staging windows genuinely overlap rather than merely being asked to.
+    const PAGES = 2000;
+    for (let i = 0; i < PAGES; i++) writePage(`p${i}.md`, `# P${i}\n\nbody ${i}\n`);
+
+    const script = join(root, "build.ts");
+    writeFileSync(
+      script,
+      `import { buildIndex } from ${JSON.stringify(join(import.meta.dir, "../src/index-db/build.ts"))};\n` +
+        `const [root, indexPath, gate] = process.argv.slice(2);\n` +
+        `while (!(await Bun.file(gate).exists())) await Bun.sleep(1);\n` +
+        `buildIndex({ root, indexPath, config: ${JSON.stringify(config)} });\n`,
+      "utf-8",
+    );
+
+    const gate = join(root, "go");
+    const spawn = () =>
+      Bun.spawn(["bun", script, root, indexPath, gate], { stderr: "pipe" });
+    const children = [spawn(), spawn()];
+    await Bun.sleep(300);
+    writeFileSync(gate, "", "utf-8");
+
+    const codes = await Promise.all(children.map((c) => c.exited));
+    const stderrs = await Promise.all(children.map((c) => new Response(c.stderr).text()));
+    expect(`${codes.join(",")} ${stderrs.join(" ")}`).toBe("0,0  ");
+
+    const db = openIndex(indexPath, { readonly: true });
+    expect(db.query("SELECT COUNT(*) AS n FROM pages").get()).toEqual({ n: PAGES });
+    db.close();
+    expect(stagingLeftovers()).toEqual([]);
   });
 
   test("a rebuild swaps in the new index atomically", () => {
