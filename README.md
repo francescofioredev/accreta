@@ -92,6 +92,32 @@ become load-bearing before anyone has tested them. Skill distribution waited spe
 there being a package to install from; that now exists, so the guessing is over and the issue
 can proceed on evidence.
 
+## Pages are untrusted input to the model
+
+A knowledge base is text that someone wrote, and an agent reads it into its context. An
+instruction written inside a page reaches the model exactly the way the page's actual content
+does — through the body, and also through the title, the `aliases`, a wikilink target quoted
+back by `lint`, and a search snippet. Reading a page's body and finding it sound establishes
+nothing about the other four.
+
+This matters most at one setting. **`ACCRETA_ALLOW_WRITES=1` means any page in the corpus can
+direct a write.** The write tool asks for a dry run and a confirming token, and that handshake
+is real — it stops an agent writing on impulse, and it cannot be replayed onto a different
+edit. But it confirms an intent rather than authorizing one, and an agent acting on an
+instruction it read in a page will complete the handshake on its way there. Leave writes off
+unless an agent is meant to re-verify pages, and understand that enabling them extends trust
+to whoever wrote the corpus.
+
+accreta itself has no outbound network capability — no `fetch`, no HTTP client — so there is
+no channel here through which a page could send anything anywhere. That is worth stating
+precisely rather than inflating: the corpus is private data and pages are untrusted content,
+which is two of the three conditions usually named for this class of problem. The third is
+supplied by whatever other tools the agent holds in the same session, and accreta can neither
+know nor constrain them. This is a real limitation, not an oversight. Documenting it is not a
+control, and nothing here prevents an injection; it tells you what you are trusting when you
+decide to trust it. See the
+[adversarial review](docs/research/2026-08-review/07-adversarial-content.md).
+
 Progress is tracked on the [project board](https://github.com/users/francescofioredev/projects/1),
 one epic per phase.
 

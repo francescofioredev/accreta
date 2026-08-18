@@ -143,6 +143,13 @@ Writes are off by default. `update_verified_revision` is not registered at all u
 meant to re-verify pages, and understand what it does first: it rewrites the provenance the
 whole system rests on.
 
+Understand who it extends trust to, as well. Pages are untrusted input to the model — an agent
+reads them into its context, and an instruction written inside one arrives there the same way
+the page's real content does, through the title and `aliases` as much as the body. So
+`ACCRETA_ALLOW_WRITES=1` means any page in the corpus can direct a write. The dry-run-and-token
+handshake confirms the edit but does not decide whether it should happen, and an agent following
+an instruction it read will complete the handshake on its way to the write.
+
 ## 6. Verify, from outside
 
 Do not declare it working because `reindex` printed a page count. Query it the way the agent
