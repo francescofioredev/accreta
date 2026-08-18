@@ -62,5 +62,13 @@ The token is a hash of the page, the new revision and the *current* value, so it
 produced without having run the dry run and cannot be reused for a different edit. A plain
 `confirm: true` flag would let a model skip straight to writing.
 
+What that handshake does **not** do is decide *whether* the edit should happen. It confirms an
+intent; it does not authorize one. An agent that is following an instruction it read inside a
+page will run the dry run and echo the token back, because doing so is simply the protocol for
+getting to the write — the two steps are a sequence it can complete unaided. So enabling writes
+extends trust to whoever authored the corpus, not only to whoever is operating the agent. Pages
+are untrusted input to the model; see
+[the README](../../README.md#pages-are-untrusted-input-to-the-model).
+
 The tool edits the markdown and asks for a reindex rather than updating the index directly.
 The index is derived; writing to it would put it out of step with the pages it comes from.
