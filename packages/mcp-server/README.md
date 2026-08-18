@@ -36,6 +36,34 @@ another — it needs no filesystem access to the knowledge base itself, only to 
 | `lint_knowledge_base` | Unresolvable links, missing provenance, unknown page types. |
 | `update_verified_revision` | Write. Registered only when `ACCRETA_ALLOW_WRITES=1`. |
 
+## Which fields a page author wrote
+
+The five tools that relay page text return a `_provenance` block naming the fields that carry it:
+
+```json
+{
+  "count": 1,
+  "results": [{ "path": "…", "title": "…", "snippet": "…" }],
+  "_provenance": {
+    "page_derived_fields": ["results[].title", "results[].snippet"],
+    "notice": "… This label raises an attacker's cost; it does not prevent prompt injection."
+  }
+}
+```
+
+Values are byte-identical to what the page contains — the block names fields rather than
+delimiting them, because a delimiter is itself a string the page author can write, and mangling
+values would cost `get_page` its body fidelity.
+
+`search_pages` additionally returns `matched_aliases` on a hit whose match an alias explains.
+Aliases are indexed but never displayed, so a page whose title and body are both benign could
+surface on an alias alone and the hit looked unmotivated. The field is omitted when no alias
+matched, and it never carries the page's whole alias list.
+
+**This is labelling, not a control.** It prevents nothing: any defence living inside the same
+agent loop the injection controls is defeated by the same move. It raises an attacker's cost and
+tells a reading model which text it should treat as data.
+
 ## Three outcomes, not two
 
 `check_drift` distinguishes results that a simpler design would collapse:

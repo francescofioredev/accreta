@@ -51,3 +51,31 @@ test("the server reports the version its package declares", async () => {
     await client.close();
   }
 });
+
+/**
+ * Asserted through the real transport because the envelope has to survive
+ * serialization to be worth anything, and because it must not cost the response
+ * its parseability — the reason the notice is a field inside the JSON rather
+ * than a preamble in front of it.
+ */
+test("the provenance block survives a real tool call", async () => {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "provenance-probe", version: "0.0.0" });
+
+  await Promise.all([createServer(ctx).connect(serverTransport), client.connect(clientTransport)]);
+
+  try {
+    const result = (await client.callTool({
+      name: "search_pages",
+      arguments: { query: "anything" },
+    })) as { content: { text: string }[] };
+
+    const payload = JSON.parse(result.content[0]?.text ?? "") as {
+      _provenance: { notice: string; page_derived_fields: string[] };
+    };
+    expect(payload._provenance.page_derived_fields).toContain("results[].title");
+    expect(payload._provenance.notice).toContain("does not prevent");
+  } finally {
+    await client.close();
+  }
+});

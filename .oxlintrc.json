@@ -5,5 +5,8 @@
     "suspicious": "warn"
   },
   "env": { "es2024": true },
+  "rules": {
+    "eslint/no-underscore-dangle": ["warn", { "allow": ["_provenance"] }]
+  },
   "ignorePatterns": ["**/dist/**", "**/node_modules/**"]
 }
