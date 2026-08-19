@@ -60,6 +60,21 @@ figure from 70% to 85%:
 | alias recall@1 | 40% | **100%** |
 | MRR | 0.742 | **0.867** |
 
+**What that table is, stated at its actual strength.** Twenty queries is a small benchmark, and
+the percentages carry intervals wide enough to matter. Exactly **3 of the 20 queries change
+rank** between the two conditions: `climate forcing` (2 → 1), `ECS` (not found → 1) and
+`thermal inertia` (not found → 1). Two of the five alias queries already worked without the
+column. McNemar exact two-sided p = 0.25; unpaired Fisher on the alias class, 5/5 versus 2/5,
+p = 0.167. Clopper-Pearson 95% intervals: before 2/5 → 5.3–85.3%, after 5/5 → 47.8–100%.
+They overlap across most of their range.
+
+So the *statistical* case for the alias column is weak at n=20, and would be dishonest to
+present otherwise. The *mechanical* case does not depend on statistics and is what actually
+decides it: `ECS` and `thermal inertia` retrieved **nothing** — not a worse rank, no result at
+all. A page declaring an alias that appears nowhere in its title or body is unreachable by that
+name when the column is unindexed, deterministically and by construction. That is the finding.
+The percentages are a small sample; the mechanism is not a sample.
+
 This is the finding that decides the ADR, and it would have been invisible without measuring.
 Had the benchmark not been run first, the 40% alias score would have looked exactly like
 evidence that lexical search cannot handle synonyms — the classic argument for reaching for
@@ -82,10 +97,12 @@ driver and reciprocal rank fusion listed on the epic are all left unwritten.
 
 What the numbers actually say is narrower than "semantic search is unnecessary": on this
 corpus, three of four query classes are already at 100% recall@1, and the remaining gap is
-**paraphrase at 50%** — six queries, three of which fail. That is a real weakness and exactly
-where embeddings would help. It is not, on its own, a mandate to add an embedding pipeline,
-an extra index, a driver abstraction and a fusion algorithm to a project whose search is
-otherwise at 85%.
+**paraphrase at 50%** — six queries, three of which fail. At n=6 that carries a 95% binomial
+interval of roughly 12–88%, which cannot discriminate between "lexical search is fine here"
+and "lexical search is broken here" — a reason to keep measuring, not a measured gap. It is a
+real weakness and exactly where embeddings would help. It is not, on its own, a mandate to
+add an embedding pipeline, an extra index, a driver abstraction and a fusion algorithm to a
+project whose search is otherwise at 85%.
 
 ## Alternatives rejected
 

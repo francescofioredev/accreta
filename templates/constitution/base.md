@@ -86,9 +86,10 @@ Two fields do most of the work:
   cannot be checked — `accreta lint` will tell you so.
 
 **`aliases` are not decoration.** They are how a reader who knows a concept by another name
-finds it. Declaring them measurably improves retrieval: on the project's own benchmark,
-indexing aliases moved alias-query recall from 40% to 100%. If a concept has a common
-synonym, an abbreviation, or an older name, list it.
+finds it, and search consults them alongside the title and the body. A page that declares
+`aliases: ["ECS"]`, where "ECS" appears in neither its title nor its text, is reachable by
+that name only because the alias is there — without it the query returns nothing at all. If
+a concept has a common synonym, an abbreviation, or an older name, list it.
 
 ## Links
 

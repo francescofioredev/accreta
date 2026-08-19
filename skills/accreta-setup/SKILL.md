@@ -88,8 +88,8 @@ pressure:
 - Never duplicate a source. Cite it.
 - When sources disagree, record the disagreement rather than picking a winner.
 - A concept needs at least two real points of contact before it earns a page.
-- **Declare `aliases`.** They are indexed and they measurably matter: on the project's
-  benchmark, indexing aliases moved alias-query recall from 40% to 100%.
+- **Declare `aliases`.** Search consults them alongside title and body, so a page whose
+  alias is the only place a name appears is reachable by that name and unreachable without it.
 
 ## 4. Index and check
 
