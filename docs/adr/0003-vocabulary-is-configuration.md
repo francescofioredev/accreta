@@ -47,8 +47,9 @@ concepts known by more than one name. None of them needs `route`.
 The distinction is worth stating because it is the boundary that will be argued over: a field
 belongs in the schema if every corpus has it, and in configuration if only some do.
 
-Measured consequence: with aliases outside the index, alias-query recall was 40%. With them
-indexed, 100%. See ADR-0001.
+Measured consequence: with aliases outside the index, a page reachable only by its declared
+alias is not reachable at all — the query returns nothing rather than ranking it lower. See
+ADR-0001, which also records how small the sample behind the accompanying percentages is.
 
 ## Alternatives rejected
 

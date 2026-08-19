@@ -34,25 +34,25 @@ Findings that arrived three times as three different severities were merged into
 | RT-10 | Verification records that a check happened, never who made it or how                                        | high     | CITED + MEASURED    | MEASUREMENT |
 | RT-11 | `unverified-page` invites exactly the fix the constitution calls maximally damaging                         | high     | REASONED            | MEASUREMENT |
 | RT-12 | `FsSource.citation()` renders `rev="unknown"` forever, and the tests cannot catch it                        | high     | MEASURED            | ISSUE [#43]|
-| RT-13 | A depth-carrying recursive CTE defeats SQLite's cycle protection — a trap, not yet a bug                    | medium   | MEASURED ×2 + CITED | ISSUE       |
-| RT-14 | `search_pages`'s description omits `aliases`, contradicting the schema                                      | medium   | MEASURED            | ISSUE       |
-| RT-15 | A mutually contradictory supersession state passes lint clean                                               | medium   | MEASURED ×2         | ISSUE       |
-| RT-16 | `findCanonical`'s alias branch is a full scan, and neither it nor lint has a `LIMIT`                        | medium   | MEASURED            | ISSUE       |
+| RT-13 | A depth-carrying recursive CTE defeats SQLite's cycle protection — a trap, not yet a bug                    | medium   | MEASURED ×2 + CITED | ISSUE [#80]|
+| RT-14 | `search_pages`'s description omits `aliases`, contradicting the schema                                      | medium   | MEASURED            | ISSUE [#79]|
+| RT-15 | A mutually contradictory supersession state passes lint clean                                               | medium   | MEASURED ×2         | ISSUE [#81]|
+| RT-16 | `findCanonical`'s alias branch is a full scan, and neither it nor lint has a `LIMIT`                        | medium   | MEASURED            | ISSUE [#82]|
 | RT-17 | mtime revisions cause false-positive drift on rsync and `cp -R` (diagnosis kept, proposal withdrawn)        | medium   | MEASURED            | MEASUREMENT |
 | RT-18 | No tool declares `outputSchema`; drift's three-way distinction arrives as prose                             | medium   | MEASURED + CITED    | MEASUREMENT |
-| RT-19 | ADR-0001's reopen triggers cannot be evaluated; trigger 2 is unfalsifiable as written                       | medium   | REASONED            | ISSUE       |
-| RT-20 | `.gitignore`'s "~150ms" predates all code and never measured anything                                       | low      | MEASURED            | ISSUE       |
+| RT-19 | ADR-0001's reopen triggers cannot be evaluated; trigger 2 is unfalsifiable as written                       | medium   | REASONED            | ISSUE [#83]|
+| RT-20 | `.gitignore`'s "~150ms" predates all code and never measured anything                                       | low      | MEASURED            | ISSUE [#84]|
 | RT-21 | A frontmatter merge conflict on `last_verified_revision` has no resolution procedure                        | medium   | REASONED            | MEASUREMENT |
 | RT-22 | Obsolescence is structurally invisible to per-source drift                                                  | medium   | MEASURED            | ADR         |
-| RT-23 | `get_page`'s flat 29.8KB is a benchmark artifact — do not act on it                                         | medium   | MEASURED            | ISSUE       |
+| RT-23 | `get_page`'s flat 29.8KB is a benchmark artifact — do not act on it                                         | medium   | MEASURED            | ISSUE [#85]|
 | RT-24 | No graph database is needed; SQLite serves every plausible traversal                                        | low      | MEASURED            | ADR         |
 | RT-25 | The confirm-token is correct for its threat model and structurally cannot stop an injected instruction      | high     | MEASURED            | ADR         |
 | RT-26 | Attacker-controlled text reaches the model through five channels, not just the page body                    | high     | MEASURED            | ISSUE [#49]|
 | RT-27 | A wikilink inside a double-quoted frontmatter value discards the entire frontmatter                         | high     | MEASURED ×2         | ISSUE [#46]|
 | RT-28 | `ACCRETA_ALLOW_WRITES` is process-wide and cannot express _for whom_ on a shared deployment                 | high     | REASONED            | MEASUREMENT |
 | RT-29 | Nothing in the shipped guidance tells the operator that pages are untrusted input to the model              | high     | MEASURED            | ISSUE [#50]|
-| RT-30 | The parser withstood 15 adversarial inputs; the resource guard belongs to `yaml`, not to accreta            | low      | MEASURED            | ISSUE       |
-| RT-31 | The path boundary holds — and symlink containment is accidental, undocumented, and untested                 | low      | MEASURED            | ISSUE       |
+| RT-30 | The parser withstood 15 adversarial inputs; the resource guard belongs to `yaml`, not to accreta            | low      | MEASURED            | ISSUE [#86]|
+| RT-31 | The path boundary holds — and symlink containment is accidental, undocumented, and untested                 | low      | MEASURED            | ISSUE [#87]|
 
 ## The five findings that decide the most
 

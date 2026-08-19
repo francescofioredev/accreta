@@ -77,10 +77,10 @@ describe("searchPages", () => {
   });
 
   test("a declared alias is searchable, because the index keeps it", () => {
-    // Measured, not assumed: with aliases outside the FTS table, alias queries
-    // scored 40% recall@1 over bench/; with them indexed, 100%. The editorial
-    // work of declaring an alias is signal a curated corpus has, and discarding
-    // it at index time is how a system argues itself into needing embeddings.
+    // Measured, not assumed: blank the FTS aliases column and this query returns
+    // nothing at all, not a worse rank. The editorial work of declaring an alias
+    // is signal a curated corpus has, and discarding it at index time is how a
+    // system argues itself into needing embeddings.
     writePage(
       "concepts/sensitivity.md",
       '---\ntype: concept\naliases: ["ECS", "equilibrium climate sensitivity"]\n---\n\n# Climate sensitivity\n\nWarming after doubling.\n',
