@@ -1,6 +1,6 @@
 {
   "name": "@accreta/adapter-fs",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "license": "MIT",
   "description": "Source adapter for a directory of documents. Revision is a hash of modification times.",
@@ -24,6 +24,6 @@
     "src"
   ],
   "dependencies": {
-    "@accreta/core": "0.1.2"
+    "@accreta/core": "0.1.3"
   }
 }

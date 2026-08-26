@@ -77,7 +77,7 @@ npm will not let a version be republished. Before tagging:
 
 ```bash
 bun test                                  # includes the packed-tarball test
-bun run scripts/check-version.ts 0.1.2    # the tag you are about to push, without the v
+bun run scripts/check-version.ts 0.1.3    # the tag you are about to push, without the v
 cd packages/cli && bun pm pack --dry-run  # eyeball the file list
 ```
 
