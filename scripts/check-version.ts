@@ -22,9 +22,19 @@ export const PUBLISHABLE = [
   "packages/mcp-server",
 ];
 
+export interface Manifest {
+  name: string;
+  version: string;
+  dependencies?: Record<string, string>;
+  repository?: { url?: string };
+}
+
+export function manifestOf(packageDir: string): Manifest {
+  return JSON.parse(readFileSync(join(REPO_ROOT, packageDir, "package.json"), "utf-8"));
+}
+
 export function versionOf(packageDir: string): string {
-  const manifest = JSON.parse(readFileSync(join(REPO_ROOT, packageDir, "package.json"), "utf-8"));
-  return manifest.version;
+  return manifestOf(packageDir).version;
 }
 
 /** Returns the disagreements, so the caller can report all of them at once. */

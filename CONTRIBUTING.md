@@ -120,6 +120,27 @@ carrying `workspace:*` cannot be installed by anybody. So the internal dependenc
 versions, and a test in `packages/cli/test/packaging.test.ts` fails if the protocol ever comes
 back. Bumping a version means bumping it in every manifest that names it.
 
+## Measuring adoption
+
+```bash
+bun run adoption
+```
+
+npm's download counter is not an adoption number. It counts tarball fetches, does not filter
+automation, and pays every publish a tribute of 100-150 fetches per version per package from
+mirrors and security scanners. The first release drew 1,836 downloads with no human behind
+any of them.
+
+The report prints the daily counts, how much of the total the publishes explain, and a
+three-line checklist of the things a real user leaves behind: a sustained rate above npm's
+own noise floor, a repository that depends on the package, a referrer that is not
+`github.com`. It cites every threshold it compares against, and prints `?` rather than `no`
+for a source that did not answer. `docs/research/2026-08-npm-downloads.md` records the first
+reading.
+
+The GitHub section needs `gh` authenticated with push rights; without it that section is
+skipped and the rest still works.
+
 ## Reporting a bug
 
 Use the bug template and include: what you expected, what happened, and the smallest
