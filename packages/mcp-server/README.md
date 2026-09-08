@@ -33,7 +33,7 @@ another — it needs no filesystem access to the knowledge base itself, only to 
 | `find_canonical` | Resolve a term, including aliases, to the page that defines it. |
 | `check_drift` | Which pages their sources have moved out from under. |
 | `list_recent_changes` | What changed in a source since a revision. |
-| `lint_knowledge_base` | Unresolvable links, missing provenance, unknown page types. |
+| `lint_knowledge_base` | Unresolvable links, missing provenance, unknown page types, and a count of the citations it could not check. |
 | `update_verified_revision` | Write. Registered only when `ACCRETA_ALLOW_WRITES=1`. |
 
 ## Which fields a page author wrote
@@ -64,7 +64,7 @@ matched, and it never carries the page's whole alias list.
 agent loop the injection controls is defeated by the same move. It raises an attacker's cost and
 tells a reading model which text it should treat as data.
 
-## Three outcomes, not two
+## Four outcomes, not two
 
 `check_drift` distinguishes results that a simpler design would collapse:
 
@@ -72,10 +72,19 @@ tells a reading model which text it should treat as data.
 - **`unverifiable`** — the page records no revision, so nothing can be said about it.
 - **`unresolvable`** — the source cannot place the revision the page names. History was
   rewritten, or the revision came from a previous run of an `fs` source.
+- **`delegated`** — accreta cannot reach the source at all; the agent can. Carries the
+  connector, the declared scope, and the pages grouped by the revision they are stuck at.
+  `current_revision` is `null`, because there is no honest string to put there.
 
-Only the absence of all three means "current". Reporting `unresolvable` as "up to date" would
+Only the absence of all four means "current". Reporting `unresolvable` as "up to date" would
 be a claim the system has no basis for, which is why `list_recent_changes` returns
-`unresolvable: true` rather than an empty change list.
+`unresolvable: true` rather than an empty change list — and it returns `delegated: true` with
+the scope instead, because "nobody asked" and "the revision is lost" are different instructions
+to whoever reads them.
+
+`lint_knowledge_base` draws the same distinction with `citations_unchecked`: a count rather
+than findings, because a citation into a source nothing here can question was not found to be
+wrong, it was not examined.
 
 ## Writes
 
