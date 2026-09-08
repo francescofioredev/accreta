@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildIndex, DEFAULT_CONFIG, openIndex, type AccretaConfig } from "@accreta/core";
-import { FsSource } from "@accreta/adapter-fs";
+import { buildRegistry } from "@accreta/adapters";
 import {
   checkDriftTool,
   findCanonicalTool,
@@ -132,10 +132,10 @@ describe("source-backed tools", () => {
     build();
     ctx.sources.set(
       "docs",
-      new FsSource({
+      buildRegistry({ root, citationFormat: "{source} @ {rev}" }).create({
         id: "docs",
-        root: join(root, "src-docs"),
-        citationFormat: "{source} @ {rev}",
+        type: "fs",
+        options: { root: "src-docs" },
       }),
     );
   });
