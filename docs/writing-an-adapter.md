@@ -123,18 +123,34 @@ promise.
 
 ## Registration
 
-Adapters register by type name, in the surface rather than the core:
+Adapters register by type name, in `@accreta/adapters` rather than in the core. A kind is four
+things:
 
 ```ts
-new SourceRegistry().register("http", (d) => new HttpSource({
-  id: d.id,
-  url: String(d.options.url),
-  citationFormat: config.provenanceFormat,
-}));
+const httpKind: SourceKind = {
+  type: "http",
+  template: (id) => `# ...\nid: ${id}\ntype: http\nurl:\n`,
+  create: (d, ctx) =>
+    new HttpSource({ id: d.id, url: String(d.options.url), citationFormat: ctx.citationFormat }),
+  preflight: async (d) => ({ reachable: "yes", detail: "…" }),
+};
 ```
 
 Everything besides `id` and `type` reaches you untouched in `d.options`. The core does not
-validate them — validating them would require knowing what your adapter needs.
+validate them — validating them would require knowing what your adapter needs — so your
+`create` and your `preflight` are where a bad option is caught.
+
+`template` is what `accreta source add` writes. Put the adapter's sharp edges in its comments;
+that file is where somebody meets them.
+
+**`preflight` must not construct the adapter.** `accreta doctor` has to survive a half-written
+declaration and report it, so preflight validates the options itself and returns a verdict:
+
+- `yes` — you looked and the source is there.
+- `no` — you looked and it is not. Give a `remedy`: one line the user can act on.
+- `unknown` — you cannot look. Return `agentAccess` naming what the user's agent needs.
+  `doctor` prints it as unverified and does not fail on it, because an honest "I cannot tell"
+  must not be indistinguishable from a broken setup.
 
 Users then declare a source in `sources/*.yaml`:
 

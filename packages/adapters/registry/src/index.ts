@@ -1,81 +1,37 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  parseSourceDeclaration,
-  SourceRegistry,
-  type SourceAdapter,
-  type SourceDeclaration,
-} from "@accreta/core";
-import { FsSource } from "@accreta/adapter-fs";
-import { GitSource } from "@accreta/adapter-git";
-import { DelegatedSource } from "@accreta/adapter-delegated";
+import { parseSourceDeclaration, SourceRegistry, type SourceAdapter } from "@accreta/core";
+import { KINDS, type SourceContext } from "./kinds.ts";
 
-export interface SourceContext {
-  /** Workspace root. A declaration's own `root` is resolved against it. */
-  root: string;
-  /** `provenance.format`, handed to every adapter as its citation template. */
-  citationFormat: string;
-}
-
-/** A declaration's options reach the adapter untouched, so shaping them is the surface's job. */
-function stringsOr(value: unknown, fallback?: string[]): string[] | undefined {
-  return Array.isArray(value) ? (value as string[]) : fallback;
-}
+export type { AgentAccess, Preflight, SourceContext, SourceKind } from "./kinds.ts";
+export { KINDS, KNOWN_TYPES, kindFor } from "./kinds.ts";
 
 /**
  * The adapters this build knows how to construct.
  *
  * Not in the core, whose whole purpose is not to know which adapters exist. Not
  * in each surface either, which is where it was: the CLI and the MCP server
- * carried the same two registrations and the same hand-written option
- * marshalling, copied line for line, and the copies were free to disagree about
- * what a declaration means. A third adapter would have made three of them.
+ * carried the same registrations and the same hand-written option marshalling,
+ * copied line for line, and the copies were free to disagree about what a
+ * declaration means.
  */
 export function buildRegistry(ctx: SourceContext): SourceRegistry {
-  return new SourceRegistry()
-    .register(
-      "fs",
-      (d) =>
-        new FsSource({
-          id: d.id,
-          root: join(ctx.root, String(d.options.root ?? ".")),
-          citationFormat: ctx.citationFormat,
-          extensions: stringsOr(d.options.extensions),
-        }),
-    )
-    .register(
-      "git",
-      (d) =>
-        new GitSource({
-          id: d.id,
-          root: join(ctx.root, String(d.options.root ?? ".")),
-          citationFormat: ctx.citationFormat,
-          paths: stringsOr(d.options.paths),
-        }),
-    )
-    .register(
-      "delegated",
-      (d) =>
-        new DelegatedSource({
-          id: d.id,
-          via: String(d.options.via ?? ""),
-          scope: String(d.options.scope ?? ""),
-          citationFormat: ctx.citationFormat,
-        }),
-    );
+  const registry = new SourceRegistry();
+  for (const kind of KINDS) {
+    registry.register(kind.type, (declaration) => kind.create(declaration, ctx));
+  }
+  return registry;
 }
 
 /** Read every `*.yaml` declaration in `<root>/sources`, in a stable order. */
-export function readDeclarations(root: string): SourceDeclaration[] {
+export function readDeclarations(root: string) {
   const dir = join(root, "sources");
   if (!existsSync(dir)) return [];
 
-  const out: SourceDeclaration[] = [];
-  for (const name of readdirSync(dir).toSorted()) {
-    if (!name.endsWith(".yaml") && !name.endsWith(".yml")) continue;
-    out.push(parseSourceDeclaration(readFileSync(join(dir, name), "utf-8")));
-  }
-  return out;
+  return readdirSync(dir)
+    .toSorted()
+    .filter((name) => name.endsWith(".yaml") || name.endsWith(".yml"))
+    .map((name) => parseSourceDeclaration(readFileSync(join(dir, name), "utf-8")));
 }
 
 /**
@@ -85,7 +41,7 @@ export function readDeclarations(root: string): SourceDeclaration[] {
  * `source:path` ambiguous and `pages.source` unable to tell them apart, so it
  * was never valid — but it was silent, and silent in two different ways: the
  * CLI built both and checked drift twice, the MCP server kept whichever file
- * sorted last. Neither behaviour is worth preserving over saying so.
+ * sorted last.
  */
 export function loadSources(ctx: SourceContext): Map<string, SourceAdapter> {
   const registry = buildRegistry(ctx);

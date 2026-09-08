@@ -41,8 +41,9 @@ delete theirs.
 
 ## 2. Declare the sources
 
-One YAML file per source in `sources/`. Delete the generated `example.yaml` — leaving it
-produces confusing drift output about a source that does not exist.
+One YAML file per source in `sources/`. `accreta source add <type> <id>` writes one with its
+comments, or write it by hand. Delete the generated `example.yaml` — leaving it produces
+confusing drift output about a source that does not exist.
 
 ```yaml
 # sources/ipcc.yaml
@@ -59,11 +60,36 @@ type: git
 root: ../billing-service
 ```
 
+```yaml
+# sources/design-docs.yaml
+id: design-docs
+type: delegated
+via: notion
+scope: |
+  The "Design decisions" page and everything below it.
+  A page is in scope only if it is a descendant of that page.
+```
+
 Choosing the adapter:
 
 - **`git`** when the corpus is a repository. Revisions are commit SHAs, so drift detection
   can say exactly which files changed since a page was verified.
 - **`fs`** for a directory of documents. Revisions are a hash of modification times.
+- **`delegated`** when only you can reach it — a wiki, a mailbox, a tracker behind a
+  connector. accreta holds no credential and makes no call. It tracks which pages cite the
+  source and at what revision, and hands you the list; the reading is yours.
+
+What `delegated` costs, so you can decide with it in view:
+
+- **`accreta drift` cannot check it.** It prints a work order — the pages, the revisions they
+  are stuck at, and the scope — and exits 0, because nothing is *known* to be wrong. A
+  knowledge base with delegated sources therefore cannot be gated on drift in CI. Use
+  `accreta drift --strict`, which exits 1 on anything left unchecked.
+- **`accreta lint` cannot verify a citation into it.** It counts them as unchecked. An
+  invented page id and a real one look the same from here, so the citations you write into a
+  delegated source are only as good as your reading was.
+- **`scope` is prose, and it is the only thing that says what you may look at.** An empty
+  scope is refused rather than treated as "everything".
 
 Two `fs` consequences to state plainly, because they surprise people:
 
@@ -75,6 +101,30 @@ Two `fs` consequences to state plainly, because they surprise people:
 `id` matters: it appears in every citation and in each page's `source` field. Pick the name
 you want to read a thousand times.
 
+## 2b. Verify access, from both sides
+
+```bash
+accreta doctor
+```
+
+It reports, per source, whether accreta can reach it, and it never writes anything. Read the
+three verdicts as they are meant:
+
+- **ok** — accreta looked and the source is there.
+- **no** — accreta looked and it is not. There is a remedy on the next line. Fix it now.
+- **unknown** — accreta cannot look at all. This is the delegated case, and it is not a
+  failure. It exits 0 deliberately: an honest "I cannot tell" must not be indistinguishable
+  from a broken setup.
+
+**Then settle what doctor could not.** Nothing on the machine records whether *your* connector
+is authorized — a connector is not a file — so no command can prove it. You can. Read the
+declared scope once through the connector, and say what came back: the top-level items you can
+see, and how many. If you cannot reach it, stop here and say so rather than writing pages you
+cannot cite.
+
+This is the only step in the whole setup where the agent's own access is proven rather than
+assumed, and everything downstream depends on it.
+
 ## 3. Build the knowledge base
 
 This is the part no tool does for you. Read the sources and write pages, following the
@@ -83,8 +133,9 @@ constitution in `AGENTS.md`.
 The rules worth repeating here, because they are the ones most often skipped under time
 pressure:
 
-- Every non-trivial claim cites source, path, lines, **and revision**. The revision is the
-  part people drop and the part drift detection needs.
+- Every non-trivial claim cites source, path, locator, **and revision**. The locator is
+  whatever the source addresses itself by — `L142-L158` for a file, a block or message id for
+  a page or a thread. The revision is the part people drop and the part drift detection needs.
 - Never duplicate a source. Cite it.
 - When sources disagree, record the disagreement rather than picking a winner.
 - A concept needs at least two real points of contact before it earns a page.
@@ -119,6 +170,30 @@ Then:
 accreta drift
 ```
 
+`lint` also prints how many citations it **could not** check. That number is not a finding and
+not a failure: it is the citations into delegated sources, which nothing here can verify. It is
+the size of what you are being trusted on.
+
+### The drift loop for a delegated source
+
+`drift` cannot check it, so it hands you the work instead:
+
+```
+design-docs — read through notion by the agent, not by accreta
+  3 page(s) for the agent to re-verify there:
+    knowledge/concepts/pricing.md (verified at 2026-08-01T10:22:00Z)
+  in scope:
+    The "Design decisions" page and everything below it.
+```
+
+Take it literally. For each page: read the cited location through the connector, decide whether
+the claim still holds, fix the page if it does not, and only then record the new revision —
+`update_verified_revision`, or by hand.
+
+**Re-verifying means reading the source again.** Bumping the revision because the drift report
+mentioned the page is the one move that turns a detectable problem into an undetectable one, and
+it is easiest to make here, where nothing can catch you at it.
+
 ## 5. Wire up MCP
 
 `.mcp.json`, in whichever project the agent will work from:
@@ -137,6 +212,10 @@ accreta drift
 
 `ACCRETA_ROOT` is the whole point: the agent queries a knowledge base it has no filesystem
 access to.
+
+`accreta doctor` reports whether a `.mcp.json` in the knowledge base names accreta's server. It
+can only see that one file, so "unknown" there means the agent may well be configured somewhere
+else — it is not a claim that anything is wrong.
 
 Writes are off by default. `update_verified_revision` is not registered at all unless
 `ACCRETA_ALLOW_WRITES=1` is set in that `env` block. **Leave it off** unless the agent is

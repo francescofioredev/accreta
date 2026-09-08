@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   buildIndex,
@@ -8,11 +8,20 @@ import {
   getPage,
   lint,
   lintCitations,
+  checkConfig,
+  DEFAULT_CONFIG,
   openIndex,
+  parseSourceDeclaration,
   searchPages,
   type SourceAdapter,
 } from "@accreta/core";
-import { loadSources as loadDeclaredSources } from "@accreta/adapters";
+import {
+  KNOWN_TYPES,
+  kindFor,
+  loadSources as loadDeclaredSources,
+  readDeclarations,
+  type Preflight,
+} from "@accreta/adapters";
 import { CONFIG_FILENAME, findWorkspace, indexPathFor, type Workspace } from "./workspace.ts";
 import { composeConstitution, isPreset, PRESETS, type Preset } from "./constitution.ts";
 
@@ -116,19 +125,6 @@ provenance:
   format: "{source} @ {rev} · {path}#{locator}"
 `;
 
-const SOURCE_TEMPLATE = `# A source is anything with a revision and a way to report what changed.
-#
-#   type: fs   — a directory of documents; revision is a hash of modification times
-#   type: git  — a repository; revision is a commit SHA
-#
-# Every key besides id and type is passed to the adapter untouched.
-
-id: example
-type: fs
-root: sources/example
-extensions: [".md"]
-`;
-
 export interface InitOptions {
   preset?: string;
   /** Filename for the generated constitution. */
@@ -158,7 +154,8 @@ export function init(ctx: CommandContext, options: InitOptions = {}): number {
   mkdirSync(join(root, "sources"), { recursive: true });
 
   const examplePath = join(root, "sources", "example.yaml");
-  if (!existsSync(examplePath)) writeFileSync(examplePath, SOURCE_TEMPLATE, "utf-8");
+  if (!existsSync(examplePath))
+    writeFileSync(examplePath, kindFor("fs")!.template("example"), "utf-8");
 
   // The constitution is written only if nothing is there to overwrite. An
   // existing AGENTS.md or CLAUDE.md is somebody's work, and init is not the
@@ -446,6 +443,155 @@ export async function drift(
     db.close();
   }
   return exitCode;
+}
+
+/**
+ * Write a source declaration, then say whether anything can reach it.
+ *
+ * The `--set` pairs go into the declaration untouched, because the CLI knows no
+ * more about a source's options than the core does — the same rule the registry
+ * already follows for everything besides `id` and `type`.
+ */
+export async function sourceAdd(
+  ctx: CommandContext,
+  type: string,
+  id: string,
+  overrides: Record<string, string>,
+): Promise<number> {
+  if (!type || !id) {
+    ctx.err("Usage: accreta source add <type> <id> [--set key=value]");
+    ctx.err(`Types: ${KNOWN_TYPES.join(", ")}`);
+    return 1;
+  }
+
+  const kind = kindFor(type);
+  if (!kind) {
+    ctx.err(`Unknown source type "${type}". Known: ${KNOWN_TYPES.join(", ")}.`);
+    return 1;
+  }
+
+  const workspace = findWorkspace(ctx.cwd);
+  const dir = join(workspace.root, "sources");
+  mkdirSync(dir, { recursive: true });
+
+  const path = join(dir, `${id}.yaml`);
+  if (existsSync(path)) {
+    ctx.err(`sources/${id}.yaml already exists. Leaving it alone.`);
+    return 1;
+  }
+
+  writeFileSync(path, applyOverrides(kind.template(id), overrides), "utf-8");
+  ctx.out(`Wrote sources/${id}.yaml`);
+
+  const preflight = await kind.preflight(
+    { id, type, options: parseSourceDeclaration(readFileSync(path, "utf-8")).options },
+    { root: workspace.root, citationFormat: workspace.config.provenanceFormat },
+  );
+  reportPreflight(ctx, preflight, "  ");
+  return 0;
+}
+
+/** Replace `key: …` lines the user overrode, leaving the template's comments in place. */
+function applyOverrides(template: string, overrides: Record<string, string>): string {
+  let out = template;
+  for (const [key, value] of Object.entries(overrides)) {
+    const line = new RegExp(`^${key}:.*$`, "m");
+    out = line.test(out) ? out.replace(line, `${key}: ${value}`) : `${out}${key}: ${value}\n`;
+  }
+  return out;
+}
+
+function reportPreflight(ctx: CommandContext, preflight: Preflight, indent: string): void {
+  const label = preflight.reachable === "yes" ? "ok" : preflight.reachable;
+  ctx.out(`${indent}${label}: ${preflight.detail}`);
+  if (preflight.remedy) ctx.out(`${indent}  → ${preflight.remedy}`);
+  if (preflight.agentAccess) {
+    ctx.out(`${indent}your agent needs: ${preflight.agentAccess.connector} — unverified`);
+    ctx.out(`${indent}  → ${preflight.agentAccess.hint}`);
+  }
+}
+
+/**
+ * Say what is wired up and what is not, and never guess at the difference.
+ *
+ * Everything here is read-only on purpose. The one thing a user most wants
+ * checked — whether their agent can actually reach a delegated source — is the
+ * one thing no file on this machine records, so it is reported as unverified
+ * rather than inferred from the absence of evidence.
+ */
+export async function doctor(ctx: CommandContext): Promise<number> {
+  const workspace = findWorkspace(ctx.cwd);
+  let exitCode = 0;
+  ctx.out(`accreta doctor — ${workspace.root}`);
+
+  ctx.out("\nconfig");
+  const check = checkConfig(readFileSync(join(workspace.root, CONFIG_FILENAME), "utf-8"));
+  if (check.error) {
+    // Everything else reads this file through `parseConfig`, which degrades to
+    // the defaults rather than throwing. That is the right trade there and it
+    // means a knowledge base can lint against page types nobody chose.
+    ctx.out(`  broken: ${CONFIG_FILENAME} did not parse — ${check.error}`);
+    ctx.out("    → every command is running on the default vocabulary, silently");
+    exitCode = 1;
+  } else {
+    ctx.out(`  ok: ${CONFIG_FILENAME} parses`);
+  }
+  if (/\{start\}|\{end\}/.test(workspace.config.provenanceFormat)) {
+    ctx.out("  stale: provenance.format still uses {start} and {end}");
+    ctx.out(`    → replace them with {locator}: "${DEFAULT_CONFIG.provenanceFormat}"`);
+  }
+
+  ctx.out("\nindex");
+  ctx.out(
+    existsSync(workspace.indexPath)
+      ? `  ok: ${workspace.indexPath}`
+      : "  missing: run `accreta reindex`",
+  );
+
+  const declarations = readDeclarations(workspace.root);
+  ctx.out(`\nsources (${declarations.length})`);
+  if (declarations.length === 0) ctx.out("  none declared in sources/");
+
+  for (const declaration of declarations) {
+    ctx.out(`  ${declaration.id} — ${declaration.type}`);
+    const kind = kindFor(declaration.type);
+    if (!kind) {
+      ctx.out(`    no: unknown source type. Known: ${KNOWN_TYPES.join(", ")}.`);
+      exitCode = 1;
+      continue;
+    }
+    // Preflight never constructs the adapter, so a half-written declaration is
+    // reported here rather than thrown from a diagnostic command.
+    const preflight = await kind.preflight(declaration, {
+      root: workspace.root,
+      citationFormat: workspace.config.provenanceFormat,
+    });
+    reportPreflight(ctx, preflight, "    ");
+    if (preflight.reachable === "no") exitCode = 1;
+  }
+
+  ctx.out("\nmcp");
+  ctx.out(
+    mentionsAccretaServer(workspace.root)
+      ? "  ok: .mcp.json in this workspace names accreta's server"
+      : "  unknown: no .mcp.json here names accreta's server — the agent may be configured elsewhere",
+  );
+
+  return exitCode;
+}
+
+/** Only this workspace's file. An agent configured elsewhere is invisible, and saying so is the point. */
+function mentionsAccretaServer(root: string): boolean {
+  const path = join(root, ".mcp.json");
+  if (!existsSync(path)) return false;
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf-8")) as {
+      mcpServers?: Record<string, unknown>;
+    };
+    return Object.keys(parsed.mcpServers ?? {}).some((name) => name.includes("accreta"));
+  } catch {
+    return false;
+  }
 }
 
 export { indexPathFor };
