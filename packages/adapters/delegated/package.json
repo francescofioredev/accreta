@@ -1,6 +1,6 @@
 {
   "name": "@accreta/adapter-delegated",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "type": "module",
   "license": "MIT",
   "description": "A source only the agent can reach: accreta declares it, the connector reads it.",
@@ -24,6 +24,6 @@
     "src"
   ],
   "dependencies": {
-    "@accreta/core": "0.1.3"
+    "@accreta/core": "0.1.4"
   }
 }

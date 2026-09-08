@@ -1,6 +1,6 @@
 {
   "name": "@accreta/mcp-server",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "type": "module",
   "license": "MIT",
   "description": "The agent-facing surface: MCP tools over a knowledge base.",
@@ -27,8 +27,8 @@
     "src"
   ],
   "dependencies": {
-    "@accreta/adapters": "0.1.3",
-    "@accreta/core": "0.1.3",
+    "@accreta/adapters": "0.1.4",
+    "@accreta/core": "0.1.4",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "zod": "^4.1.0"
   }
