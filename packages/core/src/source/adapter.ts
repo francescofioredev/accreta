@@ -105,6 +105,29 @@ export class UnknownRevisionError extends Error {
 }
 
 /**
+ * Thrown when a source can only be reached by the agent, not by accreta.
+ *
+ * A value would have been the smaller change — a flag on the adapter, or a
+ * sentinel revision — and both would have let a caller carry on as if an answer
+ * had been given. The same reasoning as `UnknownRevisionError`: a condition that
+ * must not be confused with an answer is raised, not returned.
+ *
+ * `guidance` is the source declaration's own description of what is in scope. It
+ * is prose written by whoever declared the source, carried to whoever has to act
+ * on it, and accreta neither interprets nor validates it.
+ */
+export class DelegatedSourceError extends Error {
+  constructor(
+    readonly sourceId: string,
+    readonly via: string,
+    readonly guidance: string,
+  ) {
+    super(`Source "${sourceId}" is read through ${via} by the agent, not by accreta`);
+    this.name = "DelegatedSourceError";
+  }
+}
+
+/**
  * Resolve a source-relative path, refusing one that climbs out of the root.
  *
  * The argument reaching `locate` is not always something the operator wrote. A

@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import {
+  DelegatedSourceError,
   detectDrift,
   findCanonical,
   findRelated,
@@ -226,6 +227,14 @@ export async function checkDriftTool(ctx: ToolContext, input: { source?: string 
       })),
       unverifiable: report.unverifiable,
       unresolvable: report.unresolvable,
+      // Present only when accreta cannot reach the source. Kept out of
+      // `unresolvable`, which says the recorded revision is gone and the work
+      // has to start over — a different instruction entirely.
+      delegated: report.delegated && {
+        via: report.delegated.via,
+        scope: report.delegated.guidance,
+        pending: report.delegated.pending,
+      },
     })),
   };
 }
@@ -241,6 +250,19 @@ export async function listRecentChangesTool(
   try {
     return { source: adapter.id, changed: await adapter.changedSince(input.since) };
   } catch (error) {
+    // Not unresolvable: nobody asked this source anything. The agent holding
+    // the connector is the one who can answer, so it is told what to go and
+    // read rather than that the revision is lost.
+    if (error instanceof DelegatedSourceError) {
+      return {
+        source: adapter.id,
+        delegated: true as const,
+        via: error.via,
+        scope: error.guidance,
+        message: error.message,
+        changed: [],
+      };
+    }
     // "I cannot tell" reaches the agent as itself. Returning an empty list here
     // would read as "nothing changed", which is a different claim.
     return {
@@ -262,6 +284,10 @@ export async function lintTool(ctx: ToolContext) {
   return {
     pages_checked: report.pagesChecked,
     count: findings.length,
+    // Citations whose source could not be questioned. A number rather than
+    // findings: reporting them would say a problem was found where nothing was
+    // looked at.
+    citations_unchecked: citations.citationsUnchecked,
     findings,
     _provenance: provenance(LINT_FIELDS),
   };

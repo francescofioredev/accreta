@@ -232,8 +232,18 @@ export async function runLint(ctx: CommandContext): Promise<number> {
     const citations = await lintCitations(db, sources);
     const findings = [...report.findings, ...citations.findings];
 
+    // A count rather than findings: the citations belong to a source accreta
+    // cannot question, and "I did not look" must not be printed as a problem
+    // found. It is still the size of what this pass did not cover.
+    const unchecked =
+      citations.citationsUnchecked > 0
+        ? `${citations.citationsUnchecked} citation(s) could not be checked: ` +
+          `their source is one only the agent can read.`
+        : null;
+
     if (findings.length === 0) {
       ctx.out(`${report.pagesChecked} page(s) checked, nothing to report.`);
+      if (unchecked) ctx.out(unchecked);
       return 0;
     }
 
@@ -249,6 +259,7 @@ export async function runLint(ctx: CommandContext): Promise<number> {
       for (const finding of group) ctx.out(`  ${finding.path}: ${finding.detail}`);
     }
     ctx.out(`\n${findings.length} finding(s) across ${report.pagesChecked} page(s).`);
+    if (unchecked) ctx.out(unchecked);
 
     // A non-zero exit so CI can fail on an unresolvable link.
     return 1;
@@ -350,7 +361,10 @@ export function canonical(ctx: CommandContext, term: string): number {
   });
 }
 
-export async function drift(ctx: CommandContext): Promise<number> {
+export async function drift(
+  ctx: CommandContext,
+  options: { strict?: boolean } = {},
+): Promise<number> {
   const workspace = findWorkspace(ctx.cwd);
   if (!existsSync(workspace.indexPath)) {
     throw new Error(`No index at ${workspace.indexPath}. Run \`accreta reindex\` first.`);
@@ -367,6 +381,35 @@ export async function drift(ctx: CommandContext): Promise<number> {
   try {
     for (const adapter of sources) {
       const report = await detectDrift(db, adapter);
+
+      // A source only the agent can reach produces a work order rather than a
+      // verdict, so it is printed on its own terms and skips the outcomes below
+      // — every one of which would imply somebody had looked.
+      if (report.delegated) {
+        const work = report.delegated;
+        const pageCount = work.pending.reduce((total, entry) => total + entry.pages.length, 0);
+        ctx.out(`${adapter.id} — read through ${work.via} by the agent, not by accreta`);
+
+        if (pageCount > 0) {
+          ctx.out(`  ${pageCount} page(s) for the agent to re-verify there:`);
+          for (const entry of work.pending) {
+            for (const path of entry.pages) {
+              ctx.out(`    ${path} (verified at ${entry.revision})`);
+            }
+          }
+        } else {
+          ctx.out("  no pages cite it yet");
+        }
+        if (report.unverifiable.length > 0) {
+          ctx.out(`  ${report.unverifiable.length} page(s) record no revision at all`);
+        }
+        ctx.out("  in scope:");
+        for (const line of work.guidance.trim().split("\n")) ctx.out(`    ${line}`);
+
+        if (options.strict && (pageCount > 0 || report.unverifiable.length > 0)) exitCode = 1;
+        continue;
+      }
+
       ctx.out(`${adapter.id} @ ${report.currentRevision}`);
 
       if (report.stale.length > 0) {
@@ -393,6 +436,7 @@ export async function drift(ctx: CommandContext): Promise<number> {
       }
       if (report.unverifiable.length > 0) {
         ctx.out(`  ${report.unverifiable.length} page(s) record no revision at all`);
+        if (options.strict) exitCode = 1;
       }
       if (report.stale.length === 0 && report.unresolvable.length === 0) {
         ctx.out("  up to date");

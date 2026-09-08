@@ -6,8 +6,9 @@
   "license": "MIT",
   "description": "Cross-adapter tests: the same core code driven by every adapter.",
   "dependencies": {
-    "@accreta/core": "workspace:*",
+    "@accreta/adapter-delegated": "workspace:*",
     "@accreta/adapter-fs": "workspace:*",
-    "@accreta/adapter-git": "workspace:*"
+    "@accreta/adapter-git": "workspace:*",
+    "@accreta/core": "workspace:*"
   }
 }
