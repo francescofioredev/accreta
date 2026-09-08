@@ -42,6 +42,15 @@
         "@accreta/core": "0.1.3",
       },
     },
+    "packages/adapters/registry": {
+      "name": "@accreta/adapters",
+      "version": "0.1.3",
+      "dependencies": {
+        "@accreta/adapter-fs": "0.1.3",
+        "@accreta/adapter-git": "0.1.3",
+        "@accreta/core": "0.1.3",
+      },
+    },
     "packages/cli": {
       "name": "accreta",
       "version": "0.1.3",
@@ -49,8 +58,7 @@
         "accreta": "./src/main.ts",
       },
       "dependencies": {
-        "@accreta/adapter-fs": "0.1.3",
-        "@accreta/adapter-git": "0.1.3",
+        "@accreta/adapters": "0.1.3",
         "@accreta/core": "0.1.3",
       },
     },
@@ -68,8 +76,7 @@
         "accreta-mcp": "./src/main.ts",
       },
       "dependencies": {
-        "@accreta/adapter-fs": "0.1.3",
-        "@accreta/adapter-git": "0.1.3",
+        "@accreta/adapters": "0.1.3",
         "@accreta/core": "0.1.3",
         "@modelcontextprotocol/sdk": "^1.30.0",
         "zod": "^4.1.0",
@@ -82,6 +89,8 @@
     "@accreta/adapter-git": ["@accreta/adapter-git@workspace:packages/adapters/git"],
 
     "@accreta/adapter-tests": ["@accreta/adapter-tests@workspace:packages/adapters"],
+
+    "@accreta/adapters": ["@accreta/adapters@workspace:packages/adapters/registry"],
 
     "@accreta/bench": ["@accreta/bench@workspace:bench"],
 

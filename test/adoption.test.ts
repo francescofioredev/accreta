@@ -42,7 +42,15 @@ const totals = new Map(
   [...august].map(([name, series]) => [name, series.reduce((sum, d) => sum + d.downloads, 0)]),
 );
 
-const EDGES: Edge[] = [
+/**
+ * The graph as it was when those downloads were recorded, and frozen with them.
+ *
+ * It is not the graph the manifests describe today, and it must not be updated to match:
+ * the arithmetic below reads August, and reading August through a later shape would
+ * attribute those downloads to edges that did not exist yet. `CURRENT_EDGES` is the one
+ * that tracks the manifests.
+ */
+const AUGUST_EDGES: Edge[] = [
   { dependent: "@accreta/adapter-fs", dependency: "@accreta/core" },
   { dependent: "@accreta/adapter-git", dependency: "@accreta/core" },
   { dependent: "accreta", dependency: "@accreta/core" },
@@ -53,8 +61,24 @@ const EDGES: Edge[] = [
   { dependent: "@accreta/mcp-server", dependency: "@accreta/adapter-git" },
 ];
 
+/** What the manifests say now. Update this when a package gains or loses a dependency. */
+const CURRENT_EDGES: Edge[] = [
+  { dependent: "@accreta/adapter-fs", dependency: "@accreta/core" },
+  { dependent: "@accreta/adapter-git", dependency: "@accreta/core" },
+  { dependent: "@accreta/adapters", dependency: "@accreta/core" },
+  { dependent: "@accreta/adapters", dependency: "@accreta/adapter-fs" },
+  { dependent: "@accreta/adapters", dependency: "@accreta/adapter-git" },
+  { dependent: "accreta", dependency: "@accreta/core" },
+  { dependent: "accreta", dependency: "@accreta/adapters" },
+  { dependent: "@accreta/mcp-server", dependency: "@accreta/core" },
+  { dependent: "@accreta/mcp-server", dependency: "@accreta/adapters" },
+];
+
 test("the entry points are the two packages nobody depends on", () => {
-  expect(roots([...totals.keys()], EDGES).sort()).toEqual(["@accreta/mcp-server", "accreta"]);
+  expect(roots([...totals.keys()], AUGUST_EDGES).sort()).toEqual([
+    "@accreta/mcp-server",
+    "accreta",
+  ]);
 });
 
 test("reachability follows the chain, not just the direct edges", () => {
@@ -66,7 +90,7 @@ test("reachability follows the chain, not just the direct edges", () => {
 });
 
 test("a dependency counted fewer times than its entry points is short, and by how much", () => {
-  const byName = new Map(shortfalls(totals, EDGES).map((s) => [s.dependency, s]));
+  const byName = new Map(shortfalls(totals, AUGUST_EDGES).map((s) => [s.dependency, s]));
 
   // 358 installs of the CLI and 322 of the server cannot happen without 680 of core.
   const core = byName.get("@accreta/core")!;
@@ -88,7 +112,7 @@ test("the sum is taken over entry points, so a dependency of a dependency is not
     ["@accreta/adapter-fs", 10],
     ["@accreta/adapter-git", 10],
   ]);
-  const edges = EDGES.filter((e) => e.dependent !== "@accreta/mcp-server");
+  const edges = AUGUST_EDGES.filter((e) => e.dependent !== "@accreta/mcp-server");
   expect(shortfalls(explained, edges).every((s) => s.slack === 0)).toBe(true);
 });
 
@@ -107,7 +131,7 @@ test("the rate away from a publish is under the floor where npm traffic means an
 });
 
 test("a package fetched on a day its dependency was not is reported, with both counts", () => {
-  const found = unfetchedDays(august, EDGES).filter((u) => u.day <= COUNTED_TO);
+  const found = unfetchedDays(august, AUGUST_EDGES).filter((u) => u.day <= COUNTED_TO);
 
   const git11 = found.find(
     (u) =>
@@ -127,7 +151,7 @@ test("the dependency graph is read from the manifests, not remembered here", () 
       (a, b) => a.dependent.localeCompare(b.dependent) || a.dependency.localeCompare(b.dependency),
     ),
   ).toEqual(
-    [...EDGES].sort(
+    [...CURRENT_EDGES].sort(
       (a, b) => a.dependent.localeCompare(b.dependent) || a.dependency.localeCompare(b.dependency),
     ),
   );
