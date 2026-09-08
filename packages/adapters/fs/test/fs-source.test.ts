@@ -18,7 +18,7 @@ function source() {
   return new FsSource({
     id: "docs",
     root,
-    citationFormat: "{source} @ {rev} · {path}#L{start}-L{end}",
+    citationFormat: "{source} @ {rev} · {path}#{locator}",
   });
 }
 
@@ -84,9 +84,28 @@ describe("FsSource", () => {
     expect(fs.changedSince("deadbeef")).rejects.toThrow(UnknownRevisionError);
   });
 
-  test("read returns file contents", async () => {
+  test("locate finds a path inside the root", async () => {
     write("docs/a.md", "hello", 1000);
-    expect(await source().read("docs/a.md")).toBe("hello");
+    expect(await source().locate("docs/a.md")).toEqual({ verdict: "found" });
+  });
+
+  test("locate bounds a line range against the file", async () => {
+    write("docs/a.md", "one\ntwo\nthree", 1000);
+    expect(await source().locate("docs/a.md", "L2-L3")).toEqual({ verdict: "found" });
+
+    const past = await source().locate("docs/a.md", "L2-L9");
+    expect(past.verdict).toBe("missing");
+    expect(past).toMatchObject({ part: "locator" });
+  });
+
+  test("locate refuses a locator this source cannot address by", async () => {
+    write("docs/a.md", "hello", 1000);
+    // A file is addressed by line. A block id is not a range this source has
+    // any way to check, and saying "found" would be an invention.
+    expect(await source().locate("docs/a.md", "block-a1b2c3")).toMatchObject({
+      verdict: "missing",
+      part: "locator",
+    });
   });
 
   test("hidden directories and node_modules are not part of the source", async () => {
@@ -115,12 +134,12 @@ describe("FsSource", () => {
   });
 
   test("a citation renders the configured format", () => {
-    expect(source().citation("chapter-07.md", [142, 158])).toContain("chapter-07.md#L142-L158");
+    expect(source().citation("chapter-07.md", "L142-L158")).toContain("chapter-07.md#L142-L158");
   });
 
-  test("a citation without a line range drops the line decoration", () => {
+  test("a citation without a locator drops the locator decoration", () => {
     const cite = source().citation("chapter-07.md");
-    expect(cite).not.toContain("{start}");
+    expect(cite).not.toContain("{locator}");
     expect(cite).not.toContain("undefined");
   });
 
@@ -132,6 +151,6 @@ describe("FsSource", () => {
     write("chapter-07.md", "rewritten after the claim was checked", 3000);
     expect(await fs.revision()).not.toBe(verifiedAt);
 
-    expect(fs.citation("chapter-07.md", [142, 158])).toContain(verifiedAt);
+    expect(fs.citation("chapter-07.md", "L142-L158")).toContain(verifiedAt);
   });
 });

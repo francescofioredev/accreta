@@ -24,7 +24,7 @@ export const DEFAULT_CONFIG: AccretaConfig = {
   knowledgeBase: "knowledge",
   pageTypes: ["note", "source", "concept", "decision", "synthesis"],
   linkFields: ["related", "supersedes", "superseded_by", "discussed_in"],
-  provenanceFormat: "{source} @ {rev} · {path}#L{start}-L{end}",
+  provenanceFormat: "{source} @ {rev} · {path}#{locator}",
 };
 
 function asStringArray(value: unknown, fallback: string[]): string[] {

@@ -3,7 +3,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { detectDrift } from "../src/source/drift.ts";
-import { UnknownRevisionError, type LineRange, type SourceAdapter } from "../src/source/adapter.ts";
+import {
+  UnknownRevisionError,
+  type LocationVerdict,
+  type SourceAdapter,
+} from "../src/source/adapter.ts";
 import { openIndex } from "../src/index-db/db.ts";
 import type { Database } from "../src/index-db/db.ts";
 
@@ -31,12 +35,12 @@ class ScriptedSource implements SourceAdapter {
     return answer;
   }
 
-  async read(): Promise<string> {
-    return "";
+  async locate(): Promise<LocationVerdict> {
+    return { verdict: "found" };
   }
 
-  citation(path: string, lines?: LineRange): string {
-    return lines ? `${this.id}:${path}#${lines[0]}` : `${this.id}:${path}`;
+  citation(path: string, locator?: string): string {
+    return locator ? `${this.id}:${path}#${locator}` : `${this.id}:${path}`;
   }
 
   // This source's citations carry no revision, so there is nothing to pin.

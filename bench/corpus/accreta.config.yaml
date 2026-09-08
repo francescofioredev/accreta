@@ -2,4 +2,4 @@ knowledge_base: knowledge
 page_types: [concept, synthesis, decision, note]
 link_fields: [related, supersedes, superseded_by, discussed_in]
 provenance:
-  format: "{source} @ {rev} · {path}#L{start}-L{end}"
+  format: "{source} @ {rev} · {path}#{locator}"

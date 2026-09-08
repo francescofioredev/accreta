@@ -13,12 +13,13 @@ export { buildIndex } from "./index-db/build.ts";
 export type { Database, OpenOptions } from "./index-db/db.ts";
 export { openIndex, sealForReading } from "./index-db/db.ts";
 
-export type { LineRange, ParsedCitation, SourceAdapter } from "./source/adapter.ts";
+export type { LocationVerdict, ParsedCitation, SourceAdapter } from "./source/adapter.ts";
 export {
   UNPINNED_REVISION,
   UnknownRevisionError,
   formatCitation,
   parseCitation,
+  parseLineLocator,
   resolveInside,
 } from "./source/adapter.ts";
 export type { DriftReport, StaleRevision, UnresolvableRevision } from "./source/drift.ts";

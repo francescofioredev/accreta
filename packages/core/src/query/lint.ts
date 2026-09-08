@@ -1,6 +1,6 @@
 import type { Database } from "../index-db/db.ts";
 import type { AccretaConfig } from "../config.ts";
-import { parseCitation, type SourceAdapter } from "../source/adapter.ts";
+import { parseCitation, type LocationVerdict, type SourceAdapter } from "../source/adapter.ts";
 
 export interface LintFinding {
   kind:
@@ -12,7 +12,7 @@ export interface LintFinding {
     | "unparseable-frontmatter"
     | "unparseable-citation"
     | "citation-path-missing"
-    | "citation-range-out-of-bounds";
+    | "citation-locator-missing";
   path: string;
   detail: string;
 }
@@ -20,6 +20,16 @@ export interface LintFinding {
 export interface LintReport {
   findings: LintFinding[];
   pagesChecked: number;
+  /**
+   * Citations whose source could not check them.
+   *
+   * A count rather than findings, because a source accreta reaches only through
+   * the agent answers "unknown" for every citation into it, and reporting that
+   * as a finding per page would dress "I did not look" up as "I found
+   * something". The number is still worth showing: it is the size of what this
+   * pass did not cover.
+   */
+  citationsUnchecked: number;
 }
 
 interface BrokenRow {
@@ -132,7 +142,7 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
     }
   }
 
-  return { findings, pagesChecked: pages.length };
+  return { findings, pagesChecked: pages.length, citationsUnchecked: 0 };
 }
 
 interface CitationRow {
@@ -149,9 +159,9 @@ interface CitationRow {
  * passed every check the project had and was then served by `find_canonical` as
  * the authoritative answer.
  *
- * Two checks, both deterministic and both needing only `SourceAdapter.read`,
- * which is already on the interface — so the core still cannot tell one adapter
- * from another.
+ * The check is `SourceAdapter.locate`, and the adapter decides what a locator
+ * means — so the core still cannot tell one adapter from another, and no longer
+ * has to believe that addressing a document means counting its newlines.
  *
  * Separate from `lint` rather than folded into it because this one does I/O:
  * `lint` reads the index and answers synchronously, and every caller of it
@@ -165,6 +175,7 @@ export async function lintCitations(
   sources: Map<string, SourceAdapter>,
 ): Promise<LintReport> {
   const findings: LintFinding[] = [];
+  let citationsUnchecked = 0;
 
   const pages = db
     .query(
@@ -174,9 +185,9 @@ export async function lintCitations(
     )
     .all() as CitationRow[];
 
-  // One read per distinct file, not per citation: a knowledge base cites the
-  // same source document from many pages.
-  const lineCounts = new Map<string, number | null>();
+  // One question per distinct location, not per citation: a knowledge base
+  // cites the same place from many pages.
+  const verdicts = new Map<string, LocationVerdict>();
 
   for (const page of pages) {
     const citation = parseCitation(page.canonical_source);
@@ -184,7 +195,7 @@ export async function lintCitations(
       findings.push({
         kind: "unparseable-citation",
         path: page.path,
-        detail: `canonical_source "${page.canonical_source}" is not source:path#Lstart-Lend`,
+        detail: `canonical_source "${page.canonical_source}" is not source:path#locator`,
       });
       continue;
     }
@@ -195,34 +206,39 @@ export async function lintCitations(
     // against a subset of the declared sources is a normal thing to do.
     if (!adapter) continue;
 
-    const key = `${citation.sourceId}\0${citation.path}`;
-    let lines = lineCounts.get(key);
-    if (lines === undefined) {
-      lines = await adapter
-        .read(citation.path)
-        .then((text) => text.split("\n").length)
-        .catch(() => null);
-      lineCounts.set(key, lines);
+    const key = `${citation.sourceId}\0${citation.path}\0${citation.locator ?? ""}`;
+    let verdict = verdicts.get(key);
+    if (verdict === undefined) {
+      verdict = await adapter
+        .locate(citation.path, citation.locator)
+        .catch((error) => unknownVerdict(error));
+      verdicts.set(key, verdict);
     }
 
-    if (lines === null) {
-      findings.push({
-        kind: "citation-path-missing",
-        path: page.path,
-        detail: `${citation.path} does not exist in source "${citation.sourceId}"`,
-      });
+    if (verdict.verdict === "unknown") {
+      citationsUnchecked++;
       continue;
     }
-
-    const range = citation.lines;
-    if (range && range[1] > lines) {
+    if (verdict.verdict === "missing") {
       findings.push({
-        kind: "citation-range-out-of-bounds",
+        kind: verdict.part === "path" ? "citation-path-missing" : "citation-locator-missing",
         path: page.path,
-        detail: `cites L${range[0]}-L${range[1]} but ${citation.path} has ${lines} line(s)`,
+        detail: verdict.detail,
       });
     }
   }
 
-  return { findings, pagesChecked: pages.length };
+  return { findings, pagesChecked: pages.length, citationsUnchecked };
+}
+
+/**
+ * An adapter that threw told us nothing, which is not the same as telling us a
+ * citation is wrong. A network that was down would otherwise mark every page
+ * citing that source as broken.
+ */
+function unknownVerdict(error: unknown): LocationVerdict {
+  return {
+    verdict: "unknown",
+    detail: error instanceof Error ? error.message : String(error),
+  };
 }

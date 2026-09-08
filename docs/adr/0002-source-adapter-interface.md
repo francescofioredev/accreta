@@ -1,6 +1,6 @@
 # ADR-0002: A source is four methods, and the core knows nothing else about it
 
-Status: accepted
+Status: accepted, interface amended by [ADR-0011](0011-a-citation-points-at-a-locator.md)
 Date: 2026-08-08
 
 ## Context
@@ -16,7 +16,8 @@ chapters. If generalizing means "git, plus special cases", nothing has been gene
 
 ## Decision
 
-A source implements four methods:
+A source implements four methods (`read` was later replaced by `locate`, and `citation` now
+takes an opaque locator rather than a line range — see ADR-0011):
 
 ```ts
 interface SourceAdapter {

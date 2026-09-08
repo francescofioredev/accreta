@@ -29,7 +29,7 @@ function source() {
   return new GitSource({
     id: "repo",
     root,
-    citationFormat: "{source} @ {rev} · {path}#L{start}-L{end}",
+    citationFormat: "{source} @ {rev} · {path}#{locator}",
   });
 }
 
@@ -102,10 +102,14 @@ describe("GitSource", () => {
     expect(source().changedSince("0".repeat(40))).rejects.toThrow(UnknownRevisionError);
   });
 
-  test("read returns file contents from the working tree", async () => {
+  test("locate answers from the working tree", async () => {
     write("docs/a.md", "hello");
     await commit("first");
-    expect(await source().read("docs/a.md")).toBe("hello");
+    expect(await source().locate("docs/a.md", "L1")).toEqual({ verdict: "found" });
+    expect(await source().locate("docs/gone.md")).toMatchObject({
+      verdict: "missing",
+      part: "path",
+    });
   });
 
   test("a citation pins the revision it was verified against", async () => {
@@ -120,7 +124,7 @@ describe("GitSource", () => {
     // A citation must name the revision the claim was checked against, not
     // whatever HEAD happens to be when the page is rendered later.
     git.pinRevision(first);
-    expect(git.citation("a.md", [1, 3])).toContain(first);
+    expect(git.citation("a.md", "L1-L3")).toContain(first);
   });
 });
 
