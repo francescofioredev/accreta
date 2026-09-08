@@ -32,6 +32,7 @@ const PUBLISHABLE = [
   "packages/core",
   "packages/adapters/fs",
   "packages/adapters/git",
+  "packages/adapters/registry",
   "packages/cli",
   "packages/mcp-server",
 ];

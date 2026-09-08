@@ -1,15 +1,7 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import {
-  openIndex,
-  parseConfig,
-  parseSourceDeclaration,
-  SourceRegistry,
-  type AccretaConfig,
-  type SourceAdapter,
-} from "@accreta/core";
-import { FsSource } from "@accreta/adapter-fs";
-import { GitSource } from "@accreta/adapter-git";
+import { openIndex, parseConfig } from "@accreta/core";
+import { loadSources } from "@accreta/adapters";
 import type { ToolContext } from "./tools.ts";
 
 const CONFIG_FILENAME = "accreta.config.yaml";
@@ -29,43 +21,6 @@ function findRoot(start: string): string {
     }
     dir = parent;
   }
-}
-
-function loadSources(root: string, config: AccretaConfig): Map<string, SourceAdapter> {
-  const dir = join(root, "sources");
-  const out = new Map<string, SourceAdapter>();
-  if (!existsSync(dir)) return out;
-
-  const registry = new SourceRegistry()
-    .register(
-      "fs",
-      (d) =>
-        new FsSource({
-          id: d.id,
-          root: join(root, String(d.options.root ?? ".")),
-          citationFormat: config.provenanceFormat,
-          extensions: Array.isArray(d.options.extensions)
-            ? (d.options.extensions as string[])
-            : undefined,
-        }),
-    )
-    .register(
-      "git",
-      (d) =>
-        new GitSource({
-          id: d.id,
-          root: join(root, String(d.options.root ?? ".")),
-          citationFormat: config.provenanceFormat,
-          paths: Array.isArray(d.options.paths) ? (d.options.paths as string[]) : undefined,
-        }),
-    );
-
-  for (const name of readdirSync(dir).toSorted()) {
-    if (!name.endsWith(".yaml") && !name.endsWith(".yml")) continue;
-    const declaration = parseSourceDeclaration(readFileSync(join(dir, name), "utf-8"));
-    out.set(declaration.id, registry.create(declaration));
-  }
-  return out;
 }
 
 /**
@@ -132,7 +87,7 @@ export function createContext(cwd: string = process.cwd()): ToolContext {
     },
     config,
     root,
-    sources: loadSources(root, config),
+    sources: loadSources({ root, citationFormat: config.provenanceFormat }),
     // Writes are off unless explicitly enabled. Provenance is the substance of
     // the project, so the tool that can rewrite it does not exist by default.
     writesEnabled: process.env.ACCRETA_ALLOW_WRITES === "1",

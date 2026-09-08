@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   buildIndex,
@@ -9,13 +9,10 @@ import {
   lint,
   lintCitations,
   openIndex,
-  parseSourceDeclaration,
   searchPages,
-  SourceRegistry,
   type SourceAdapter,
 } from "@accreta/core";
-import { FsSource } from "@accreta/adapter-fs";
-import { GitSource } from "@accreta/adapter-git";
+import { loadSources as loadDeclaredSources } from "@accreta/adapters";
 import { CONFIG_FILENAME, findWorkspace, indexPathFor, type Workspace } from "./workspace.ts";
 import { composeConstitution, isPreset, PRESETS, type Preset } from "./constitution.ts";
 
@@ -25,52 +22,14 @@ export interface CommandContext {
   err: (line: string) => void;
 }
 
-/**
- * The adapters this build knows how to construct.
- *
- * Registration lives here, in the surface, rather than in the core: the core's
- * whole purpose is not to know which adapters exist.
- */
-function buildRegistry(workspace: Workspace): SourceRegistry {
-  const format = workspace.config.provenanceFormat;
-  return new SourceRegistry()
-    .register(
-      "fs",
-      (d) =>
-        new FsSource({
-          id: d.id,
-          root: join(workspace.root, String(d.options.root ?? ".")),
-          citationFormat: format,
-          extensions: Array.isArray(d.options.extensions)
-            ? (d.options.extensions as string[])
-            : undefined,
-        }),
-    )
-    .register(
-      "git",
-      (d) =>
-        new GitSource({
-          id: d.id,
-          root: join(workspace.root, String(d.options.root ?? ".")),
-          citationFormat: format,
-          paths: Array.isArray(d.options.paths) ? (d.options.paths as string[]) : undefined,
-        }),
-    );
-}
-
 /** Load every `sources/*.yaml` declaration in the workspace. */
 function loadSources(workspace: Workspace): SourceAdapter[] {
-  const dir = join(workspace.root, "sources");
-  if (!existsSync(dir)) return [];
-
-  const registry = buildRegistry(workspace);
-  const out: SourceAdapter[] = [];
-  for (const name of readdirSync(dir).toSorted()) {
-    if (!name.endsWith(".yaml") && !name.endsWith(".yml")) continue;
-    const declaration = parseSourceDeclaration(readFileSync(join(dir, name), "utf-8"));
-    out.push(registry.create(declaration));
-  }
-  return out;
+  return [
+    ...loadDeclaredSources({
+      root: workspace.root,
+      citationFormat: workspace.config.provenanceFormat,
+    }).values(),
+  ];
 }
 
 function configTemplateFor(preset?: Preset): string {
