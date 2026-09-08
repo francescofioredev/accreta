@@ -62,13 +62,33 @@ export function configFromObject(data: unknown): AccretaConfig {
 
 /** Parse the text of an `accreta.config.yaml`. */
 export function parseConfig(source: string): AccretaConfig {
+  return checkConfig(source).config;
+}
+
+export interface ConfigCheck {
+  config: AccretaConfig;
+  /** Why the file could not be read, when it could not. */
+  error?: string;
+}
+
+/**
+ * Parse a config and say whether it actually parsed.
+ *
+ * `parseConfig` degrades to defaults on a syntax error so that reading a page
+ * never throws on the config, which is the right trade there and the wrong one
+ * everywhere else: a knowledge base whose vocabulary silently reverted to the
+ * defaults lints against page types nobody chose, and nothing says so. This is
+ * how `doctor` can.
+ */
+export function checkConfig(source: string): ConfigCheck {
   let data: unknown;
   try {
     data = parseYaml(source);
-  } catch {
-    // A malformed config is a loud failure elsewhere (the CLI validates it);
-    // here we degrade to defaults so parsing a page never throws on config.
-    return { ...DEFAULT_CONFIG };
+  } catch (error) {
+    return {
+      config: { ...DEFAULT_CONFIG },
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
-  return configFromObject(data);
+  return { config: configFromObject(data) };
 }

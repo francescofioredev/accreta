@@ -1,5 +1,5 @@
-export type { AccretaConfig } from "./config.ts";
-export { DEFAULT_CONFIG, configFromObject, parseConfig } from "./config.ts";
+export type { AccretaConfig, ConfigCheck } from "./config.ts";
+export { DEFAULT_CONFIG, checkConfig, configFromObject, parseConfig } from "./config.ts";
 
 export type { Frontmatter, ParsedPage } from "./page.ts";
 export { parsePage } from "./page.ts";

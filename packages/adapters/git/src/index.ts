@@ -56,6 +56,22 @@ export class GitCommandError extends Error {
 }
 
 /**
+ * Is there a repository at this path?
+ *
+ * Exported for preflight rather than used by the adapter: an adapter that
+ * checked would pay for it on every call, and the answer only matters when
+ * somebody is asking whether the source is wired up correctly.
+ */
+export async function isWorkingTree(root: string): Promise<boolean> {
+  try {
+    await git(root, ["rev-parse", "--git-dir"]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * A git repository as a source.
  *
  * The natural implementation: a revision is a commit SHA, and what changed

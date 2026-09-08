@@ -440,3 +440,125 @@ describe("accreta --version", () => {
     expect(stdout()).toContain(manifest.version);
   });
 });
+
+describe("accreta source add", () => {
+  test("it writes a declaration and immediately says what can reach it", async () => {
+    await cli("init");
+    mkdirSync(join(root, "corpus"), { recursive: true });
+    output = [];
+
+    expect(await cli("source", "add", "fs", "docs", "--set", "root=corpus")).toBe(0);
+    const written = readFileSync(join(root, "sources", "docs.yaml"), "utf-8");
+    expect(written).toContain("id: docs");
+    expect(written).toContain("root: corpus");
+    // The template's comments survive an override; they are most of its value.
+    expect(written).toContain("hash of modification times");
+    expect(stdout()).toContain("ok:");
+  });
+
+  test("a delegated source is written unusable, and says why", async () => {
+    // The template leaves `scope` empty on purpose: nothing else says what the
+    // agent may look at, so it has to be written rather than defaulted.
+    await cli("init");
+    output = [];
+
+    expect(await cli("source", "add", "delegated", "design-docs", "--set", "via=notion")).toBe(0);
+    expect(stdout()).toContain("no: declares no `scope`");
+  });
+
+  test("it refuses to overwrite a declaration that is already there", async () => {
+    await cli("init");
+    await cli("source", "add", "fs", "docs");
+    output = [];
+    errors = [];
+
+    expect(await cli("source", "add", "fs", "docs")).toBe(1);
+    expect(stderr()).toContain("already exists");
+  });
+
+  test("an unknown type names the ones this build has", async () => {
+    await cli("init");
+    errors = [];
+    expect(await cli("source", "add", "notion", "docs")).toBe(1);
+    expect(stderr()).toContain("delegated");
+  });
+});
+
+describe("accreta doctor", () => {
+  test("a source it cannot reach fails; one it cannot check does not", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    writeFileSync(
+      join(root, "sources", "design-docs.yaml"),
+      "id: design-docs\ntype: delegated\nvia: notion\nscope: The Design decisions page.\n",
+      "utf-8",
+    );
+    output = [];
+
+    // "unknown" is not a failure. accreta genuinely cannot look, and exiting 1
+    // would make an honest answer indistinguishable from a broken setup.
+    expect(await cli("doctor")).toBe(0);
+    expect(stdout()).toContain("unknown: accreta cannot check this source");
+    expect(stdout()).toContain("your agent needs: notion — unverified");
+  });
+
+  test("a directory that is not there is a failure with a remedy", async () => {
+    await cli("init");
+    output = [];
+
+    expect(await cli("doctor")).toBe(1);
+    expect(stdout()).toContain("does not exist");
+    expect(stdout()).toContain("→ Create it");
+  });
+
+  test("a half-written declaration is reported, not thrown", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    writeFileSync(
+      join(root, "sources", "x.yaml"),
+      "id: x\ntype: delegated\nvia: notion\n",
+      "utf-8",
+    );
+    output = [];
+
+    expect(await cli("doctor")).toBe(1);
+    expect(stdout()).toContain("declares no `scope`");
+  });
+
+  test("a config that silently reverted to the defaults is named", async () => {
+    // `parseConfig` swallows a syntax error and hands back the defaults, which
+    // is right where a page is being read and invisible everywhere else.
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    writeFileSync(join(root, "accreta.config.yaml"), "page_types: [a\n  - broken", "utf-8");
+    output = [];
+
+    expect(await cli("doctor")).toBe(1);
+    expect(stdout()).toContain("did not parse");
+    expect(stdout()).toContain("default vocabulary");
+  });
+
+  test("a provenance format left on the old placeholders is flagged", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    writeFileSync(
+      join(root, "accreta.config.yaml"),
+      'knowledge_base: knowledge\nprovenance:\n  format: "{source} @ {rev} · {path}#L{start}-L{end}"\n',
+      "utf-8",
+    );
+    output = [];
+
+    await cli("doctor");
+    expect(stdout()).toContain("still uses {start} and {end}");
+  });
+
+  test("an unknown source type is a finding rather than a crash", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    writeFileSync(join(root, "sources", "x.yaml"), "id: x\ntype: confluence\n", "utf-8");
+    output = [];
+
+    expect(await cli("doctor")).toBe(1);
+    expect(stdout()).toContain("unknown source type");
+  });
+});

@@ -1,7 +1,18 @@
 #!/usr/bin/env bun
 import { readFileSync } from "node:fs";
 
-import { canonical, consumers, drift, init, reindex, runLint, search, show } from "./commands.ts";
+import {
+  canonical,
+  consumers,
+  doctor,
+  drift,
+  init,
+  reindex,
+  runLint,
+  search,
+  show,
+  sourceAdd,
+} from "./commands.ts";
 import type { CommandContext } from "./commands.ts";
 
 const USAGE = `accreta — a knowledge base an agent writes and keeps current
@@ -14,6 +25,8 @@ Usage: accreta <command> [arguments]
   lint                     Report unresolvable links, missing provenance, unknown types
   drift [--strict]         Report which pages their sources have moved out from under.
                            --strict also fails on anything left unchecked
+  doctor                   Report what is wired up, and what cannot be checked from here
+  source add <type> <id>   Write a source declaration (--set key=value, repeatable)
   search <query>           Full-text search (--type <type>, repeatable)
   show <path|wikilink>     Print a page
   consumers <path>         What links to this page, and what it links to (--inline)
@@ -43,6 +56,7 @@ function parseArgs(argv: string[]): {
   types: string[];
   includeInline: boolean;
   strict: boolean;
+  set: Record<string, string>;
   preset?: string;
   agentFile?: string;
 } {
@@ -50,6 +64,7 @@ function parseArgs(argv: string[]): {
   const types: string[] = [];
   let includeInline = false;
   let strict = false;
+  const set: Record<string, string> = {};
   let preset: string | undefined;
   let agentFile: string | undefined;
   for (let i = 0; i < argv.length; i++) {
@@ -67,6 +82,14 @@ function parseArgs(argv: string[]): {
       strict = true;
       continue;
     }
+    if (arg === "--set") {
+      // `key=value`, kept as written: the CLI knows no more about a source's
+      // options than the core does.
+      const pair = argv[++i] ?? "";
+      const at = pair.indexOf("=");
+      if (at > 0) set[pair.slice(0, at)] = pair.slice(at + 1);
+      continue;
+    }
     if (arg === "--preset") {
       preset = argv[++i];
       continue;
@@ -77,12 +100,12 @@ function parseArgs(argv: string[]): {
     }
     if (arg !== undefined) positional.push(arg);
   }
-  return { positional, types, includeInline, strict, preset, agentFile };
+  return { positional, types, includeInline, strict, set, preset, agentFile };
 }
 
 export async function run(argv: string[], ctx: CommandContext): Promise<number> {
   const [command, ...rest] = argv;
-  const { positional, types, includeInline, strict, preset, agentFile } = parseArgs(rest);
+  const { positional, types, includeInline, strict, set, preset, agentFile } = parseArgs(rest);
 
   switch (command) {
     case undefined:
@@ -103,6 +126,14 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
       return runLint(ctx);
     case "drift":
       return drift(ctx, { strict });
+    case "doctor":
+      return doctor(ctx);
+    case "source":
+      if (positional[0] !== "add") {
+        ctx.err("Usage: accreta source add <type> <id> [--set key=value]");
+        return 1;
+      }
+      return sourceAdd(ctx, positional[1] ?? "", positional[2] ?? "", set);
     case "search":
       return search(ctx, positional.join(" "), types.length > 0 ? types : undefined);
     case "show":
