@@ -8,7 +8,12 @@ import { openIndex, type Database } from "../src/index-db/db.ts";
 import { findCanonical, findRelated, getPage } from "../src/query/page.ts";
 import { searchPages } from "../src/query/search.ts";
 import { lint, lintCitations } from "../src/query/lint.ts";
-import { parseCitation, type SourceAdapter } from "../src/source/adapter.ts";
+import {
+  parseCitation,
+  parseLineLocator,
+  type LocationVerdict,
+  type SourceAdapter,
+} from "../src/source/adapter.ts";
 
 let root = "";
 let indexPath = "";
@@ -262,19 +267,21 @@ describe("parseCitation", () => {
     expect(parseCitation("ipcc:ch07.md#L142-L160")).toEqual({
       sourceId: "ipcc",
       path: "ch07.md",
-      lines: [142, 160],
+      locator: "L142-L160",
     });
   });
 
-  test("a single line is a range of one", () => {
-    expect(parseCitation("ipcc:ch07.md#L142")).toEqual({
-      sourceId: "ipcc",
-      path: "ch07.md",
-      lines: [142, 142],
+  test("a locator is carried through without being understood", () => {
+    // The grammar does not know what a block id is, and does not need to: only
+    // the source it names can say whether it addresses anything.
+    expect(parseCitation("design-docs:2f1a4b#block-a1b2c3")).toEqual({
+      sourceId: "design-docs",
+      path: "2f1a4b",
+      locator: "block-a1b2c3",
     });
   });
 
-  test("a citation may name no range at all", () => {
+  test("a citation may name no locator at all", () => {
     expect(parseCitation("ipcc:ch07.md")).toEqual({ sourceId: "ipcc", path: "ch07.md" });
   });
 
@@ -285,23 +292,58 @@ describe("parseCitation", () => {
   test("a malformed pointer is null rather than a throw", () => {
     // Reported as a finding by the caller; a lint pass should not explode on
     // a value a model wrote.
-    for (const bad of ["", "no-colon", "s:", ":path", "s:p#L0", "s:p#L9-L2"]) {
+    for (const bad of ["", "no-colon", "s:", ":path", "s:p#"]) {
       expect(parseCitation(bad)).toBeNull();
+    }
+  });
+
+  test("a nonsensical range parses, because the grammar is not the judge", () => {
+    // `L9-L2` is a well-formed pointer at nothing. It is the source that says
+    // so, as a finding, not the parser as a syntax error.
+    expect(parseCitation("s:p#L9-L2")).toEqual({ sourceId: "s", path: "p", locator: "L9-L2" });
+  });
+});
+
+describe("parseLineLocator", () => {
+  test("a range, and a single line as a range of one", () => {
+    expect(parseLineLocator("L142-L160")).toEqual([142, 160]);
+    expect(parseLineLocator("L142")).toEqual([142, 142]);
+  });
+
+  test("a pointer at nothing is null", () => {
+    for (const bad of ["L0", "L9-L2", "block-a1b2c3", "142", ""]) {
+      expect(parseLineLocator(bad)).toBeNull();
     }
   });
 });
 
-/** The real adapter shape: `read` resolves a path or rejects. */
+/** A file-backed source, answering the way `fs` and `git` do. */
+function locateIn(files: Record<string, string>, path: string, locator?: string): LocationVerdict {
+  const text = files[path];
+  if (text === undefined) {
+    return { verdict: "missing", part: "path", detail: `${path} does not exist` };
+  }
+  if (locator === undefined) return { verdict: "found" };
+  const range = parseLineLocator(locator);
+  if (!range) {
+    return { verdict: "missing", part: "locator", detail: `"${locator}" is not a line range` };
+  }
+  const lines = text.split("\n").length;
+  return range[1] > lines
+    ? {
+        verdict: "missing",
+        part: "locator",
+        detail: `cites L${range[0]}-L${range[1]} but ${path} has ${lines} line(s)`,
+      }
+    : { verdict: "found" };
+}
+
 function source(id: string, files: Record<string, string>): SourceAdapter {
   return {
     id,
     revision: async () => "rev",
     changedSince: async () => [],
-    read: async (path: string) => {
-      const text = files[path];
-      if (text === undefined) throw new Error(`ENOENT: ${path}`);
-      return text;
-    },
+    locate: async (path, locator) => locateIn(files, path, locator),
     citation: () => "",
     pinRevision: () => {},
   };
@@ -321,14 +363,14 @@ describe("lintCitations", () => {
     expect(findings[0]?.path).toBe("knowledge/a.md");
   });
 
-  test("a line range past the end of the file is reported", async () => {
+  test("a locator past the end of the file is reported", async () => {
     // The issue's own reproduction: a pointer into a file that exists, at a
     // line that does not.
     writePage("a.md", '---\ntype: note\ncanonical_source: "s:doc.md#L99999"\n---\n\n# A\n');
     reindex();
     const { findings } = await lintCitations(db, sources(source("s", { "doc.md": tenLines })));
     expect(findings).toHaveLength(1);
-    expect(findings[0]?.kind).toBe("citation-range-out-of-bounds");
+    expect(findings[0]?.kind).toBe("citation-locator-missing");
     expect(findings[0]?.detail).toContain("10 line(s)");
   });
 
@@ -366,14 +408,13 @@ describe("lintCitations", () => {
     expect(report.pagesChecked).toBe(0);
   });
 
-  test("one source file cited by many pages is read once", async () => {
-    let reads = 0;
+  test("one location cited by many pages is asked about once", async () => {
+    let asked = 0;
     const counting: SourceAdapter = {
       ...source("s", { "doc.md": tenLines }),
-      read: async (path: string) => {
-        reads++;
-        if (path !== "doc.md") throw new Error("ENOENT");
-        return tenLines;
+      locate: async (path, locator) => {
+        asked++;
+        return locateIn({ "doc.md": tenLines }, path, locator);
       },
     };
     for (const name of ["a", "b", "c"]) {
@@ -384,6 +425,46 @@ describe("lintCitations", () => {
     }
     reindex();
     await lintCitations(db, sources(counting));
-    expect(reads).toBe(1);
+    expect(asked).toBe(1);
+  });
+
+  test("a well-formed pointer at an impossible range is a locator finding", async () => {
+    // Not `unparseable-citation`: the pointer is shaped correctly and names a
+    // real file. What is wrong is where inside it points, and only the source
+    // can say so.
+    writePage("a.md", '---\ntype: note\ncanonical_source: "s:doc.md#L9-L2"\n---\n\n# A\n');
+    reindex();
+    const { findings } = await lintCitations(db, sources(source("s", { "doc.md": tenLines })));
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.kind).toBe("citation-locator-missing");
+  });
+
+  test("a source that cannot check is counted, not reported", async () => {
+    // "I did not look" must not read as "I found something", so an unknown
+    // verdict produces a number rather than a finding.
+    const opaque: SourceAdapter = {
+      ...source("s", {}),
+      locate: async () => ({ verdict: "unknown", detail: "only the agent can reach this" }),
+    };
+    writePage("a.md", '---\ntype: note\ncanonical_source: "s:anything#block-1"\n---\n\n# A\n');
+    reindex();
+    const report = await lintCitations(db, sources(opaque));
+    expect(report.findings).toEqual([]);
+    expect(report.citationsUnchecked).toBe(1);
+  });
+
+  test("an adapter that throws leaves the citation unchecked, not broken", async () => {
+    // A network that is down says nothing about whether a citation is correct.
+    const failing: SourceAdapter = {
+      ...source("s", {}),
+      locate: async () => {
+        throw new Error("connection refused");
+      },
+    };
+    writePage("a.md", '---\ntype: note\ncanonical_source: "s:doc.md#L1"\n---\n\n# A\n');
+    reindex();
+    const report = await lintCitations(db, sources(failing));
+    expect(report.findings).toEqual([]);
+    expect(report.citationsUnchecked).toBe(1);
   });
 });

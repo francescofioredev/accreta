@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { SourceRegistry, parseSourceDeclaration } from "../src/source/registry.ts";
-import type { LineRange, SourceAdapter } from "../src/source/adapter.ts";
+import type { LocationVerdict, SourceAdapter } from "../src/source/adapter.ts";
 
 class StubSource implements SourceAdapter {
   constructor(
@@ -13,11 +13,11 @@ class StubSource implements SourceAdapter {
   async changedSince() {
     return [];
   }
-  async read() {
-    return "";
+  async locate(): Promise<LocationVerdict> {
+    return { verdict: "found" };
   }
-  citation(path: string, lines?: LineRange) {
-    return lines ? `${this.id}:${path}#${lines[0]}` : `${this.id}:${path}`;
+  citation(path: string, locator?: string) {
+    return locator ? `${this.id}:${path}#${locator}` : `${this.id}:${path}`;
   }
   // This stub's citations carry no revision, so there is nothing to pin.
   pinRevision() {}

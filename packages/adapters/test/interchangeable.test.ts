@@ -46,7 +46,7 @@ function write(dir: string, name: string, contents: string, mtime?: number): voi
   if (mtime !== undefined) utimesSync(full, mtime, mtime);
 }
 
-const CITATION = "{source} @ {rev} · {path}#L{start}-L{end}";
+const CITATION = "{source} @ {rev} · {path}#{locator}";
 
 /** A source at an initial revision, plus a way to move it forward. */
 interface Fixture {
@@ -145,7 +145,7 @@ for (const [name, makeFixture] of ADAPTERS) {
 
     test("a citation renders through the configured format", async () => {
       const { adapter } = await makeFixture();
-      expect(adapter.citation("chapter-07.md", [142, 158])).toContain("chapter-07.md#L142-L158");
+      expect(adapter.citation("chapter-07.md", "L142-L158")).toContain("chapter-07.md#L142-L158");
     });
 
     // The case above asserts only the path and line tail, which is how `fs`
@@ -162,8 +162,8 @@ for (const [name, makeFixture] of ADAPTERS) {
       // Pinned before the source moved, so the citation must still name the
       // revision the claim was checked against rather than where the source
       // has since got to.
-      expect(adapter.citation("chapter-07.md", [142, 158])).toContain(verifiedAt);
-      expect(adapter.citation("chapter-07.md", [142, 158])).not.toContain(UNPINNED_REVISION);
+      expect(adapter.citation("chapter-07.md", "L142-L158")).toContain(verifiedAt);
+      expect(adapter.citation("chapter-07.md", "L142-L158")).not.toContain(UNPINNED_REVISION);
     });
 
     test("an unpinned citation says so rather than inventing a revision", async () => {
@@ -178,20 +178,34 @@ for (const [name, makeFixture] of ADAPTERS) {
       expect(adapter.citation("chapter-07.md")).not.toContain(current);
     });
 
-    test("read serves a path inside the root", async () => {
+    test("locate finds a path inside the root, and misses one that is not there", async () => {
       const { adapter } = await makeFixture();
-      expect(await adapter.read("chapter-07.md")).toContain("one");
+      expect(await adapter.locate("chapter-07.md")).toEqual({ verdict: "found" });
+      expect(await adapter.locate("never-written.md")).toMatchObject({
+        verdict: "missing",
+        part: "path",
+      });
     });
 
-    test("read refuses a path that climbs out of the root", async () => {
+    test("locate bounds a line range against the document", async () => {
+      const { adapter } = await makeFixture();
+      expect(await adapter.locate("chapter-07.md", "L1")).toEqual({ verdict: "found" });
+      expect(await adapter.locate("chapter-07.md", "L99999")).toMatchObject({
+        verdict: "missing",
+        part: "locator",
+      });
+    });
+
+    test("locate refuses a path that climbs out of the declared scope", async () => {
       const { adapter } = await makeFixture();
       // The argument is not always operator-written: a `canonical_source` is
       // authored by a model and handed here by the citation checks, so an
       // escaping path would turn "verify this citation" into "read this file".
+      // The verdict that matters is the one this must never be: `found`.
       writeFileSync(join(root, "outside.md"), "SECRET", "utf-8");
 
       for (const escape of ["../outside.md", "./../outside.md", join(root, "outside.md")]) {
-        await expect(adapter.read(escape)).rejects.toThrow(/outside the source root/);
+        expect(await adapter.locate(escape)).toMatchObject({ verdict: "missing", part: "path" });
       }
     });
   });

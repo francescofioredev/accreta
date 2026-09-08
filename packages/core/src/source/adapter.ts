@@ -2,7 +2,7 @@ import { resolve, sep } from "node:path";
 
 /**
  * A source is anything that can answer three questions: what revision are you
- * at, what changed since a given revision, and how do I cite a location inside
+ * at, what changed since a given revision, and is this location really inside
  * you — plus one instruction: cite against *this* revision.
  *
  * Git answers with a commit SHA and `diff --name-only`. A directory of
@@ -31,11 +31,19 @@ export interface SourceAdapter {
    */
   changedSince(revision: string): Promise<string[]>;
 
-  /** Read a path relative to the source root. */
-  read(path: string): Promise<string>;
+  /**
+   * Does a citation point at something that exists?
+   *
+   * The adapter owns what a locator means, and that is the whole reason this
+   * method is here rather than the `read` it replaced. The core used to answer
+   * this itself by reading the source and counting newlines, which quietly made
+   * every source line-oriented: a page addressed by block id had no way to be
+   * checked, and no way to say so.
+   */
+  locate(path: string, locator?: string): Promise<LocationVerdict>;
 
   /** Render a citation to a location, per the configured provenance format. */
-  citation(path: string, lines?: LineRange): string;
+  citation(path: string, locator?: string): string;
 
   /**
    * Fix the revision that subsequent citations name.
@@ -58,6 +66,19 @@ export interface SourceAdapter {
 }
 
 /**
+ * What a source can say about a citation's target.
+ *
+ * Three answers rather than two, for the reason `changedSince` distinguishes
+ * "nothing changed" from "I cannot tell": a source accreta reaches only through
+ * the agent can check nothing, and reporting that as `missing` would turn "I
+ * did not look" into "I found something".
+ */
+export type LocationVerdict =
+  | { verdict: "found" }
+  | { verdict: "missing"; part: "path" | "locator"; detail: string }
+  | { verdict: "unknown"; detail: string };
+
+/**
  * What a citation names before anything has been pinned.
  *
  * Shared by every adapter so the honest answer cannot vary by source type. The
@@ -65,8 +86,6 @@ export interface SourceAdapter {
  * as a real revision and so states something the source cannot support.
  */
 export const UNPINNED_REVISION = "unknown";
-
-export type LineRange = readonly [start: number, end: number];
 
 /**
  * Thrown when a source is asked what changed since a revision it cannot place.
@@ -88,7 +107,7 @@ export class UnknownRevisionError extends Error {
 /**
  * Resolve a source-relative path, refusing one that climbs out of the root.
  *
- * The argument reaching `read` is not always something the operator wrote. A
+ * The argument reaching `locate` is not always something the operator wrote. A
  * `canonical_source` is authored by a model into a markdown file and handed
  * straight to this function by the citation checks, so a path that escapes the
  * root turns "verify this citation" into "read this file". `join` alone does
@@ -108,11 +127,41 @@ export function resolveInside(root: string, path: string): string {
   return full;
 }
 
+/**
+ * Read a line-range locator such as `L142-L158`, or `L7` for a single line.
+ *
+ * Line ranges belong to the citation grammar rather than to any one adapter, so
+ * the grammar owns them: two file-backed sources that read `L142-L158`
+ * differently would make a citation mean different things depending on which
+ * source it happened to name. Whether those lines exist is the adapter's
+ * answer, and this function does not ask.
+ *
+ * Null for anything else, a descending or zero-based range included — those are
+ * well-formed pointers at nothing, which is a finding rather than a parse
+ * error.
+ */
+export function parseLineLocator(locator: string): readonly [start: number, end: number] | null {
+  const match = locator.match(/^L(\d+)(?:-L?(\d+))?$/);
+  if (!match) return null;
+
+  const start = Number(match[1]);
+  const end = match[2] === undefined ? start : Number(match[2]);
+  if (start < 1 || end < start) return null;
+  return [start, end];
+}
+
 /** A `canonical_source` pointer, split into the parts a check can act on. */
 export interface ParsedCitation {
   sourceId: string;
   path: string;
-  lines?: LineRange;
+  /**
+   * Where inside the document, in whatever terms the source addresses itself.
+   *
+   * Opaque here on purpose. A file source reads `L142-L158`; a page source
+   * reads something like `block-a1b2c3`. The core carries the string and the
+   * adapter decides whether it means anything.
+   */
+  locator?: string;
 }
 
 /**
@@ -121,8 +170,8 @@ export interface ParsedCitation {
  * This is deliberately *not* the inverse of `formatCitation`. That renders the
  * configured `provenance.format`, which is prose a human reads in a footnote
  * and which every knowledge base may shape differently. `canonical_source` is a
- * fixed machine-readable convention — `source:path#Lstart[-Lend]` — documented
- * in the constitution and in architecture.md, and it is the one a check can
+ * fixed machine-readable convention — `source:path[#locator]` — documented in
+ * the constitution and in architecture.md, and it is the one a check can
  * resolve without knowing how a given knowledge base likes its citations to
  * read.
  *
@@ -130,49 +179,37 @@ export interface ParsedCitation {
  * to report, not an exception to propagate out of a lint pass.
  */
 export function parseCitation(value: string): ParsedCitation | null {
-  const match = value.trim().match(/^([^\s:]+):([^\s#]+?)(?:#L(\d+)(?:-L?(\d+))?)?$/);
+  const match = value.trim().match(/^([^\s:]+):([^\s#]+)(?:#(\S+))?$/);
   if (!match) return null;
 
-  const [, sourceId, path, start, end] = match;
+  const [, sourceId, path, locator] = match;
   if (!sourceId || !path) return null;
 
-  if (start === undefined) return { sourceId, path };
-
-  const from = Number(start);
-  const to = end === undefined ? from : Number(end);
-  // A descending range is a malformed pointer, not a range to check.
-  if (from < 1 || to < from) return null;
-
-  return { sourceId, path, lines: [from, to] };
+  // A locator this parser cannot judge is still a well-formed pointer. Whether
+  // it addresses anything is the adapter's answer, not the grammar's.
+  return locator === undefined ? { sourceId, path } : { sourceId, path, locator };
 }
 
 /**
  * Render a citation from the configured template.
  *
  * The format is configuration because what a citation should look like depends
- * on what is being cited: a line range suits a file, and a source without line
- * numbers should not be forced to invent them. Placeholders that have no value
- * are dropped along with their surrounding `#L…-L…` decoration rather than
+ * on what is being cited: a line range suits a file, a block id suits a page,
+ * and a source with neither should not be forced to invent one. A `{locator}`
+ * with no value is dropped along with the `#` that introduces it rather than
  * rendered as the literal string "undefined".
  */
 export function formatCitation(
   format: string,
-  parts: { source: string; rev: string; path: string; lines?: LineRange },
+  parts: { source: string; rev: string; path: string; locator?: string },
 ): string {
-  const { source, rev, path, lines } = parts;
+  const { source, rev, path, locator } = parts;
 
-  let out = format
+  const out = format
     .replaceAll("{source}", source)
     .replaceAll("{rev}", rev)
     .replaceAll("{path}", path);
 
-  if (lines) {
-    out = out.replaceAll("{start}", String(lines[0])).replaceAll("{end}", String(lines[1]));
-  } else {
-    // Strip a trailing line-range decoration such as `#L{start}-L{end}` rather
-    // than leaving half a template behind.
-    out = out.replace(/#?L?\{start\}\s*-\s*L?\{end\}/g, "").replace(/#$/, "");
-  }
-
-  return out.trim();
+  if (locator) return out.replaceAll("{locator}", locator).trim();
+  return out.replace(/#?\{locator\}/g, "").trim();
 }

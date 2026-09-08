@@ -45,7 +45,7 @@ second for a few hundred pages, so it is never committed and never migrated.
 ### `SourceAdapter`
 
 A source is anything that can answer three questions — what revision are you at, what changed
-since a given revision, and how do I cite a location inside you — plus one instruction: cite
+since a given revision, and is this location really inside you — plus one instruction: cite
 against *this* revision.
 
 ```ts
@@ -53,8 +53,8 @@ interface SourceAdapter {
   id: string;
   revision(): Promise<string>;                    // sha, mtime hash, etag…
   changedSince(rev: string): Promise<string[]>;   // changed paths
-  read(path: string): Promise<string>;
-  citation(path: string, lines?: [number, number]): string;
+  locate(path: string, locator?: string): Promise<LocationVerdict>;  // found/missing/unknown
+  citation(path: string, locator?: string): string;
   pinRevision(rev: string): void;                 // what citations name
 }
 ```
@@ -79,7 +79,7 @@ invented for source code. Vocabulary is configuration:
 page_types: [note, source, concept, decision, synthesis]
 link_fields: [related, consumed_by, supersedes, discussed_in]
 provenance:
-  format: "{source} @ {rev} · {path}#L{start}-L{end}"
+  format: "{source} @ {rev} · {path}#{locator}"
 ```
 
 Code-oriented types (`module`, `api`, `usecase`, `endpoint`) ship as the `codebase` preset.

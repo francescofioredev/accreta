@@ -27,7 +27,7 @@ link_fields:
   - discussed_in
 
 provenance:
-  format: "{source} @ {rev} · {path}#L{start}-L{end}"
+  format: "{source} @ {rev} · {path}#{locator}"
 ```
 
 ## What deserves a page

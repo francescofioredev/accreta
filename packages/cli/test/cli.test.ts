@@ -323,7 +323,7 @@ describe("accreta lint — citations", () => {
     await cli("reindex");
 
     expect(await cli("lint")).toBe(1);
-    expect(stdout()).toContain("citation-range-out-of-bounds");
+    expect(stdout()).toContain("citation-locator-missing");
     expect(stdout()).toContain("knowledge/a.md");
   });
 

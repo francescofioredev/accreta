@@ -1,10 +1,11 @@
 import { readFile } from "node:fs/promises";
 import {
   formatCitation,
+  parseLineLocator,
   resolveInside,
   UNPINNED_REVISION,
   UnknownRevisionError,
-  type LineRange,
+  type LocationVerdict,
   type SourceAdapter,
 } from "@accreta/core";
 
@@ -110,16 +111,64 @@ export class GitSource implements SourceAdapter {
     return out.split("\n").filter(Boolean).toSorted();
   }
 
-  async read(path: string): Promise<string> {
-    return readFile(resolveInside(this.root, path), "utf-8");
+  /**
+   * Whether a citation names something that is really in this source.
+   *
+   * A path that climbs out of the root is refused rather than reported as an
+   * error: it names nothing this source can offer, and reading it to find out
+   * is exactly what `resolveInside` exists to prevent.
+   */
+  async locate(path: string, locator?: string): Promise<LocationVerdict> {
+    let full: string;
+    try {
+      full = resolveInside(this.root, path);
+    } catch {
+      return {
+        verdict: "missing",
+        part: "path",
+        detail: `${path} resolves outside source "${this.id}"`,
+      };
+    }
+
+    let text: string;
+    try {
+      text = await readFile(full, "utf-8");
+    } catch {
+      return {
+        verdict: "missing",
+        part: "path",
+        detail: `${path} does not exist in source "${this.id}"`,
+      };
+    }
+
+    if (locator === undefined) return { verdict: "found" };
+
+    const range = parseLineLocator(locator);
+    if (!range) {
+      return {
+        verdict: "missing",
+        part: "locator",
+        detail: `"${locator}" is not a line range, and ${path} is addressed by line`,
+      };
+    }
+
+    const lines = text.split("\n").length;
+    if (range[1] > lines) {
+      return {
+        verdict: "missing",
+        part: "locator",
+        detail: `cites L${range[0]}-L${range[1]} but ${path} has ${lines} line(s)`,
+      };
+    }
+    return { verdict: "found" };
   }
 
-  citation(path: string, lines?: LineRange): string {
+  citation(path: string, locator?: string): string {
     return formatCitation(this.citationFormat, {
       source: this.id,
       rev: this.pinnedRevision ?? UNPINNED_REVISION,
       path,
-      lines,
+      locator,
     });
   }
 

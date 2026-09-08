@@ -25,7 +25,7 @@ link_fields:
   - discussed_in
 
 provenance:
-  format: "{source} @ {rev} · {path}#L{start}-L{end}"
+  format: "{source} @ {rev} · {path}#{locator}"
 ```
 
 ## `contradiction` is a page type here, and that is deliberate

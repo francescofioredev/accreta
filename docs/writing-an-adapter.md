@@ -1,8 +1,8 @@
 # Writing a source adapter
 
 A source is anything that can answer three questions: what revision are you at, what changed
-since a given revision, and how do I cite a location inside you. Adapters are the natural
-extension point of this project — if accreta cannot read your corpus, this is the file you
+since a given revision, and is this location really inside you. Adapters are the natural
+extension point of this project — if accreta cannot check your corpus, this is the file you
 need.
 
 ## The interface
@@ -12,8 +12,8 @@ interface SourceAdapter {
   readonly id: string;
   revision(): Promise<string>;
   changedSince(revision: string): Promise<string[]>;
-  read(path: string): Promise<string>;
-  citation(path: string, lines?: LineRange): string;
+  locate(path: string, locator?: string): Promise<LocationVerdict>;
+  citation(path: string, locator?: string): string;
   pinRevision(revision: string): void;
 }
 ```
@@ -70,13 +70,41 @@ having no report.
 Returning *every* path is a valid answer for a source that cannot compute a difference. It is
 less useful, not incorrect.
 
-## `read()` and `citation()`
+## `locate()` and `citation()`
 
-`read()` takes a path relative to the source root.
+`locate()` answers whether a citation points at something that exists — a path relative to
+the source root, and optionally a locator naming a place inside it. It replaced a `read()`
+that returned the document's text, and the replacement is the point: the core used to answer
+this question itself by reading the source and counting newlines, which quietly made every
+source line-oriented. A page addressed by block id had no way to be checked, and no way to
+say so.
+
+There are three verdicts, not two:
+
+```ts
+type LocationVerdict =
+  | { verdict: "found" }
+  | { verdict: "missing"; part: "path" | "locator"; detail: string }
+  | { verdict: "unknown"; detail: string };
+```
+
+`unknown` is for a source you cannot check — one the agent reaches on accreta's behalf, or
+one that was unreachable at the moment you asked. Reporting that as `missing` would turn "I
+did not look" into "I found something", which is the same distinction `changedSince()` draws
+between "nothing changed" and "I cannot tell". Lint counts unknowns; it does not report them
+as findings.
+
+The `detail` string is yours to write and is shown to the user verbatim, so make it name the
+document and what was wrong with the pointer.
+
+**A locator is opaque to everything but you.** A file source reads `L142-L158`; a page source
+might read `block-a1b2c3`. If yours is line-oriented, parse it with `parseLineLocator()` from
+the core rather than writing the regex again — two file-backed sources that read `L142-L158`
+differently would make a citation mean different things depending on which source it named.
 
 `citation()` renders the configured provenance format. Use `formatCitation()` from the core
-rather than building the string yourself — it drops the `#L{start}-L{end}` decoration when a
-source has no line numbers, instead of emitting `undefined`.
+rather than building the string yourself — it drops the `#{locator}` decoration when there is
+no locator, instead of emitting `undefined`.
 
 ## `pinRevision()`
 
@@ -139,5 +167,8 @@ all:
 2. How does it report what changed — and how does it tell you it cannot?
 3. What does a citation into it look like?
 
+4. Can accreta reach this source at all, or only the agent working with it?
+
 If the first two have no good answer, the source cannot support drift detection, and drift
-detection is most of the point.
+detection is most of the point. If the answer to the fourth is "only the agent", you want a
+declaration rather than a package — see the `delegated` source type.

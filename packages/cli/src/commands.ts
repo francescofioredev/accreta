@@ -104,7 +104,7 @@ link_fields:
   - discussed_in
 
 provenance:
-  format: "{source} @ {rev} · {path}#L{start}-L{end}"
+  format: "{source} @ {rev} · {path}#{locator}"
 `;
 
 const CONFIG_RESEARCH = `# The vocabulary of this knowledge base — the "research" preset.
@@ -130,7 +130,7 @@ link_fields:
   - discussed_in
 
 provenance:
-  format: "{source} @ {rev} · {path}#L{start}-L{end}"
+  format: "{source} @ {rev} · {path}#{locator}"
 `;
 
 const CONFIG_TEMPLATE = `# The vocabulary of this knowledge base.
@@ -154,7 +154,7 @@ link_fields:
   - discussed_in
 
 provenance:
-  format: "{source} @ {rev} · {path}#L{start}-L{end}"
+  format: "{source} @ {rev} · {path}#{locator}"
 `;
 
 const SOURCE_TEMPLATE = `# A source is anything with a revision and a way to report what changed.
