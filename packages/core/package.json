@@ -1,6 +1,6 @@
 {
   "name": "@accreta/core",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "type": "module",
   "license": "MIT",
   "description": "Parsing, link graph, indexing and search. Knows nothing about where sources come from.",
