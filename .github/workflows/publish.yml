@@ -65,7 +65,7 @@ jobs:
           published=0
           skipped=0
 
-          for package in packages/core packages/adapters/fs packages/adapters/git packages/adapters/registry packages/cli packages/mcp-server; do
+          for package in packages/core packages/adapters/fs packages/adapters/git packages/adapters/delegated packages/adapters/registry packages/cli packages/mcp-server; do
             name=$(node -p "require('./$package/package.json').name")
             echo "::group::$name"
 

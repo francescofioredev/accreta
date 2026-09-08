@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { detectDrift } from "../src/source/drift.ts";
 import {
+  DelegatedSourceError,
   UnknownRevisionError,
   type LocationVerdict,
   type SourceAdapter,
@@ -166,5 +167,71 @@ describe("detectDrift", () => {
     // the previous shape each one dragged all 50 changed paths along with it,
     // and this difference was more than twenty times larger.
     expect(large - small).toBeLessThan(90 * 40);
+  });
+});
+
+/** A source nobody here can question: it raises instead of answering. */
+class DelegatedStub implements SourceAdapter {
+  constructor(
+    readonly id: string,
+    private readonly via = "notion",
+    private readonly scope = "The Design decisions page and everything below it.",
+  ) {}
+
+  async revision(): Promise<string> {
+    throw new DelegatedSourceError(this.id, this.via, this.scope);
+  }
+  async changedSince(): Promise<string[]> {
+    throw new DelegatedSourceError(this.id, this.via, this.scope);
+  }
+  async locate(): Promise<LocationVerdict> {
+    return { verdict: "unknown", detail: "the agent reads this" };
+  }
+  citation(path: string): string {
+    return `${this.id}:${path}`;
+  }
+  pinRevision(): void {}
+}
+
+describe("a source only the agent can reach", () => {
+  test("its pages become a work order, not a verdict", async () => {
+    addPage("knowledge/a.md", "docs", "2026-08-01T10:22:00Z");
+    addPage("knowledge/b.md", "docs", "2026-08-01T10:22:00Z");
+
+    const report = await detectDrift(db, new DelegatedStub("docs"));
+
+    expect(report.currentRevision).toBeNull();
+    expect(report.delegated?.via).toBe("notion");
+    expect(report.delegated?.guidance).toContain("Design decisions");
+    expect(report.delegated?.pending).toEqual([
+      { revision: "2026-08-01T10:22:00Z", pages: ["knowledge/a.md", "knowledge/b.md"] },
+    ]);
+  });
+
+  test("it never lands in unresolvable", async () => {
+    // `unresolvable` means the recorded revision is gone and the work starts
+    // over. Nobody asked this source anything, so saying that would send a
+    // reader to redo work for a reason that never happened.
+    addPage("knowledge/a.md", "docs", "2026-08-01T10:22:00Z");
+
+    const report = await detectDrift(db, new DelegatedStub("docs"));
+    expect(report.unresolvable).toEqual([]);
+    expect(report.stale).toEqual([]);
+  });
+
+  test("a page recording no revision is still unverifiable", async () => {
+    // Independent of who can read the source: there is no revision to compare
+    // against, whoever does the comparing.
+    addPage("knowledge/a.md", "docs", null);
+
+    const report = await detectDrift(db, new DelegatedStub("docs"));
+    expect(report.unverifiable).toEqual(["knowledge/a.md"]);
+    expect(report.delegated?.pending).toEqual([]);
+  });
+
+  test("a source nothing cites yet reports no pending work", async () => {
+    const report = await detectDrift(db, new DelegatedStub("docs"));
+    expect(report.delegated?.pending).toEqual([]);
+    expect(report.unverifiable).toEqual([]);
   });
 });

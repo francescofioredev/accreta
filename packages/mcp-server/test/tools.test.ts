@@ -157,6 +157,49 @@ describe("source-backed tools", () => {
     expect(report).not.toHaveProperty("currentRevision");
   });
 
+  test("check_drift keeps a delegated source out of every outcome that implies a check", async () => {
+    writePage(
+      "b.md",
+      "---\ntype: note\nsource: design-docs\nlast_verified_revision: 2026-08-01T10:22:00Z\n---\n\n# B\n",
+    );
+    // `build()` replaces ctx, sources included, so the source is declared after it.
+    build();
+    ctx.sources.set(
+      "design-docs",
+      buildRegistry({ root, citationFormat: "{source} @ {rev}" }).create({
+        id: "design-docs",
+        type: "delegated",
+        options: { via: "notion", scope: "The Design decisions page." },
+      }),
+    );
+
+    const result = await checkDriftTool(ctx, { source: "design-docs" });
+    const report = result.reports?.[0];
+    expect(report?.current_revision).toBeNull();
+    expect(report?.unresolvable).toEqual([]);
+    expect(report?.stale).toEqual([]);
+    expect(report?.delegated?.via).toBe("notion");
+    expect(report?.delegated?.pending?.[0]?.pages).toEqual(["knowledge/b.md"]);
+  });
+
+  test("list_recent_changes tells the agent to go and look, not that a revision is lost", async () => {
+    ctx.sources.set(
+      "design-docs",
+      buildRegistry({ root, citationFormat: "{source} @ {rev}" }).create({
+        id: "design-docs",
+        type: "delegated",
+        options: { via: "notion", scope: "The Design decisions page." },
+      }),
+    );
+
+    const result = await listRecentChangesTool(ctx, {
+      source: "design-docs",
+      since: "2026-08-01T10:22:00Z",
+    });
+    expect(result).toMatchObject({ delegated: true, via: "notion", changed: [] });
+    expect(result).not.toHaveProperty("unresolvable");
+  });
+
   test("list_recent_changes surfaces an unplaceable revision as such", async () => {
     // Returning an empty change list would read as "nothing changed", which is
     // a different claim from "I cannot tell".

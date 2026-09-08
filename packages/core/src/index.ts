@@ -16,13 +16,19 @@ export { openIndex, sealForReading } from "./index-db/db.ts";
 export type { LocationVerdict, ParsedCitation, SourceAdapter } from "./source/adapter.ts";
 export {
   UNPINNED_REVISION,
+  DelegatedSourceError,
   UnknownRevisionError,
   formatCitation,
   parseCitation,
   parseLineLocator,
   resolveInside,
 } from "./source/adapter.ts";
-export type { DriftReport, StaleRevision, UnresolvableRevision } from "./source/drift.ts";
+export type {
+  DelegatedWork,
+  DriftReport,
+  StaleRevision,
+  UnresolvableRevision,
+} from "./source/drift.ts";
 export { detectDrift } from "./source/drift.ts";
 export type { SourceDeclaration, SourceFactory } from "./source/registry.ts";
 export { SourceRegistry, parseSourceDeclaration } from "./source/registry.ts";

@@ -224,6 +224,65 @@ describe("accreta drift", () => {
     expect(stdout()).toContain("cannot place");
   });
 
+  test("a delegated source produces a work order and does not fail the run", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    writeFileSync(
+      join(root, "sources", "design-docs.yaml"),
+      "id: design-docs\ntype: delegated\nvia: notion\nscope: |\n  The Design decisions page.\n",
+      "utf-8",
+    );
+    writePage(
+      "a.md",
+      "---\ntype: note\nsource: design-docs\nlast_verified_revision: 2026-08-01T10:22:00Z\n---\n\n# A\n",
+    );
+    await cli("reindex");
+    output = [];
+
+    // Exit 0: nothing is known to be wrong. What is true is that accreta did
+    // not look, and the report says who has to.
+    expect(await cli("drift")).toBe(0);
+    expect(stdout()).toContain("read through notion by the agent");
+    expect(stdout()).toContain("1 page(s) for the agent to re-verify");
+    expect(stdout()).toContain("knowledge/a.md (verified at 2026-08-01T10:22:00Z)");
+    expect(stdout()).toContain("The Design decisions page.");
+    // Never the outcome that means "the revision is gone, start over".
+    expect(stdout()).not.toContain("cannot place");
+  });
+
+  test("--strict fails on work nobody has done rather than on work that went wrong", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    writeFileSync(
+      join(root, "sources", "design-docs.yaml"),
+      "id: design-docs\ntype: delegated\nvia: notion\nscope: The Design decisions page.\n",
+      "utf-8",
+    );
+    writePage(
+      "a.md",
+      "---\ntype: note\nsource: design-docs\nlast_verified_revision: 2026-08-01T10:22:00Z\n---\n\n# A\n",
+    );
+    await cli("reindex");
+    output = [];
+
+    expect(await cli("drift")).toBe(0);
+    expect(await cli("drift", "--strict")).toBe(1);
+  });
+
+  test("a delegated source declared without a scope names the file to fix", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    writeFileSync(
+      join(root, "sources", "design-docs.yaml"),
+      "id: design-docs\ntype: delegated\nvia: notion\n",
+      "utf-8",
+    );
+    await cli("reindex");
+    output = [];
+
+    await expect(cli("drift")).rejects.toThrow(/declares no `scope`/);
+  });
+
   test("with no sources declared it says so rather than failing", async () => {
     await cli("init");
     rmSync(join(root, "sources", "example.yaml"), { force: true });
@@ -325,6 +384,28 @@ describe("accreta lint — citations", () => {
     expect(await cli("lint")).toBe(1);
     expect(stdout()).toContain("citation-locator-missing");
     expect(stdout()).toContain("knowledge/a.md");
+  });
+
+  test("citations into a source only the agent can read are counted, not reported", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    writeFileSync(
+      join(root, "sources", "design-docs.yaml"),
+      "id: design-docs\ntype: delegated\nvia: notion\nscope: The Design decisions page.\n",
+      "utf-8",
+    );
+    writePage(
+      "a.md",
+      "---\ntype: note\nsource: design-docs\nlast_verified_revision: 2026-08-01T10:22:00Z\n" +
+        'canonical_source: "design-docs:2f1a4b#block-a1b2c3"\n---\n\n# A\n',
+    );
+    await cli("reindex");
+    output = [];
+
+    // Clean, because nothing was found to be wrong — and a line saying so was
+    // not the same as saying it was checked.
+    expect(await cli("lint")).toBe(0);
+    expect(stdout()).toContain("1 citation(s) could not be checked");
   });
 
   test("a citation that resolves is not reported", async () => {

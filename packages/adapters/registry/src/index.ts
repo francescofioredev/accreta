@@ -8,6 +8,7 @@ import {
 } from "@accreta/core";
 import { FsSource } from "@accreta/adapter-fs";
 import { GitSource } from "@accreta/adapter-git";
+import { DelegatedSource } from "@accreta/adapter-delegated";
 
 export interface SourceContext {
   /** Workspace root. A declaration's own `root` is resolved against it. */
@@ -50,6 +51,16 @@ export function buildRegistry(ctx: SourceContext): SourceRegistry {
           root: join(ctx.root, String(d.options.root ?? ".")),
           citationFormat: ctx.citationFormat,
           paths: stringsOr(d.options.paths),
+        }),
+    )
+    .register(
+      "delegated",
+      (d) =>
+        new DelegatedSource({
+          id: d.id,
+          via: String(d.options.via ?? ""),
+          scope: String(d.options.scope ?? ""),
+          citationFormat: ctx.citationFormat,
         }),
     );
 }

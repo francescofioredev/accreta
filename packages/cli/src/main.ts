@@ -12,7 +12,8 @@ Usage: accreta <command> [arguments]
                            a constitution. Presets: codebase, research
   reindex                  Rebuild the index from the knowledge base
   lint                     Report unresolvable links, missing provenance, unknown types
-  drift                    Report which pages their sources have moved out from under
+  drift [--strict]         Report which pages their sources have moved out from under.
+                           --strict also fails on anything left unchecked
   search <query>           Full-text search (--type <type>, repeatable)
   show <path|wikilink>     Print a page
   consumers <path>         What links to this page, and what it links to (--inline)
@@ -41,12 +42,14 @@ function parseArgs(argv: string[]): {
   positional: string[];
   types: string[];
   includeInline: boolean;
+  strict: boolean;
   preset?: string;
   agentFile?: string;
 } {
   const positional: string[] = [];
   const types: string[] = [];
   let includeInline = false;
+  let strict = false;
   let preset: string | undefined;
   let agentFile: string | undefined;
   for (let i = 0; i < argv.length; i++) {
@@ -60,6 +63,10 @@ function parseArgs(argv: string[]): {
       includeInline = true;
       continue;
     }
+    if (arg === "--strict") {
+      strict = true;
+      continue;
+    }
     if (arg === "--preset") {
       preset = argv[++i];
       continue;
@@ -70,12 +77,12 @@ function parseArgs(argv: string[]): {
     }
     if (arg !== undefined) positional.push(arg);
   }
-  return { positional, types, includeInline, preset, agentFile };
+  return { positional, types, includeInline, strict, preset, agentFile };
 }
 
 export async function run(argv: string[], ctx: CommandContext): Promise<number> {
   const [command, ...rest] = argv;
-  const { positional, types, includeInline, preset, agentFile } = parseArgs(rest);
+  const { positional, types, includeInline, strict, preset, agentFile } = parseArgs(rest);
 
   switch (command) {
     case undefined:
@@ -95,7 +102,7 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
     case "lint":
       return runLint(ctx);
     case "drift":
-      return drift(ctx);
+      return drift(ctx, { strict });
     case "search":
       return search(ctx, positional.join(" "), types.length > 0 ? types : undefined);
     case "show":

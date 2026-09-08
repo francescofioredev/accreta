@@ -65,7 +65,9 @@ const AUGUST_EDGES: Edge[] = [
 const CURRENT_EDGES: Edge[] = [
   { dependent: "@accreta/adapter-fs", dependency: "@accreta/core" },
   { dependent: "@accreta/adapter-git", dependency: "@accreta/core" },
+  { dependent: "@accreta/adapter-delegated", dependency: "@accreta/core" },
   { dependent: "@accreta/adapters", dependency: "@accreta/core" },
+  { dependent: "@accreta/adapters", dependency: "@accreta/adapter-delegated" },
   { dependent: "@accreta/adapters", dependency: "@accreta/adapter-fs" },
   { dependent: "@accreta/adapters", dependency: "@accreta/adapter-git" },
   { dependent: "accreta", dependency: "@accreta/core" },
