@@ -44,13 +44,16 @@ accreta gives you the machinery around it:
 - an **MCP server** — so any agent (Claude Code, Cursor, or anything speaking [MCP](https://modelcontextprotocol.io))
   can search, fetch pages, resolve canonical definitions, and run impact analysis;
 - **source adapters** — a source is anything with a revision and a way to detect change.
-  Git repositories are one kind. Directories of documents are another;
-- a **CLI** — `init`, `reindex`, `lint`, `drift`, `search`, `show`, `consumers`, `canonical`;
+  Git repositories are one kind, directories of documents another. The third kind inverts who
+  does the work: a source **only your agent can reach**, which accreta declares and never
+  touches;
+- a **CLI** — `init`, `reindex`, `lint`, `drift`, `doctor`, `source add`, `search`, `show`,
+  `consumers`, `canonical`;
 - a **constitution** — the operating rules the agent follows when writing pages, versioned
   as a template rather than pasted into a chat.
 
 ```
-sources (git · files · …) ──► agent writes pages ──► index (FTS5 + links)
+sources (git · files · connectors) ──► agent writes pages ──► index (FTS5 + links)
         ▲                          with provenance             │
         └───────── drift: which pages did this change invalidate?
                                                                ▼
@@ -73,6 +76,55 @@ The vocabulary there is `source`, `concept`, `finding`, `contradiction`, `synthe
 `module`, no `api`, no `endpoint` — page types are configuration, not code
 ([ADR-0003](docs/adr/0003-vocabulary-is-configuration.md)).
 
+## Sources your agent reads for you
+
+Not every corpus is on disk. A wiki, a mailbox, a tracker — accreta declares those and
+**never touches them**: no credential, no network call, no provider name anywhere in the code.
+
+```yaml
+# sources/design-docs.yaml
+id: design-docs
+type: delegated
+via: notion              # the connector your agent needs; accreta never interprets it
+scope: |                 # prose your agent reads, and the only definition of what is in scope
+  The "Design decisions" page and everything below it.
+```
+
+There is no `notion` type and no `gmail` type. A mailbox is the same declaration with a
+different connector, which is the test of whether the generalization is real:
+
+```yaml
+# sources/support-threads.yaml
+id: support-threads
+type: delegated
+via: gmail
+scope: |
+  Threads labelled "escalations" from 2026 onward.
+  A message is immutable, so what changes is not a cited claim but that the thread continued:
+  look for new messages in a cited thread, not for edits to a cited one.
+```
+
+accreta still knows which pages cite the source and at which revision, so `drift` produces a
+work order instead of a verdict:
+
+```
+design-docs — read through notion by the agent, not by accreta
+  3 page(s) for the agent to re-verify there:
+    knowledge/concepts/pricing.md (verified at 2026-08-01T10:22:00Z)
+  in scope:
+    The "Design decisions" page and everything below it.
+```
+
+**What this costs, stated where you choose it:**
+
+- **`drift` exits 0** — nothing is *known* to be wrong. So a knowledge base with delegated
+  sources cannot be gated on drift in CI. Use `accreta drift --strict`, which exits 1 on
+  anything left unchecked.
+- **`lint` cannot check a citation into one.** It counts them. An invented page id and a real
+  one look identical from here, so those citations are only as good as your agent's reading was.
+- **It needs the setup skill in front of your agent**, because the agent is what does the
+  reading. See below — nothing installs it yet.
+
 ## Roadmap
 
 | Phase | What | Status |
@@ -84,13 +136,17 @@ The vocabulary there is `source`, `concept`, `finding`, `contradiction`, `synthe
 | 5 | Constitution templates and setup skill | done |
 | 6 | Demo knowledge base, docs, `v0.1.0` | done |
 
-Two pieces are deferred rather than built, each with a reason and an issue:
-[hosted deployment auth and the sync loop](https://github.com/francescofioredev/accreta/issues/21),
-and [skill distribution](https://github.com/francescofioredev/accreta/issues/26). Both serve
-a deployment story that does not exist yet, and building them now would encode guesses that
-become load-bearing before anyone has tested them. Skill distribution waited specifically on
-there being a package to install from; that now exists, so the guessing is over and the issue
-can proceed on evidence.
+Two pieces are deferred rather than built, each with a reason and an issue.
+
+[Hosted deployment auth and the sync loop](https://github.com/francescofioredev/accreta/issues/21)
+serves a deployment story that does not exist yet, and building it now would encode guesses that
+become load-bearing before anyone has tested them.
+
+[Skill distribution](https://github.com/francescofioredev/accreta/issues/26) waited on there
+being a package to install from. There is one now, and delegated sources made it urgent rather
+than tidy: the setup skill is what drives the agent that reads them, so a delegated source is
+inert until the skill reaches the agent — and today that is a manual copy, described in full
+above rather than glossed over.
 
 ## Pages are untrusted input to the model
 
@@ -155,9 +211,99 @@ Those run against the repository. With `accreta` installed the same commands wor
 which is what [the packaged CLI is tested for](packages/cli/test/packaging.test.ts): the test
 packs the tarballs, installs them outside this repository, and drives the CLI from there.
 
+## A knowledge base of your own, end to end
+
+Over a source only your agent can reach, which is the case that needs the most explaining. Every
+step is a command or a named file.
+
+**1. Start one.**
+
+```bash
+bun add -g accreta
+mkdir my-kb && cd my-kb
+accreta init --preset research
+```
+
+**2. Declare the source.** `--set` pairs go into the declaration untouched — accreta knows no
+more about a source's options than you do.
+
+```bash
+accreta source add delegated design-docs --set via=notion
+```
+
+It writes `sources/design-docs.yaml` and tells you it is not usable yet:
+
+```
+Wrote sources/design-docs.yaml
+  no: declares no `scope`
+    → Add `scope:` — prose your agent reads. Nothing else says what it may look at.
+```
+
+That is deliberate. An empty scope means either nothing or everything, so it is refused rather
+than guessed at. Open the file and fill it in:
+
+```yaml
+scope: |
+  The "Design decisions" page and everything below it.
+```
+
+**3. Check both sides.**
+
+```bash
+accreta doctor
+```
+
+```
+sources (1)
+  design-docs — delegated
+    unknown: accreta cannot check this source; notion can
+    your agent needs: notion — unverified
+      → Nothing on this machine records whether your agent can reach notion.
+```
+
+`unknown` is not a failure, and `doctor` exits 0 on it. A connector authorized in your agent
+lives in no file here, so calling it absent would be exactly as wrong as calling it present.
+**The one thing that can settle it is your agent**, by reading the declared scope once and
+saying what came back.
+
+**4. Give your agent the skill.** This is the step with a rough edge, so it is stated plainly
+rather than glossed. The setup skill ships inside the package, at
+`skills/accreta-setup/SKILL.md`, and **nothing installs it**:
+
+```bash
+# Locate the installed package, then copy the skill where your agent looks for skills.
+accreta_dir=$(dirname "$(dirname "$(readlink -f "$(command -v accreta)")")")
+cp -r "$accreta_dir/skills/accreta-setup" <your-agent-skills-dir>/
+```
+
+Nothing updates that copy when the package updates, either. An installer that handles this
+properly is [issue #26](https://github.com/francescofioredev/accreta/issues/26); until it
+ships, this is a manual copy and you own keeping it current.
+
+**5. Let the agent write the pages.** No tool does this part. The agent follows the constitution
+in `AGENTS.md`: read the source through its connector, write pages that cite what they came
+from, and record the revision each claim was checked against.
+
+**6. Check the result.**
+
+```bash
+accreta reindex
+accreta lint      # also prints the citations it could not check, and why
+accreta drift     # a work order for the delegated source, exit 0
+```
+
+**7. Keep it current.** `accreta drift` lists the pages waiting to be re-verified and the
+revisions they are stuck at. The agent reads those locations again, fixes what changed, and
+records the new revision. Re-verifying means reading the source again — bumping the revision
+because the report mentioned the page is the one move that turns a detectable problem into an
+undetectable one.
+
+In CI, use `accreta drift --strict`: it exits 1 on anything left unchecked, so a pipeline can
+demand "nothing unverified" without anyone pretending the source was inspected.
+
 ## Design decisions
 
-Four ADRs in [`docs/adr/`](docs/adr/):
+Twelve ADRs in [`docs/adr/`](docs/adr/). The ones that decide the shape:
 
 - **[0001](docs/adr/0001-lexical-search-first.md)** — search is lexical, and semantic search
   is **not built**. The benchmark said 85% recall@1 without it. It also found a bug in our own
@@ -169,6 +315,10 @@ Four ADRs in [`docs/adr/`](docs/adr/):
   configuration; the schema follows the same rule.
 - **[0004](docs/adr/0004-markdown-source-of-truth.md)** — markdown is the source of truth and
   the index is disposable.
+- **[0011](docs/adr/0011-a-citation-points-at-a-locator.md)** — a citation points at a locator
+  the source defines, and accreta never reads a source.
+- **[0012](docs/adr/0012-a-source-only-the-agent-can-reach.md)** — a source behind a connector
+  is declared, not fetched. accreta holds no credential.
 
 Further reading: [architecture](docs/architecture.md),
 [writing an adapter](docs/writing-an-adapter.md).

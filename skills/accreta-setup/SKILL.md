@@ -8,6 +8,13 @@ description: Set up an accreta knowledge base over a corpus — pick a preset, w
 This procedure is distilled from doing it, not from planning it. The order below is the order
 that worked; the warnings are things that actually went wrong.
 
+> **Where this file came from, and how to update it.** It ships inside the `accreta` npm
+> package, under `skills/accreta-setup/`. Nothing installs it — someone copied it into your
+> agent's skills directory by hand, and nothing will replace it when the package updates. If
+> the commands here disagree with `accreta help`, this copy is the stale one: recopy it from
+> `node_modules/accreta/skills/accreta-setup/`. An installer that handles this properly is
+> [issue #26](https://github.com/francescofioredev/accreta/issues/26).
+
 ## Before anything: look at the corpus
 
 The single decision that shapes everything else is which preset fits, and it is decided by

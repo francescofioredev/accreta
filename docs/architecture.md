@@ -11,14 +11,14 @@ recorded in [`adr/`](adr/).
 ```
 ┌──────────────────────────────────────────────────────────┐
 │  Sources (pluggable)                                     │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐                │
-│  │ git      │  │ fs       │  │ (future) │                │
-│  │ adapter  │  │ adapter  │  │ http/api │                │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘                │
+│  ┌──────────┐  ┌──────────┐  ┌───────────┐               │
+│  │ git      │  │ fs       │  │ delegated │  the agent    │
+│  │ adapter  │  │ adapter  │  │ adapter   │  reads this   │
+│  └────┬─────┘  └────┬─────┘  └────┬──────┘               │
 └───────┼─────────────┼─────────────┼──────────────────────┘
         └─────────────┴─────────────┘
                       │  SourceAdapter:
-                      │   revision() · changedSince() · read() · citation()
+                      │   revision() · changedSince() · locate() · citation()
                       ▼
         ┌─────────────────────────────┐
         │  Knowledge base (markdown)  │  ← the agent writes here,
