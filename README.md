@@ -7,8 +7,8 @@
 > [!NOTE]
 > [![npm](https://img.shields.io/npm/v/accreta)](https://www.npmjs.com/package/accreta)
 > All six roadmap phases are complete and the pipeline runs end to end —
-> see the [worked example](examples/climate/). The API is not yet stable, and two deliberately
-> deferred pieces are listed in the [roadmap](#roadmap).
+> see the [worked example](examples/climate/). The API is not yet stable, and one deliberately
+> deferred piece is listed in the [roadmap](#roadmap).
 
 ---
 
@@ -123,7 +123,7 @@ design-docs — read through notion by the agent, not by accreta
 - **`lint` cannot check a citation into one.** It counts them. An invented page id and a real
   one look identical from here, so those citations are only as good as your agent's reading was.
 - **It needs the setup skill in front of your agent**, because the agent is what does the
-  reading. See below — nothing installs it yet.
+  reading. One command installs it; see below.
 
 ## Roadmap
 
@@ -136,17 +136,20 @@ design-docs — read through notion by the agent, not by accreta
 | 5 | Constitution templates and setup skill | done |
 | 6 | Demo knowledge base, docs, `v0.1.0` | done |
 
-Two pieces are deferred rather than built, each with a reason and an issue.
-
+One piece is deferred rather than built.
 [Hosted deployment auth and the sync loop](https://github.com/francescofioredev/accreta/issues/21)
 serves a deployment story that does not exist yet, and building it now would encode guesses that
 become load-bearing before anyone has tested them.
 
-[Skill distribution](https://github.com/francescofioredev/accreta/issues/26) waited on there
-being a package to install from. There is one now, and delegated sources made it urgent rather
-than tidy: the setup skill is what drives the agent that reads them, so a delegated source is
-inert until the skill reaches the agent — and today that is a manual copy, described in full
-above rather than glossed over.
+One was closed without being built.
+[Skill distribution](https://github.com/francescofioredev/accreta/issues/26) asked for an
+installer that placed the setup skill and handled the five states a target can be in — the
+interesting two being a copy the user had edited and a filename something else already owned.
+It waited on there being a package to install from. What arrived instead was a channel:
+`npx skills` already finds this repository's layout, installs per agent, and updates. Writing
+our own would mean owning a policy about whose edits win, for a problem we no longer have. What
+that channel does *not* solve is written down where a user meets it, above, rather than left to
+be discovered — see [ADR-0013](docs/adr/0013-skill-distribution-is-not-ours.md).
 
 ## Pages are untrusted input to the model
 
@@ -182,6 +185,9 @@ one epic per phase.
 ```bash
 bun add -g accreta          # or: bunx accreta --help
 ```
+
+The setup skill that walks an agent through the rest is a separate install, from this
+repository rather than from npm — see [step 4](#a-knowledge-base-of-your-own-end-to-end).
 
 Then, in a directory of your own:
 
@@ -266,19 +272,35 @@ lives in no file here, so calling it absent would be exactly as wrong as calling
 **The one thing that can settle it is your agent**, by reading the declared scope once and
 saying what came back.
 
-**4. Give your agent the skill.** This is the step with a rough edge, so it is stated plainly
-rather than glossed. The setup skill ships inside the package, at
-`skills/accreta-setup/SKILL.md`, and **nothing installs it**:
+**4. Give your agent the skill.** The setup skill lives in this repository and installs with
+[`npx skills`](https://github.com/vercel-labs/skills). Pin it to the release you are running,
+so the file and the CLI cannot disagree:
 
 ```bash
-# Locate the installed package, then copy the skill where your agent looks for skills.
-accreta_dir=$(dirname "$(dirname "$(readlink -f "$(command -v accreta)")")")
-cp -r "$accreta_dir/skills/accreta-setup" <your-agent-skills-dir>/
+npx skills add "https://github.com/francescofioredev/accreta/tree/v$(accreta --version)/skills/accreta-setup"
 ```
 
-Nothing updates that copy when the package updates, either. An installer that handles this
-properly is [issue #26](https://github.com/francescofioredev/accreta/issues/26); until it
-ships, this is a manual copy and you own keeping it current.
+Or take the current one, which may describe commands your installed version does not have yet:
+
+```bash
+npx skills add francescofioredev/accreta --skill accreta-setup   # -g for every project
+npx skills update accreta-setup                                  # when a release moves
+```
+
+This is the step with a rough edge, so it is stated plainly rather than glossed:
+
+- **The unpinned form installs from `main`, not from the version you have.** The skill's
+  `metadata.requires` names the earliest release that has every command it uses; if one is
+  missing, that field and `accreta --version` are how you find out, rather than by the command
+  failing halfway through a setup.
+- **`npx skills update` overwrites your copy without asking.** Its lock file stores a hash of
+  what it installed, so it could tell that you edited the file, and it does not: an edit made
+  in the skills directory is gone after the next update, silently. Keep anything you want to
+  survive somewhere else.
+- **`npx skills` is not ours**, and a skill is instructions your agent will follow. Read it
+  before use, the way you would any dependency. The package also carries its own copy at
+  `node_modules/accreta/skills/accreta-setup/`, version-locked to the code beside it, for
+  anyone who would rather not run a fetch at all.
 
 **5. Let the agent write the pages.** No tool does this part. The agent follows the constitution
 in `AGENTS.md`: read the source through its connector, write pages that cite what they came
@@ -303,7 +325,7 @@ demand "nothing unverified" without anyone pretending the source was inspected.
 
 ## Design decisions
 
-Twelve ADRs in [`docs/adr/`](docs/adr/). The ones that decide the shape:
+Thirteen ADRs in [`docs/adr/`](docs/adr/). The ones that decide the shape:
 
 - **[0001](docs/adr/0001-lexical-search-first.md)** — search is lexical, and semantic search
   is **not built**. The benchmark said 85% recall@1 without it. It also found a bug in our own
@@ -319,6 +341,8 @@ Twelve ADRs in [`docs/adr/`](docs/adr/). The ones that decide the shape:
   the source defines, and accreta never reads a source.
 - **[0012](docs/adr/0012-a-source-only-the-agent-can-reach.md)** — a source behind a connector
   is declared, not fetched. accreta holds no credential.
+- **[0013](docs/adr/0013-skill-distribution-is-not-ours.md)** — the setup skill installs through
+  `npx skills`, and the installer we specified is **not built**.
 
 Further reading: [architecture](docs/architecture.md),
 [writing an adapter](docs/writing-an-adapter.md).

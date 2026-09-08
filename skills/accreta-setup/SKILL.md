@@ -1,6 +1,8 @@
 ---
 name: accreta-setup
 description: Set up an accreta knowledge base over a corpus — pick a preset, write the config and a source declaration, generate the constitution, wire up MCP, and verify the first ingest. Use when someone wants an agent-maintained knowledge base with provenance and drift detection over a codebase, a document collection, or a research corpus; when a directory contains accreta.config.yaml and something is wrong with it; or when asked to add a source to an existing knowledge base.
+metadata:
+  requires: "0.1.4"
 ---
 
 # Setting up an accreta knowledge base
@@ -8,12 +10,11 @@ description: Set up an accreta knowledge base over a corpus — pick a preset, w
 This procedure is distilled from doing it, not from planning it. The order below is the order
 that worked; the warnings are things that actually went wrong.
 
-> **Where this file came from, and how to update it.** It ships inside the `accreta` npm
-> package, under `skills/accreta-setup/`. Nothing installs it — someone copied it into your
-> agent's skills directory by hand, and nothing will replace it when the package updates. If
-> the commands here disagree with `accreta help`, this copy is the stale one: recopy it from
-> `node_modules/accreta/skills/accreta-setup/`. An installer that handles this properly is
-> [issue #26](https://github.com/francescofioredev/accreta/issues/26).
+> **Where this file came from, and what it needs.** `npx skills add` put it here, from the
+> accreta repository. `metadata.requires` above names the earliest accreta release that has
+> every command below: if one of them does not exist, compare it with `accreta --version`
+> rather than working around the gap. Refresh with `npx skills update accreta-setup` — which
+> overwrites this file without asking, so anything you want to keep belongs somewhere else.
 
 ## Before anything: look at the corpus
 

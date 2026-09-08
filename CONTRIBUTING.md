@@ -77,17 +77,23 @@ npm will not let a version be republished. Before tagging:
 
 ```bash
 bun test                                  # includes the packed-tarball test
-bun run scripts/check-version.ts 0.1.3    # the tag you are about to push, without the v
+bun run scripts/check-version.ts 0.1.4    # the tag you are about to push, without the v
 cd packages/cli && bun pm pack --dry-run  # eyeball the file list
 ```
 
 The `--dry-run` is worth the ten seconds. It prints exactly what would ship, which is the one
 moment where an accidentally included secret or an oversized directory is cheap to notice.
 
-Bump all five publishable packages in one commit — `@accreta/core`, the two adapters, `accreta`
-and `@accreta/mcp-server`. They depend on each other by version, and `workspace:*` is resolved
-at publish time, so one left behind names a version that was never published. Then tag `vX.Y.Z`
-and push it; `.github/workflows/publish.yml` does the rest.
+Bump all seven publishable packages in one commit — `@accreta/core`, the four adapters,
+`accreta` and `@accreta/mcp-server`. They depend on each other by version, and `workspace:*` is
+resolved at publish time, so one left behind names a version that was never published. Then tag
+`vX.Y.Z` and push it; `.github/workflows/publish.yml` does the rest.
+
+The setup skill has its own number, `metadata.requires` in `skills/accreta-setup/SKILL.md`, and
+it is not the version being released: it is the earliest release that has every command the
+skill uses. Raise it when the skill starts using a new one. `check-version.ts` refuses a tag
+older than it, because the skill installs from git and would otherwise send a reader to a
+command nobody can install yet.
 
 `packages/adapters` and `bench` stay private: they are a test harness and a benchmark, not
 things anyone installs.
@@ -103,7 +109,7 @@ otherwise entirely Bun repository: bun cannot do the OIDC exchange
 2FA-bypass tokens that were the alternative — sensitive operations in August 2026, direct
 publishing in January 2027.
 
-Publishing five packages is not atomic: npm takes them one at a time, and any of them can
+Publishing seven packages is not atomic: npm takes them one at a time, and any of them can
 fail — a scope without a trusted publisher configured, a network blip. The workflow therefore
 skips whatever is already at the tag's version, so re-running a half-finished release picks up
 where it stopped instead of dying on the first package that already succeeded. Re-running is

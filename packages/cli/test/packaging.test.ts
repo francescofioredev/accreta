@@ -13,16 +13,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * Does the published package actually work?
- *
- * Everything else in the suite runs against the repository, where the templates
- * and the schema are simply there. A user has a tarball, and a tarball only
- * contains what `files` and `prepack` put in it. The gap between those two
- * situations is invisible until someone installs the thing, and by then the
- * version is on npm and cannot be republished.
- *
- * So this test builds the tarballs, installs them somewhere the repository
- * cannot be reached, and drives the CLI from there.
+ * A tarball holds only what `files` and `prepack` put in it, and the gap is
+ * invisible until someone installs it — by then it is on npm, unrepublishable.
  */
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
@@ -132,6 +124,19 @@ test("an installed CLI carries its own constitution templates", () => {
   }
 });
 
+test("an installed CLI carries the setup skill, and its declared floor", () => {
+  // The README sends a user to `npx skills add`, which installs from git. The
+  // package ships its own copy anyway, version-locked to the code beside it —
+  // and no command reads it, so `skills` dropping out of `files`, or prepack
+  // failing to copy it, would be invisible to every other test here.
+  const skill = join(consumer, "node_modules", "accreta", "skills", "accreta-setup", "SKILL.md");
+  expect(existsSync(skill)).toBe(true);
+
+  const text = readFileSync(skill, "utf-8");
+  expect(text).toContain("name: accreta-setup");
+  expect(text).toMatch(/^\s+requires:/m);
+});
+
 test("an installed core carries the schema its index is built from", () => {
   // schema.sql is the one non-TypeScript file in core/src. A `files` field
   // written as a *.ts glob would drop it and every reindex would fail here.
@@ -151,11 +156,9 @@ test("an installed core carries the schema its index is built from", () => {
 });
 
 test("the published manifests name real versions, not workspace protocols", () => {
-  // npm is what publishes, and unlike bun it does not rewrite `workspace:*` —
-  // it copies the string into the tarball verbatim. A published package
-  // carrying `workspace:*` cannot be installed by anyone, and npm does not
-  // allow the version to be republished. So the protocol must never reach a
-  // manifest in the first place.
+  // npm publishes, and unlike bun it copies `workspace:*` into the tarball
+  // verbatim. Such a package installs for nobody and cannot be republished, so
+  // the protocol must never reach a manifest in the first place.
   for (const pkg of PUBLISHABLE) {
     const manifest = JSON.parse(readFileSync(join(REPO_ROOT, pkg, "package.json"), "utf-8")) as {
       dependencies?: Record<string, string>;

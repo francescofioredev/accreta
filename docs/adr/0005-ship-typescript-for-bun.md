@@ -92,3 +92,9 @@ A test packs every publishable package, installs the tarballs outside the reposi
 runs `init --preset research` and `reindex` against them. Installing outside the tree is what
 makes it a real test: inside it, the resolver's repository fallback would answer for a package
 that shipped nothing and the suite would go green on a broken release.
+
+#26 was closed in September 2026 without an installer being built: the setup skill installs
+through `npx skills`, for the reasons in
+[ADR-0013](0013-skill-distribution-is-not-ours.md). `skills/` still ships, as the copy that is
+version-locked to the code beside it, and the packing test now asserts it is there — nothing
+reads it, so its absence would otherwise surface on a user's machine.
