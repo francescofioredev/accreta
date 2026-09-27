@@ -1,0 +1,14 @@
+{
+  "errata.json": {
+    "url": "https://www.rfc-editor.org/api/v1/errata.json",
+    "fetched": "2026-09-27",
+    "sha256": "64e4da3f938845728998b18dbd95272cbfb77d9da199ffd5cae9fe469ce09c8d",
+    "bytes": 11685137
+  },
+  "index.xml": {
+    "url": "https://www.rfc-editor.org/rfc-index.xml",
+    "fetched": "2026-09-27",
+    "sha256": "401e94f50c15f60d89b09e95ce3dd02212cb9650165c05ca0fc83436bffd7742",
+    "bytes": 13722267
+  }
+}
