@@ -51,7 +51,7 @@ the API would charge for the same question; the cards say so wherever they compa
 Measured, summed from `results/` and the call cache:
 
 - **Jev:** $1.17 of Cloudflare AI Gateway credit, for every task and tier.
-- **Claude models:** $70.85 at list prices.
+- **Claude models:** $93.43 at list prices.
   - $17.35 is the nine baseline ingest sessions.
-  - $53.50 is every CLI decision: Haiku arms, Opus annotators, Sonnet writers.
+  - $76.08 is every CLI decision: Haiku arms, Opus annotators, Sonnet writers.
   - All of it ran on a Claude subscription seat rather than metered credit.

@@ -26,8 +26,8 @@ writes no text.
 | Drift, claims over code (got v13 → v14.4) | citations left after hunk ∩ range (free) | 114 of 683 (17%) |  |  |
 |  | AUROC on those, vs frontier annotator (test split) | — | 0.98 | 0.94 |
 | Citation support, SciFact (expert labels) | accuracy, three labels | — | 86.2% | 85.9% |
-| Retrieval, paraphrase queries (9,842 pages) | recall@1: BM25, then BM25 top 20 reranked in one call | 70% | 86% | — |
-| Retrieval, supersession queries (9,842 pages) | recall@1: BM25, then BM25 top 20 reranked in one call | 23% | 65% | — |
+| Retrieval, paraphrase queries (9,842 pages) | recall@1: BM25, then BM25 top 20 reranked in one call | 70% | 86% | 90% |
+| Retrieval, supersession queries (9,842 pages) | recall@1: BM25, then BM25 top 20 reranked in one call | 23% | 65% | 66% |
 |  | recall@1: BM25, then following typed links from its top hit | 23% | 57% | — |
 | Latency per decision, p50 (errata, all 1,000) |  | — | 341 ms | 13790 ms (through the CLI) |
 

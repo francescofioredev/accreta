@@ -105,6 +105,9 @@ See §3. The query file records each query's gold paths.
 | jev-rerank | title | 94.7% (142/150; 95% CI 89.8%–97.7%) | 100.0% (150/150; 95% CI 97.6%–100.0%) | 1.00 | 335 / 491 ms | $0.157 | 0 |
 | jev-rerank | paraphrase | 86.0% (129/150; 95% CI 79.4%–91.1%) | 95.3% (143/150; 95% CI 90.6%–98.1%) | 1.00 | 333 / 413 ms | $0.165 | 0 |
 | jev-rerank | supersession | 64.7% (97/150; 95% CI 56.5%–72.3%) | 76.7% (115/150; 95% CI 69.1%–83.2%) | 1.00 | 335 / 448 ms | $0.151 | 0 |
+| haiku-rerank | title | 93.3% (140/150; 95% CI 88.1%–96.8%) | 100.0% (150/150; 95% CI 97.6%–100.0%) | 1.00 | 21037 / 58671 ms | $26.378 | 0 |
+| haiku-rerank | paraphrase | 90.0% (135/150; 95% CI 84.0%–94.3%) | 95.3% (143/150; 95% CI 90.6%–98.1%) | 1.00 | 39568 / 73201 ms | $33.742 | 0 |
+| haiku-rerank | supersession | 66.0% (99/150; 95% CI 57.8%–73.5%) | 74.0% (111/150; 95% CI 66.2%–80.8%) | 1.00 | 32888 / 63478 ms | $29.913 | 0 |
 | jev-nav | title | 86.7% (130/150; 95% CI 80.2%–91.7%) | — | 0.43 | 303 / 448 ms | $0.010 | 0 |
 | jev-nav | paraphrase | 71.3% (107/150; 95% CI 63.4%–78.4%) | — | 0.43 | 325 / 766 ms | $0.011 | 0 |
 | jev-nav | supersession | 57.3% (86/150; 95% CI 49.0%–65.4%) | — | 1.86 | 624 / 1418 ms | $0.044 | 0 |
@@ -118,6 +121,9 @@ See §3. The query file records each query's gold paths.
   well over the 20-point floor. The other two classes move up slightly rather than down.
 - **H2: holds.** Reranking raises paraphrase recall@1 from 70.0% to 86.0%, over the 10-point floor.
 - **H3:** 60.0% of the knowledge base's pages have no link in either direction.
+- **Haiku reranks as well as Jev, not better.** Paraphrase recall@1 is 90.0% against 86.0%, supersession
+  66.0% against 64.7%, with overlapping intervals. It costs about 190× more per query and takes
+  21–40 s at p50 through the CLI, against 0.33 s.
 
 - **Queries partly written by a model.**
   - Paraphrase queries come from Claude Sonnet 5, told to avoid the title's words. It does not
@@ -150,3 +156,4 @@ bun bench/jev/report.ts
 | 2026-09-28 | — | Knowledge base built and indexed; BM25 arm run | Deterministic, no model |
 | 2026-09-28 | `fad9e11` | Pre-registration committed | — |
 | 2026-09-28 | — | Jev rerank and navigation | Complete. 10 transient `2018` errors, all succeeded on rerun |
+| 2026-09-28 | — | Haiku rerank | Complete, 450 rows, 0 errors |
