@@ -51,6 +51,29 @@ RFC 2119 keywords, and section length.
 - **Haiku** runs at the selected level. If that level is per-section, it runs on the calibration
   RFCs and a seeded sample of 600 test sections.
 
+### Tier A and tier C (committed before any model sees these units)
+
+**Tier A: RFC 9111 and 6455.** The labels are the baseline ingest's own citations
+(`bench/jev/builders/tier-a.ts`): three runs of Claude Opus 5.5 following the constitution.
+- **The agent cites almost everything.** 124 of 131 sections are cited in at least one run, 123
+  in at least two.
+- **The consequence is structural.** Whatever the decider, keeping 95% of the cited sections
+  leaves at most about 5% of the sections to skip. No model is run on tier A for T1. The ceiling
+  is reported instead, since 7 negatives cannot support an AUROC.
+- **The proxy fails.** Tier R's label, "cited by another RFC", agrees with "cited by the ingest
+  agent" at Cohen's kappa 0.005. The tier R result stands for what it measures, and says nothing
+  about ingest.
+
+**Tier C: got v13.0.0.**
+- **Units** (`bench/jev/builders/tier-c-units.ts`): top-level declarations and the members of
+  classes and interfaces, at least 3 lines, 213 in all.
+- **Label:** cited by the tier C ingest in any run.
+- **Split:** a seeded third of the files for calibration (7 files, 25 units), the rest for test
+  (14 files, 188 units, 86 cited, 79% of the characters).
+- **Levels:** U0, the unit alone; U1, plus the file's outline; P, the file packed, one question per unit.
+- **Rules:** the same selection and threshold rules as tier R. Haiku runs at the selected level.
+- **Deterministic arms:** whether the unit is exported, and its length.
+
 ## 4. Setup
 
 The question, a `noul`:
@@ -86,7 +109,26 @@ In the packed level, each question is prefixed "About section N ("title") only:"
 ### Tier R
 
 <!-- report:t1-r -->
+
+Test: 15 RFCs, 2,267 sections, 826 cited by another RFC. τ fixed on the 5 calibration RFCs for recall ≥ 0.95. Selected level: **P**. Haiku's test figures come from a seeded sample when it runs per section.
+
+| Arm | AUROC, calibration | AUROC, test | Recall of cited sections at τ, test | Sections skipped | Characters skipped (reading saved) | Latency p50 per call | Questions per call | Cost per 1,000 sections |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| normative-count | 0.601 | 0.609 | 100.0% (826/826; 95% CI 99.6%–100.0%) | 0.0% | 0.0% | — | 1 | $0 |
+| section-length | 0.686 | 0.657 | 94.1% (777/826; 95% CI 92.2%–95.6%) | 15.0% | 2.3% | — | 1 | $0 |
+| jev S0 | 0.669 | 0.634 | 92.7% (766/826; 95% CI 90.7%–94.4%) | 11.0% | 9.3% | 326 ms | 1 | $0.037 |
+| jev S1 | 0.660 | 0.668 | 92.0% (760/826; 95% CI 89.9%–93.8%) | 12.1% | 9.1% | 313 ms | 1 | $0.043 |
+| jev S2 | 0.633 | 0.646 | 91.6% (757/826; 95% CI 89.5%–93.4%) | 13.3% | 11.3% | 368 ms | 1 | $0.114 |
+| jev P **(selected)** | 0.706 | 0.648 | 93.2% (770/826; 95% CI 91.3%–94.8%) | 11.2% | 9.6% | 519 ms | 14 | $0.027 |
+
+![Recall of cited sections against reading skipped, every threshold, test RFCs](t1-tradeoff.svg)
+
 <!-- /report:t1-r -->
+
+### Tier C: got
+
+<!-- report:t1-c -->
+<!-- /report:t1-c -->
 
 ## 8. What this does and does not show
 
@@ -109,4 +151,6 @@ bun bench/jev/report.ts
 
 | Date | Commit | What | Outcome |
 | --- | --- | --- | --- |
-| 2026-09-28 | _pre-registration_ | Cross-references, targets, sections, levels, question and protocol committed | — |
+| 2026-09-28 | `8fb7546` | Cross-references, targets, sections, levels, question and protocol committed | — |
+| 2026-09-28 | — | Jev at every level, tier R | Complete. 65 transient Cloudflare `2018` errors, all succeeded on rerun |
+| 2026-09-28 | _pre-registration_ | Tier A ceiling and tier C units, levels and protocol committed | — |

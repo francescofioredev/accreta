@@ -30,6 +30,13 @@ function at(rows: T1Row[], tau: number) {
   };
 }
 
+function chartPoint(rows: T1Row[], tau: number): [number, number] {
+  const pos = rows.filter((r) => r.label);
+  const total = rows.reduce((s, r) => s + r.chars, 0);
+  const kept = rows.filter((r) => r.p! >= tau).reduce((s, r) => s + r.chars, 0);
+  return [pos.filter((r) => r.p! >= tau).length / pos.length, 1 - kept / total];
+}
+
 export function reportT1(): void {
   const f = join(RESULTS, "r-t1-jev.json");
   if (!existsSync(f)) return;
@@ -103,7 +110,7 @@ export function reportT1(): void {
         lines,
       ),
       "",
-      "![Recall of cited sections against reading skipped, every threshold, test RFCs](t1-tradeoff.svg)",
+      `![Recall against reading skipped, every threshold](${svg})`,
     ].join("\n"),
   );
   writeFileSync(
