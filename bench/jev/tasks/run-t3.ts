@@ -73,7 +73,12 @@ if (arms.has("jev-repeat")) {
   out.forEach((d, i) => rows.push(row(repeat[i]!, "jev", 1, fromDecision(d))));
 }
 if (arms.has("haiku")) {
-  const out = await pool(cases, 8, (c) => haiku(c.state, QUESTIONS), "haiku");
+  const out = await pool(
+    cases,
+    Number(process.env.HAIKU_CONCURRENCY ?? 16),
+    (c) => haiku(c.state, QUESTIONS),
+    "haiku",
+  );
   out.forEach((d, i) => rows.push(row(cases[i]!, "haiku", 0, fromDecision(d))));
 }
 

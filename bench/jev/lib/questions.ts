@@ -16,7 +16,7 @@ export interface Answer {
 }
 
 export interface Decision {
-  provider: "jev" | "haiku";
+  provider: "jev" | "claude";
   served_by: string;
   answers: Record<string, Answer>;
   latency_ms: number;

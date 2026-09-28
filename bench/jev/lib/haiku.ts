@@ -77,19 +77,19 @@ function run(args: string[], input: string): Promise<string> {
   });
 }
 
-async function call(state: unknown, questions: Questions): Promise<Decision> {
+async function call(model: string, state: unknown, questions: Questions): Promise<Decision> {
   mkdirSync(CWD, { recursive: true });
-  const args = ["-p", "--safe-mode", "--model", HAIKU, "--tools", "", "--output-format", "json"];
+  const args = ["-p", "--safe-mode", "--model", model, "--tools", "", "--output-format", "json"];
   args.push("--system-prompt", SYSTEM, "--json-schema", JSON.stringify(schema(questions)));
   try {
     const d = JSON.parse(await run(args, prompt(state, questions)));
     const out = d.structured_output ?? JSON.parse(d.result);
     const answers: Record<string, Answer> = {};
     for (const [name, q] of Object.entries(questions)) answers[name] = parse(q, out?.[name]);
-    const usage = d.modelUsage?.[HAIKU] ?? {};
+    const usage = d.modelUsage?.[model] ?? {};
     return {
-      provider: "haiku",
-      served_by: HAIKU,
+      provider: "claude",
+      served_by: model,
       answers,
       latency_ms: d.duration_api_ms ?? 0,
       input_tokens: usage.inputTokens ?? d.usage?.input_tokens ?? 0,
@@ -98,8 +98,8 @@ async function call(state: unknown, questions: Questions): Promise<Decision> {
     };
   } catch (e) {
     return {
-      provider: "haiku",
-      served_by: HAIKU,
+      provider: "claude",
+      served_by: model,
       answers: {},
       latency_ms: 0,
       input_tokens: 0,
@@ -111,11 +111,25 @@ async function call(state: unknown, questions: Questions): Promise<Decision> {
 }
 
 /** `sample` distinguishes repeated draws of the same item in the cache. */
-export function haiku(state: unknown, questions: Questions, sample = 0): Promise<Decision> {
+export function claude(
+  model: string,
+  state: unknown,
+  questions: Questions,
+  sample = 0,
+): Promise<Decision> {
+  // Haiku's cache namespace predates the model parameter; keeping it keeps completed calls valid.
+  const namespace = model === HAIKU ? "haiku" : `claude-${model}`;
+  const key =
+    model === HAIKU
+      ? { SHAPE, state, questions, sample }
+      : { SHAPE, model, state, questions, sample };
   return cached(
-    "haiku",
-    { SHAPE, state, questions, sample },
-    () => call(state, questions),
+    namespace,
+    key,
+    () => call(model, state, questions),
     (d) => !d.error,
   );
 }
+
+export const haiku = (state: unknown, questions: Questions, sample = 0) =>
+  claude(HAIKU, state, questions, sample);

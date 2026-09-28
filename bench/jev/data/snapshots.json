@@ -10,5 +10,11 @@
     "fetched": "2026-09-27",
     "sha256": "401e94f50c15f60d89b09e95ce3dd02212cb9650165c05ca0fc83436bffd7742",
     "bytes": 13722267
+  },
+  "scifact/data.tar.gz": {
+    "url": "https://scifact.s3-us-west-2.amazonaws.com/release/latest/data.tar.gz",
+    "fetched": "2026-09-27",
+    "sha256": "11c621288d41ac144d29b13b0f8503b3820b7d6e8b1f6ff24dff335c196d76be",
+    "bytes": 3115079
   }
 }
