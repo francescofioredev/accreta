@@ -93,6 +93,34 @@ The first run is kept as it stands, as **L0, minimal context**. It is not "Jev's
   so this measures the cost of that saving rather than assuming it.
 
 
+### Tier C: code (committed before any model sees these items)
+
+**Setup.** The tier C ingest wrote pages over got's `source/` at v13.0.0: three runs, 683 distinct
+citations with their claims. The source then moves to v14.4.0, which touches 13 files
+(+214/−155). `bench/jev/builders/tier-c-drift.ts` records deterministic facts per citation:
+- whether any `git diff -U0` hunk touches the cited range;
+- where the range lands in v14.4.0;
+- whether the innermost TypeScript declaration that encloses it is unchanged, changed or removed.
+  The text is compared with whitespace and comments stripped.
+
+**What accreta does today.** Every one of the 683 citations goes stale, because all of them cite
+the same revision of the source. A per-file check would flag 658 of them (96%). Only 114 (17%) sit
+under a hunk.
+
+**Two questions.**
+1. **Is the free step safe?** Clearing every untouched citation without a model is deterministic
+   and costs nothing. It is wrong when a claim depends on code changed outside the cited lines.
+   A seeded sample of 60 untouched citations is labelled to count those false clears.
+2. **On the 114 touched citations, can a decider tell a claim that still holds from one that broke?**
+   - The state is the claim, the cited lines before and after (±3 lines), and the word diff.
+   - The question is L3's.
+   - τ is fixed by the original rule on a seeded third of the touched items; the other two thirds are scored.
+
+**Labels.**
+- Claude Opus 5.5 labels every touched item and the untouched sample: invalidated, valid or unsure.
+- The maintainer audits 30 of them blind.
+- The Opus labels stand only as far as they agree with the audit.
+
 ## 4. Setup
 
 **Tier R.** Verified errata from the RFC Editor's errata feed, snapshot of 2026-09-27
@@ -177,6 +205,7 @@ Test split: 400 technical and 400 editorial errata. τ was fixed on the calibrat
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | whitespace-only | 0.99 | 1.0% (4/400; 95% CI 0.3%–2.5%) | 1.0% (4/400; 95% CI 0.3%–2.5%) | 0.500 | — | — | — | $0 | 0 |
 | normative-regex | 0.00 | 0.0% (0/400; 95% CI 0.0%–0.9%) | 0.0% (0/400; 95% CI 0.0%–0.9%) | 0.566 | — | — | — | $0 | 0 |
+| haiku | 0.00 | 0.0% (0/400; 95% CI 0.0%–0.9%) | 0.0% (0/400; 95% CI 0.0%–0.9%) | 0.669 | 0.331 | 0.331 | 13790 / 32393 ms | $7.435 | 0 |
 | jev | 0.04 | 1.0% (4/400; 95% CI 0.3%–2.5%) | 10.3% (41/400; 95% CI 7.5%–13.6%) | 0.740 | 0.231 | 0.147 | 341 / 477 ms | $0.023 | 0 |
 
 Confusion matrix at τ, test split:
@@ -185,6 +214,7 @@ Confusion matrix at τ, test split:
 | --- | --- | --- | --- | --- |
 | whitespace-only | 396 | 4 | 396 | 4 |
 | normative-regex | 400 | 0 | 400 | 0 |
+| haiku | 400 | 0 | 400 | 0 |
 | jev | 396 | 4 | 359 | 41 |
 
 Repeatability: Jev asked twice on 100 test items. Median |Δp| 0.010, max 0.100; the decision at τ flipped on 2 of 100.
@@ -192,6 +222,59 @@ Repeatability: Jev asked twice on 100 test items. Median |Δp| 0.010, max 0.100;
 ![Trade-off between the gated error and the re-reading saved, test split](t3-tradeoff.svg)
 
 <!-- /report:t3-r -->
+
+### Tier R, amendment 1: context ladder
+
+<!-- report:t3-ladder -->
+
+Selected on calibration AUROC: **L0-noul**. Test figures for every other configuration are exploratory.
+
+| Arm and configuration | AUROC, calibration | AUROC, test | τ | False “still valid”, test | Editorial cleared, test | ECE, test | Input tokens | Cost per 1,000 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| jev L0-noul **(selected)** | 0.747 | 0.740 | 0.04 | 1.0% (4/400; 95% CI 0.3%–2.5%) | 10.3% (41/400; 95% CI 7.5%–13.6%) | 0.147 | 559 | $0.023 |
+| jev L0-choice | 0.739 | 0.756 | 0.00 | 0.0% (0/400; 95% CI 0.0%–0.9%) | 0.0% (0/400; 95% CI 0.0%–0.9%) | 0.249 | 574 | $0.024 |
+| jev L1-noul | 0.738 | 0.748 | 0.04 | 0.8% (3/400; 95% CI 0.2%–2.2%) | 9.3% (37/400; 95% CI 6.6%–12.5%) | 0.149 | 629 | $0.026 |
+| jev L1-choice | 0.737 | 0.759 | 0.00 | 0.0% (0/400; 95% CI 0.0%–0.9%) | 0.0% (0/400; 95% CI 0.0%–0.9%) | 0.251 | 644 | $0.027 |
+| jev L1b-noul | 0.666 | 0.725 | 0.05 | 0.3% (1/400; 95% CI 0.0%–1.4%) | 3.3% (13/400; 95% CI 1.7%–5.5%) | 0.079 | 448 | $0.019 |
+| jev L1b-choice | 0.685 | 0.727 | 0.03 | 0.3% (1/400; 95% CI 0.0%–1.4%) | 7.2% (29/400; 95% CI 4.9%–10.2%) | 0.229 | 463 | $0.019 |
+| jev L2-noul | 0.736 | 0.748 | 0.04 | 1.0% (4/400; 95% CI 0.3%–2.5%) | 10.5% (42/400; 95% CI 7.7%–13.9%) | 0.151 | 1249 | $0.052 |
+| jev L2-choice | 0.745 | 0.768 | 0.00 | 0.0% (0/400; 95% CI 0.0%–0.9%) | 0.0% (0/400; 95% CI 0.0%–0.9%) | 0.228 | 1264 | $0.053 |
+| haiku L0-noul | 0.672 | 0.669 | 0.00 | 0.0% (0/400; 95% CI 0.0%–0.9%) | 0.0% (0/400; 95% CI 0.0%–0.9%) | 0.331 | 1764 | $7.435 |
+
+<!-- /report:t3-ladder -->
+
+### Tier R, amendment 1: L3, claim-conditioned
+
+<!-- report:t3-l3 -->
+
+Claim-conditioned question. There are 25 calibration items per class, so τ rests on a small set: at 2% of 25, no technical item may be cleared.
+
+| Arm | τ | AUROC, test | False “still valid”, test | Editorial cleared, test | ECE | Input tokens |
+| --- | --- | --- | --- | --- | --- | --- |
+| jev | 0.16 | 0.526 | 13.1% (13/99; 95% CI 7.2%–21.4%) | 27.0% (27/100; 95% CI 18.6%–36.8%) | 0.365 | 652 |
+| haiku | 0.00 | 0.512 | 0.0% (0/99; 95% CI 0.0%–3.7%) | 0.0% (0/100; 95% CI 0.0%–3.6%) | 0.483 | 1852 |
+
+<!-- /report:t3-l3 -->
+
+### Tier R, amendment 1: batching (exploratory)
+
+<!-- report:t3-batch -->
+
+Level L0, packed: one shared rubric, one `noul` per item. τ = 0.04, from the selected unpacked configuration's calibration split. Test split only, 800 items per K.
+
+| K per call | AUROC | False “still valid” | Editorial cleared | Input tokens per decision | Cost per 1,000 | Latency per call p50 / p95 | Latency per decision p50 | Missing answers |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 0.694 | 0.3% (1/400; 95% CI 0.0%–1.4%) | 6.5% (26/400; 95% CI 4.3%–9.4%) | 606 | $0.0255 | 417 / 602 ms | 417 ms | 0 |
+| 5 | 0.712 | 0.5% (2/400; 95% CI 0.1%–1.8%) | 3.5% (14/400; 95% CI 1.9%–5.8%) | 329 | $0.0138 | 405 / 588 ms | 81 ms | 0 |
+| 10 | 0.720 | 0.5% (2/400; 95% CI 0.1%–1.8%) | 3.3% (13/400; 95% CI 1.7%–5.5%) | 294 | $0.0123 | 406 / 539 ms | 41 ms | 0 |
+| 25 | 0.731 | 0.0% (0/400; 95% CI 0.0%–0.9%) | 1.3% (5/400; 95% CI 0.4%–2.9%) | 274 | $0.0115 | 363 / 536 ms | 15 ms | 0 |
+
+<!-- /report:t3-batch -->
+
+### Tier C: code
+
+<!-- report:t3-got -->
+<!-- /report:t3-got -->
 
 ## 8. What this does and does not show
 
@@ -215,4 +298,4 @@ bun bench/jev/report.ts
 | 2026-09-27 | — | Jev (L0) and deterministic arms, all 1,000 items | Complete. 9 calls failed with a transient Cloudflare `2018` error and succeeded on rerun |
 | 2026-09-27 | `971a0ee` | Blind audit sample drawn (30 per class) after the run showed label noise | — |
 | 2026-09-27 | — | Haiku (L0) and the Opus 5.5 second annotator started | Paused by the maintainer at 416 and 84 of 1,000; resumed from the cache |
-| 2026-09-28 | _amendment 1_ | Context ladder, question forms, L3 and batching committed before their calls | — |
+| 2026-09-28 | `4c0bba2` | Context ladder, question forms, L3 and batching committed before their calls | — |

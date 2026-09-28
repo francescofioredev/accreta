@@ -45,12 +45,25 @@ Write pages under kb/knowledge/. Never edit anything under repo/.
 When the source is ingested, stop and reply with one line listing the pages you wrote.`;
 
 if (import.meta.main) {
+  const only = process.argv
+    .find((a) => a.startsWith("--runs="))
+    ?.slice(7)
+    .split(",")
+    .map(Number);
+  const runs = Array.from({ length: RUNS }, (_, r) => r + 1).filter(
+    (r) => !only || only.includes(r),
+  );
+  // Clone before any session starts: a synchronous clone blocks the event loop, and a session
+  // whose prompt is not on stdin within 3 seconds exits without running.
+  const dirs = new Map(runs.map((run) => [run, scaffold(run)]));
   const results = await Promise.all(
-    Array.from({ length: RUNS }, async (_, r) => {
-      const run = r + 1;
-      const dir = scaffold(run);
+    runs.map(async (run) => {
+      const dir = dirs.get(run)!;
       const marker = join(dir, ".ingested.json");
-      if (existsSync(marker)) return JSON.parse(readFileSync(marker, "utf8"));
+      if (existsSync(marker)) {
+        const done = JSON.parse(readFileSync(marker, "utf8"));
+        if (!done.error) return done;
+      }
       const rev = execFileSync("git", ["-C", join(dir, "repo"), "rev-parse", "HEAD"])
         .toString()
         .trim();
@@ -82,20 +95,22 @@ if (import.meta.main) {
       return record;
     }),
   );
-  mkdirSync(RESULTS, { recursive: true });
-  writeFileSync(
-    join(RESULTS, "r-c-ingest.json"),
-    JSON.stringify(
-      {
-        run_at: new Date().toISOString(),
-        agent: AGENT,
-        repo: `${GOT_URL}@${FROM_TAG}`,
-        budget_usd: BUDGET_USD,
-        sessions: results,
-      },
-      null,
-      1,
-    ) + "\n",
-  );
+  if (!only) {
+    mkdirSync(RESULTS, { recursive: true });
+    writeFileSync(
+      join(RESULTS, "r-c-ingest.json"),
+      JSON.stringify(
+        {
+          run_at: new Date().toISOString(),
+          agent: AGENT,
+          repo: `${GOT_URL}@${FROM_TAG}`,
+          budget_usd: BUDGET_USD,
+          sessions: results,
+        },
+        null,
+        1,
+      ) + "\n",
+    );
+  }
   console.log("done");
 }
