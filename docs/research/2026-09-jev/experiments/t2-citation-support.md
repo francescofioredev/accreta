@@ -40,6 +40,23 @@ citations as supporting, while still accepting at least 70% of the citations tha
   context ladder (cited lines, ±N lines, whole section) applies to the RFC set, where the
   surrounding text exists.
 
+
+**Tier A, real citations** (added 2026-09-28, committed before any model sees these pairs):
+- **The pairs.** The baseline ingest (tier A of T1) wrote 992 citations into RFC 9111 and 6455
+  across three runs. From each run, 50 are sampled (seed 20261004): claims of 30–600 characters,
+  cited ranges of at most 120 lines. Each is paired twice:
+  - with the lines it cites. The label is unknown: whether an agent's citation supports its claim
+    is what the check is for;
+  - with a constructed negative: the same claim against the other section of the same RFC that
+    shares the most vocabulary with it, so the negative is hard.
+- **Levels:** C0 the cited lines; C1 the cited lines ±10; C2 the whole enclosing section.
+  - C1 is declared primary, since it is what opening a citation shows.
+  - τ is carried over from the SciFact calibration, because tier A has no calibration split.
+- **References.**
+  - Claude Opus 5.5 labels every pair at C1.
+  - The maintainer audits 30 pairs blind, so the Opus labels can be trusted only as far as they
+    agree with a person.
+
 ## 4. Setup
 
 **The question.** Asked of Jev as a `choice`, and of Haiku as one probability per option:
@@ -79,7 +96,27 @@ abstract carries no evidence. The labels are the experts'. Licence CC BY-NC 2.0:
 ### Tier R: SciFact
 
 <!-- report:t2-scifact -->
+
+SciFact dev, 340 claim–abstract pairs (138 supports, 71 contradicts, 131 says nothing). τ fixed on 300 pairs from SciFact train.
+
+| Arm | Accuracy | Macro F1 | False “supports”, argmax | τ | False “supports” at τ | Supports accepted at τ | Latency p50 / p95 | Cost per 1,000 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| jev | 0.862 | 0.860 | 8.4% (17/202; 95% CI 5.0%–13.1%) | 0.73 | 6.9% (14/202; 95% CI 3.8%–11.4%) | 83.3% (115/138; 95% CI 76.0%–89.1%) | 312 / 453 ms | $0.033 |
+
+Confusion, test (rows are the gold label, columns the prediction):
+
+| Arm | Gold | supports | contradicts | says_nothing |
+| --- | --- | --- | --- | --- |
+| jev | supports | 120 | 7 | 11 |
+| jev | contradicts | 4 | 65 | 2 |
+| jev | says_nothing | 13 | 10 | 108 |
+
 <!-- /report:t2-scifact -->
+
+### Tier A: citations an ingest agent wrote
+
+<!-- report:t2-atlas -->
+<!-- /report:t2-atlas -->
 
 ## 8. What this does and does not show
 
@@ -98,4 +135,6 @@ bun bench/jev/report.ts
 
 | Date | Commit | What | Outcome |
 | --- | --- | --- | --- |
-| 2026-09-28 | _pre-registration_ | SciFact question and protocol committed | — |
+| 2026-09-28 | `95c6c86` | SciFact question and protocol committed | — |
+| 2026-09-28 | — | Jev on SciFact | Complete. 18 calls failed with the transient Cloudflare `2018` error and succeeded on rerun |
+| 2026-09-28 | _pre-registration_ | Tier A pairs, levels and references committed | — |

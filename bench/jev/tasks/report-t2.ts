@@ -105,3 +105,62 @@ export function reportT2(): void {
     ].join("\n"),
   );
 }
+
+export function reportT2Atlas(): void {
+  const { readdirSync } = require("node:fs") as typeof import("node:fs");
+  const files = readdirSync(RESULTS).filter((f: string) => f.startsWith("r-t2-atlas-"));
+  if (!files.length) return;
+  const rows: (Row & { kind: string; level: string })[] = files
+    .flatMap((f: string) => JSON.parse(readFileSync(join(RESULTS, f), "utf8")).rows)
+    .filter((r: Row) => !r.error && r.choice);
+  const sf = join(RESULTS, "r-t2-scifact-jev.json");
+  const tauJev = existsSync(sf)
+    ? tauFrom(
+        JSON.parse(readFileSync(sf, "utf8")).rows.filter(
+          (r: Row) => r.split === "calibration" && !r.error,
+        ),
+      )
+    : 0.5;
+  const opus = new Map(rows.filter((r) => r.arm === "opus").map((r) => [r.id, r.choice]));
+  const body: (string | number)[][] = [];
+  for (const key of [...new Set(rows.map((r) => `${r.arm}|${r.level}`))]) {
+    const [arm, level] = key.split("|") as [string, string];
+    const rs = rows.filter((r) => r.arm === arm && r.level === level);
+    const neg = rs.filter((r) => r.kind === "negative");
+    const real = rs.filter((r) => r.kind === "real");
+    const agreeOpus = real.filter((r) => opus.has(r.id));
+    body.push([
+      `${arm} ${level}`,
+      fmtRate(rate(neg.filter((r) => r.choice === "supports").length, neg.length)),
+      arm === "jev"
+        ? fmtRate(rate(neg.filter((r) => pSupports(r) >= tauJev).length, neg.length))
+        : "—",
+      fmtRate(rate(real.filter((r) => r.choice === "supports").length, real.length)),
+      arm === "opus"
+        ? "—"
+        : fmtRate(
+            rate(agreeOpus.filter((r) => r.choice === opus.get(r.id)).length, agreeOpus.length),
+          ),
+      `$${((rs.reduce((s, r) => s + r.cost_usd, 0) / rs.length) * 1000).toFixed(3)}`,
+    ]);
+  }
+  splice(
+    join(DOCS, "experiments", "t2-citation-support.md"),
+    "t2-atlas",
+    [
+      `150 real citations from the tier A ingest (50 per run) and 150 constructed negatives (the same claim against the most similar other section). Jev's τ = ${tauJev.toFixed(2)} is carried over from the SciFact calibration.`,
+      "",
+      table(
+        [
+          "Arm and level",
+          "Negatives judged “supports” (argmax)",
+          "Negatives accepted at τ",
+          "Real citations judged “supports”",
+          "Agreement with Opus on real citations",
+          "Cost per 1,000",
+        ],
+        body,
+      ),
+    ].join("\n"),
+  );
+}
