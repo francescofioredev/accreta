@@ -63,6 +63,16 @@ Each point is quoted because each one constrains where it can sit in accreta:
   
   None tested it on specifications or on code. **CITED**
 
+## Noted, not measured
+
+**CLM-v0.1-8B** (Contrastive-LM, 2026-09-21, Apache 2.0) answers the same `noul`, `choice` and
+`score` questions behind a TypeSafe-compatible API, so this study's requests would replay against
+it unchanged. It is two contrastive heads on a frozen Qwen3-8B, and it is self-hosted only: it needs
+an NVIDIA GPU with about 24 GB. The authors report parity with Jev on computer use, gaming and tool
+calling at up to 9× lower latency, but nobody has reproduced that independently. It is left out of
+this study for want of the hardware, not on the merits. **CITED**:
+[model card](https://huggingface.co/Contrastive-LM/CLM-v0.1-8B), [code](https://github.com/Contrastive-LM/CLM)
+
 ## Responsibilities in accreta, if it had any
 
 The table is REASONED from the interface above. The experiments in [`experiments/`](experiments/)

@@ -65,7 +65,10 @@ RFCs and on code.
 - **Replacing the index with navigation.** A 9,842-page rebuild takes about five seconds, and 60%
   of pages in the test knowledge base had no link to reach them by.
 - **Hard-wiring one vendor.** Thirteen days after launch, reached through a reseller, with direct
-  sign-ups closed. The port exists so that this can change without touching core.
+  sign-ups closed. The port exists so that this can change without touching core. An open-weights
+  alternative with a TypeSafe-compatible API, [CLM-v0.1-8B](https://huggingface.co/Contrastive-LM/CLM-v0.1-8B),
+  appeared during the study. It runs locally, so no page content would leave the machine. It is
+  not measured yet.
 
 ## Consequences
 
