@@ -46,6 +46,38 @@ export function reportT1(): void {
     ...jev.rows,
     ...(existsSync(hf) ? JSON.parse(readFileSync(hf, "utf8")).rows : []),
   ].filter((r: T1Row) => r.p !== null && !r.error);
+  render(
+    rows,
+    jev.selected,
+    "t1-r",
+    "t1-tradeoff.svg",
+    "T1 tier R: reading skipped vs recall, test RFCs",
+    `Test: 15 RFCs, 2,267 sections, 826 cited by another RFC. τ fixed on the 5 calibration RFCs for recall ≥ ${PROTOCOL.calibration_min_recall}. Selected level: **${jev.selected}**. Haiku's test figures come from a seeded sample when it runs per section.`,
+  );
+}
+
+export function reportT1Got(): void {
+  const f = join(RESULTS, "r-t1-got.json");
+  if (!existsSync(f)) return;
+  const d = JSON.parse(readFileSync(f, "utf8"));
+  render(
+    d.rows.filter((r: T1Row) => r.p !== null && !r.error),
+    d.selected,
+    "t1-c",
+    "t1-tradeoff-got.svg",
+    "T1 tier C: reading skipped vs recall, got test files",
+    `Test: 14 files of got v13.0.0, 188 declarations, 86 cited by the tier C ingest (79% of the characters). τ fixed on 7 calibration files for recall ≥ ${PROTOCOL.calibration_min_recall}. Selected level: **${d.selected}**.`,
+  );
+}
+
+function render(
+  rows: T1Row[],
+  selected: string,
+  marker: string,
+  svg: string,
+  chartTitle: string,
+  intro: string,
+): void {
   const keys = [...new Set(rows.map((r) => `${r.arm}|${r.config}`))];
   const series: { name: string; points: [number, number][]; color: string }[] = [];
   const lines = keys.map((key, k) => {
@@ -61,16 +93,11 @@ export function reportT1(): void {
     series.push({
       name,
       color: COLORS[k % COLORS.length]!,
-      points: thresholds
-        .filter((_, i) => i % step === 0)
-        .map((t) => {
-          const x = at(test, t);
-          return [x.recall.rate, x.skippedChars] as [number, number];
-        }),
+      points: thresholds.filter((_, i) => i % step === 0).map((t) => chartPoint(test, t)),
     });
     const lat = rs.map((r) => r.latency_ms).filter((x) => x > 0);
     return [
-      `${name}${arm === "jev" && config === jev.selected ? " **(selected)**" : ""}`,
+      `${name}${arm === "jev" && config === selected ? " **(selected)**" : ""}`,
       auroc(
         cal.map((r) => r.p!),
         cal.map((r) => r.label),
@@ -91,21 +118,21 @@ export function reportT1(): void {
   });
   splice(
     CARD,
-    "t1-r",
+    marker,
     [
-      `Test: 15 RFCs, 2,267 sections, 826 cited by another RFC. τ fixed on the 5 calibration RFCs for recall ≥ ${PROTOCOL.calibration_min_recall}. Selected level: **${jev.selected}**. Haiku's test figures come from a seeded sample when it runs per section.`,
+      intro,
       "",
       table(
         [
           "Arm",
           "AUROC, calibration",
           "AUROC, test",
-          "Recall of cited sections at τ, test",
-          "Sections skipped",
+          "Recall of cited units at τ, test",
+          "Units skipped",
           "Characters skipped (reading saved)",
           "Latency p50 per call",
           "Questions per call",
-          "Cost per 1,000 sections",
+          "Cost per 1,000 units",
         ],
         lines,
       ),
@@ -114,10 +141,10 @@ export function reportT1(): void {
     ].join("\n"),
   );
   writeFileSync(
-    join(DOCS, "experiments", "t1-tradeoff.svg"),
+    join(DOCS, "experiments", svg),
     lineChart({
-      title: "T1 tier R: reading skipped vs recall, test RFCs",
-      xLabel: "Recall of sections other RFCs cite",
+      title: chartTitle,
+      xLabel: "Recall of cited units",
       yLabel: "Characters skipped",
       series,
     }),

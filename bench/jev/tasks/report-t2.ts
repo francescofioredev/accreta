@@ -107,8 +107,24 @@ export function reportT2(): void {
 }
 
 export function reportT2Atlas(): void {
+  reportPairs(
+    "r-t2-atlas-",
+    "t2-atlas",
+    "150 real citations from the tier A ingest (50 per run) and 150 constructed negatives (the same claim against the most similar other section).",
+  );
+}
+
+export function reportT2Got(): void {
+  reportPairs(
+    "r-t2-got-",
+    "t2-got",
+    "150 real citations from the tier C ingest into got v13.0.0 and 150 constructed negatives (the same claim against the declaration sharing most identifiers).",
+  );
+}
+
+function reportPairs(prefix: string, marker: string, intro: string): void {
   const { readdirSync } = require("node:fs") as typeof import("node:fs");
-  const files = readdirSync(RESULTS).filter((f: string) => f.startsWith("r-t2-atlas-"));
+  const files = readdirSync(RESULTS).filter((f: string) => f.startsWith(prefix));
   if (!files.length) return;
   const rows: (Row & { kind: string; level: string })[] = files
     .flatMap((f: string) => JSON.parse(readFileSync(join(RESULTS, f), "utf8")).rows)
@@ -148,7 +164,7 @@ export function reportT2Atlas(): void {
     join(DOCS, "experiments", "t2-citation-support.md"),
     "t2-atlas",
     [
-      `150 real citations from the tier A ingest (50 per run) and 150 constructed negatives (the same claim against the most similar other section). Jev's τ = ${tauJev.toFixed(2)} is carried over from the SciFact calibration.`,
+      `${intro} Jev's τ = ${tauJev.toFixed(2)} is carried over from the SciFact calibration.`,
       "",
       table(
         [

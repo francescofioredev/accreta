@@ -57,6 +57,15 @@ citations as supporting, while still accepting at least 70% of the citations tha
   - The maintainer audits 30 pairs blind, so the Opus labels can be trusted only as far as they
     agree with a person.
 
+**Tier C, citations into code** (committed before any model sees these pairs):
+- **Pairs.** 150 citations sampled (seed 20261009) from the 683 the tier C ingest wrote into got
+  v13.0.0. Each is paired with the code it cites, and with a hard negative: the same claim against
+  the declaration in the same file that shares the most identifiers with the claim.
+- **Levels.** C0 the cited lines, C1 ±10 lines, C2 the enclosing declaration.
+- **Primary level: C0.** This is chosen from tier A, where more context raised Jev's false
+  "supports", and is declared as such here.
+- **Threshold and references.** τ is carried over from SciFact. Opus 5.5 labels every pair at C0.
+
 ## 4. Setup
 
 **The question.** Asked of Jev as a `choice`, and of Haiku as one probability per option:
@@ -102,6 +111,7 @@ SciFact dev, 340 claim–abstract pairs (138 supports, 71 contradicts, 131 says 
 | Arm | Accuracy | Macro F1 | False “supports”, argmax | τ | False “supports” at τ | Supports accepted at τ | Latency p50 / p95 | Cost per 1,000 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | jev | 0.862 | 0.860 | 8.4% (17/202; 95% CI 5.0%–13.1%) | 0.73 | 6.9% (14/202; 95% CI 3.8%–11.4%) | 83.3% (115/138; 95% CI 76.0%–89.1%) | 312 / 453 ms | $0.033 |
+| haiku | 0.859 | 0.858 | 7.9% (16/202; 95% CI 4.6%–12.5%) | 0.86 | 5.0% (10/202; 95% CI 2.4%–8.9%) | 83.3% (115/138; 95% CI 76.0%–89.1%) | 9026 / 25137 ms | $7.259 |
 
 Confusion, test (rows are the gold label, columns the prediction):
 
@@ -110,13 +120,30 @@ Confusion, test (rows are the gold label, columns the prediction):
 | jev | supports | 120 | 7 | 11 |
 | jev | contradicts | 4 | 65 | 2 |
 | jev | says_nothing | 13 | 10 | 108 |
+| haiku | supports | 120 | 7 | 11 |
+| haiku | contradicts | 2 | 69 | 0 |
+| haiku | says_nothing | 14 | 14 | 103 |
 
 <!-- /report:t2-scifact -->
 
 ### Tier A: citations an ingest agent wrote
 
 <!-- report:t2-atlas -->
+
+150 real citations from the tier A ingest (50 per run) and 150 constructed negatives (the same claim against the most similar other section). Jev's τ = 0.73 is carried over from the SciFact calibration.
+
+| Arm and level | Negatives judged “supports” (argmax) | Negatives accepted at τ | Real citations judged “supports” | Agreement with Opus on real citations | Cost per 1,000 |
+| --- | --- | --- | --- | --- | --- |
+| jev C0 | 16.7% (25/150; 95% CI 11.1%–23.6%) | 5.3% (8/150; 95% CI 2.3%–10.2%) | 79.3% (119/150; 95% CI 72.0%–85.5%) | — (0/0; 95% CI 0.0%–100.0%) | $0.023 |
+| jev C1 | 21.3% (32/150; 95% CI 15.1%–28.8%) | 11.3% (17/150; 95% CI 6.7%–17.5%) | 78.0% (117/150; 95% CI 70.5%–84.3%) | — (0/0; 95% CI 0.0%–100.0%) | $0.032 |
+| jev C2 | 28.0% (42/150; 95% CI 21.0%–35.9%) | 12.7% (19/150; 95% CI 7.8%–19.1%) | 82.7% (124/150; 95% CI 75.6%–88.4%) | — (0/0; 95% CI 0.0%–100.0%) | $0.040 |
+
 <!-- /report:t2-atlas -->
+
+### Tier C: citations into code
+
+<!-- report:t2-got -->
+<!-- /report:t2-got -->
 
 ## 8. What this does and does not show
 
