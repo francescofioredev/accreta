@@ -143,6 +143,15 @@ Confusion, test (rows are the gold label, columns the prediction):
 ### Tier C: citations into code
 
 <!-- report:t2-got -->
+
+150 real citations from the tier C ingest into got v13.0.0 and 150 constructed negatives (the same claim against the declaration sharing most identifiers). Jev's τ = 0.73 is carried over from the SciFact calibration.
+
+| Arm and level | Negatives judged “supports” (argmax) | Negatives accepted at τ | Real citations judged “supports” | Agreement with Opus on real citations | Cost per 1,000 |
+| --- | --- | --- | --- | --- | --- |
+| jev C0 | 4.0% (6/150; 95% CI 1.5%–8.5%) | 1.3% (2/150; 95% CI 0.2%–4.7%) | 62.7% (94/150; 95% CI 54.4%–70.4%) | — (0/0; 95% CI 0.0%–100.0%) | $0.024 |
+| jev C1 | 6.7% (10/150; 95% CI 3.2%–11.9%) | 2.7% (4/150; 95% CI 0.7%–6.7%) | 63.3% (95/150; 95% CI 55.1%–71.0%) | — (0/0; 95% CI 0.0%–100.0%) | $0.030 |
+| jev C2 | 10.7% (16/150; 95% CI 6.2%–16.7%) | 4.0% (6/150; 95% CI 1.5%–8.5%) | 68.0% (102/150; 95% CI 59.9%–75.4%) | — (0/0; 95% CI 0.0%–100.0%) | $0.056 |
+
 <!-- /report:t2-got -->
 
 ## 8. What this does and does not show

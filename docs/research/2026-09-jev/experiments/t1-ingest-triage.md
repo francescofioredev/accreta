@@ -112,7 +112,7 @@ In the packed level, each question is prefixed "About section N ("title") only:"
 
 Test: 15 RFCs, 2,267 sections, 826 cited by another RFC. τ fixed on the 5 calibration RFCs for recall ≥ 0.95. Selected level: **P**. Haiku's test figures come from a seeded sample when it runs per section.
 
-| Arm | AUROC, calibration | AUROC, test | Recall of cited sections at τ, test | Sections skipped | Characters skipped (reading saved) | Latency p50 per call | Questions per call | Cost per 1,000 sections |
+| Arm | AUROC, calibration | AUROC, test | Recall of cited units at τ, test | Units skipped | Characters skipped (reading saved) | Latency p50 per call | Questions per call | Cost per 1,000 units |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | normative-count | 0.601 | 0.609 | 100.0% (826/826; 95% CI 99.6%–100.0%) | 0.0% | 0.0% | — | 1 | $0 |
 | section-length | 0.686 | 0.657 | 94.1% (777/826; 95% CI 92.2%–95.6%) | 15.0% | 2.3% | — | 1 | $0 |
@@ -121,13 +121,31 @@ Test: 15 RFCs, 2,267 sections, 826 cited by another RFC. τ fixed on the 5 calib
 | jev S2 | 0.633 | 0.646 | 91.6% (757/826; 95% CI 89.5%–93.4%) | 13.3% | 11.3% | 368 ms | 1 | $0.114 |
 | jev P **(selected)** | 0.706 | 0.648 | 93.2% (770/826; 95% CI 91.3%–94.8%) | 11.2% | 9.6% | 519 ms | 14 | $0.027 |
 
-![Recall of cited sections against reading skipped, every threshold, test RFCs](t1-tradeoff.svg)
+![Recall against reading skipped, every threshold](t1-tradeoff.svg)
 
 <!-- /report:t1-r -->
 
 ### Tier C: got
 
 <!-- report:t1-c -->
+
+Test: 14 files of got v13.0.0, 188 declarations, 86 cited by the tier C ingest (79% of the characters). τ fixed on 7 calibration files for recall ≥ 0.95. Selected level: **P**.
+
+| Arm | AUROC, calibration | AUROC, test | Recall of cited units at τ, test | Units skipped | Characters skipped (reading saved) | Latency p50 per call | Questions per call | Cost per 1,000 units |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| exported | 0.567 | 0.482 | 100.0% (86/86; 95% CI 95.8%–100.0%) | 0.0% | 0.0% | — | 1 | $0 |
+| unit-length | 0.780 | 0.802 | 94.2% (81/86; 95% CI 87.0%–98.1%) | 22.9% | 3.2% | — | 1 | $0 |
+| jev U0 | 0.690 | 0.692 | 97.7% (84/86; 95% CI 91.9%–99.7%) | 3.2% | 2.7% | 324 ms | 1 | $0.023 |
+| jev U1 | 0.710 | 0.650 | 90.7% (78/86; 95% CI 82.5%–95.9%) | 6.4% | 5.3% | 323 ms | 1 | $0.047 |
+| jev P **(selected)** | 0.720 | 0.433 | 95.3% (82/86; 95% CI 88.5%–98.7%) | 3.7% | 5.4% | 553 ms | 2 | $0.012 |
+| haiku P | 0.690 | 0.608 | 100.0% (86/86; 95% CI 95.8%–100.0%) | 0.0% | 0.0% | 75669 ms | 2 | $2.335 |
+
+![Recall against reading skipped, every threshold](t1-tradeoff-got.svg)
+
+<!-- /report:t1-c -->.335 |
+
+![Recall against reading skipped, every threshold](t1-tradeoff-got.svg)
+
 <!-- /report:t1-c -->
 
 ## 8. What this does and does not show

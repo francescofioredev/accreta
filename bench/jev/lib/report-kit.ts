@@ -12,7 +12,8 @@ export function splice(file: string, name: string, body: string): boolean {
   const doc = readFileSync(file, "utf8");
   const re = new RegExp(`(<!-- report:${name} -->)[\\s\\S]*?(<!-- /report:${name} -->)`);
   if (!re.test(doc)) throw new Error(`${file}: no report:${name} markers`);
-  const next = doc.replace(re, `$1\n\n${body.trim()}\n\n$2`);
+  // A function replacer: a body containing "$1" (a price, say) must not be read as a backreference.
+  const next = doc.replace(re, (_, open, close) => `${open}\n\n${body.trim()}\n\n${close}`);
   if (next !== doc) writeFileSync(file, next);
   return next !== doc;
 }

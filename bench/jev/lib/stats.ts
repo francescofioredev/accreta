@@ -1,15 +1,14 @@
-function logChoose(n: number, k: number): number {
-  let s = 0;
-  for (let i = 1; i <= k; i++) s += Math.log(n - k + i) - Math.log(i);
-  return s;
-}
-
 function binomCdf(k: number, n: number, p: number): number {
   if (k < 0) return 0;
   if (k >= n) return 1;
-  let s = 0;
-  for (let i = 0; i <= k; i++)
-    s += Math.exp(logChoose(n, i) + i * Math.log(p) + (n - i) * Math.log1p(-p));
+  // Terms by recurrence in log space: O(k), where recomputing each coefficient was O(k^2).
+  let logTerm = n * Math.log1p(-p);
+  let s = Math.exp(logTerm);
+  const ratio = Math.log(p) - Math.log1p(-p);
+  for (let i = 1; i <= k; i++) {
+    logTerm += Math.log(n - i + 1) - Math.log(i) + ratio;
+    s += Math.exp(logTerm);
+  }
   return Math.min(1, s);
 }
 

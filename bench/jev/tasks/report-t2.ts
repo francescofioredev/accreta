@@ -162,7 +162,7 @@ function reportPairs(prefix: string, marker: string, intro: string): void {
   }
   splice(
     join(DOCS, "experiments", "t2-citation-support.md"),
-    "t2-atlas",
+    marker,
     [
       `${intro} Jev's τ = ${tauJev.toFixed(2)} is carried over from the SciFact calibration.`,
       "",
