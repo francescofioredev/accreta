@@ -150,3 +150,62 @@ function render(
     }),
   );
 }
+
+// Opus 5.5 list prices per million tokens, checked on 2026-09-28 at platform.claude.com/docs/en/about-claude/pricing.
+// Claude Code writes the 1-hour cache, which is why the CLI's reported cost matches the $8 write rate.
+const OPUS_55 = { input: 4, cache_write_1h: 8, cache_read: 0.2, output: 20 } as const;
+
+export function reportIngestCost(): void {
+  const sessions = ["r-a-ingest.json", "r-c-ingest.json"].flatMap((f) =>
+    existsSync(join(RESULTS, f)) ? JSON.parse(readFileSync(join(RESULTS, f), "utf8")).sessions : [],
+  );
+  if (!sessions.length) return;
+  const lines = sessions.map((s: any) => {
+    const u = s.usage;
+    const parts = {
+      write: (u.cache_creation_input_tokens * OPUS_55.cache_write_1h) / 1e6,
+      read: (u.cache_read_input_tokens * OPUS_55.cache_read) / 1e6,
+      out: (u.output_tokens * OPUS_55.output) / 1e6,
+      input: (u.input_tokens * OPUS_55.input) / 1e6,
+    };
+    const total = parts.write + parts.read + parts.out + parts.input;
+    const share = (x: number) => `${((x / total) * 100).toFixed(0)}%`;
+    return [
+      s.rfc ?? "got source/",
+      s.run,
+      s.num_turns,
+      u.cache_creation_input_tokens,
+      u.cache_read_input_tokens,
+      u.output_tokens,
+      `$${total.toFixed(2)}`,
+      `$${s.total_cost_usd.toFixed(2)}`,
+      share(parts.write),
+      share(parts.read),
+      share(parts.out),
+    ];
+  });
+  splice(
+    CARD,
+    "t1-cost",
+    [
+      "Every baseline ingest session, Claude Opus 5.5 through Claude Code. Priced at list rates checked on 2026-09-28; the recomputed total matches the CLI's own report.",
+      "",
+      table(
+        [
+          "Source",
+          "Run",
+          "Turns",
+          "Cache written",
+          "Cache read",
+          "Output",
+          "Cost, recomputed",
+          "Cost, CLI",
+          "Share: cache writes",
+          "Share: cache reads",
+          "Share: output",
+        ],
+        lines,
+      ),
+    ].join("\n"),
+  );
+}

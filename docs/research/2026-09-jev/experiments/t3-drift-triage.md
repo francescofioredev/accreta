@@ -274,11 +274,51 @@ Level L0, packed: one shared rubric, one `noul` per item. τ = 0.04, from the se
 ### Tier C: code
 
 <!-- report:t3-got -->
+
+Labels are Claude Opus 5.5's, pending the maintainer's blind audit. They are to be read as the annotator's judgement, not as ground truth.
+
+| Step | Citations still to re-verify | Share of 683 |
+| --- | --- | --- |
+| accreta today: every page citing the revision | 683 | 100% |
+| per-file check: citations into a changed file | 658 | 96.3% |
+| cited range intersected with diff hunks | 114 | 16.7% |
+| of those, invalidated according to the annotator | 8 | 1.2% |
+
+**The free step.** In a seeded sample of untouched citations the annotator found 0.0% (0/60; 95% CI 0.0%–6.0%) invalidated: the ones hunk intersection would have cleared wrongly.
+
+**The decider on touched citations.** 8 of 113 labelled touched citations are invalidated, all of them in the test split. The calibration split holds none, so the pre-registered τ rule has nothing to calibrate on and degenerates to clearing nothing. The columns below are therefore **post hoc**: the lowest probability any invalidated claim received, and the share of valid claims below it, which is what a threshold at that point would clear.
+
+| Arm | Labelled items | AUROC vs annotator | Lowest p on an invalidated claim | Valid claims below it (cleared) | Latency p50 | Cost per 1,000 |
+| --- | --- | --- | --- | --- | --- | --- |
+| jev | 113 | 0.985 | 0.83 | 96.2% (101/105; 95% CI 90.5%–99.0%) | 322 ms | $0.048 |
+| haiku | 113 | 0.952 | 1.00 | 90.5% (95/105; 95% CI 83.2%–95.3%) | 11356 ms | $10.010 |
+
 <!-- /report:t3-got -->
 
 ## 8. What this does and does not show
 
-_To be completed with the results._
+- **The IETF label is not the question drift asks.**
+  - *Technical* means the original text was technically wrong. It does not mean that a claim
+    written from it is now false.
+  - The first run's ceiling (AUROC about 0.75 at every context level) and the frontier annotator's
+    disagreement with the IETF on 28% of errata both point at the label, not only at the decider.
+  - The blind audit (`bench/jev/audit.ts t3`, `l3`, `t3c`) decides which reference to trust.
+  - Until it runs, figures against the annotator are the annotator's judgement.
+- **Context does not rescue the errata result.**
+  - Every level from the minimal state to the surrounding section scores about the same.
+  - The word diff alone scores worse.
+- **Code drift rests on eight invalidated claims.**
+  - All eight fell in the test split, so the pre-registered τ rule had nothing to calibrate on.
+  - The threshold that clears 96% of valid claims without missing one is post hoc, and eight
+    positives cannot confirm it.
+- **The free step's safety rests on 60 sampled citations.** Zero wrong clears bounds the rate
+  below about 6%, not below 1%.
+- **One codebase, one pair of tags.** got v13.0.0 → v14.4.0 is a real major release, but it is one.
+- **Training data.** Errata and claims derived from public RFCs may have been seen by every model
+  here; code from a popular library likely was.
+- **Batching needs its own calibration.** Packing items into one call leaves the ranking intact,
+  but moves the probabilities. A threshold fixed on unpacked calls clears less when applied to
+  packed ones.
 
 ## 9. Reproduce
 

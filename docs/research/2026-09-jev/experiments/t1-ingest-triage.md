@@ -106,6 +106,26 @@ In the packed level, each question is prefixed "About section N ("title") only:"
 
 ## 7. Results
 
+### What ingest costs, and where
+
+<!-- report:t1-cost -->
+
+Every baseline ingest session, Claude Opus 5.5 through Claude Code. Priced at list rates checked on 2026-09-28; the recomputed total matches the CLI's own report.
+
+| Source | Run | Turns | Cache written | Cache read | Output | Cost, recomputed | Cost, CLI | Share: cache writes | Share: cache reads | Share: output |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| RFC9111 | 1 | 22 | 77000 | 477271 | 26386 | $1.24 | $1.24 | 50% | 8% | 43% |
+| RFC6455 | 1 | 31 | 113439 | 929773 | 34701 | $1.79 | $1.79 | 51% | 10% | 39% |
+| RFC9111 | 2 | 31 | 85337 | 917047 | 27180 | $1.41 | $1.41 | 48% | 13% | 39% |
+| RFC6455 | 2 | 42 | 126198 | 1521633 | 41604 | $2.15 | $2.15 | 47% | 14% | 39% |
+| RFC9111 | 3 | 31 | 77871 | 872101 | 28310 | $1.36 | $1.36 | 46% | 13% | 42% |
+| RFC6455 | 3 | 39 | 126212 | 1520802 | 43592 | $2.19 | $2.19 | 46% | 14% | 40% |
+| got source/ | 1 | 60 | 135889 | 3351338 | 50879 | $2.78 | $2.82 | 39% | 24% | 37% |
+| got source/ | 2 | 76 | 128101 | 2031703 | 44301 | $2.32 | $2.32 | 44% | 18% | 38% |
+| got source/ | 3 | 56 | 113100 | 2063552 | 37806 | $2.07 | $2.07 | 44% | 20% | 36% |
+
+<!-- /report:t1-cost -->
+
 ### Tier R
 
 <!-- report:t1-r -->
@@ -150,7 +170,17 @@ Test: 14 files of got v13.0.0, 188 declarations, 86 cited by the tier C ingest (
 
 ## 8. What this does and does not show
 
-_To be completed with the results._
+- **The tier R label is a proxy that fails.**
+  - "Cited by another RFC" agrees with "cited by the ingest agent" at kappa 0.005.
+  - The tier R result says Jev cannot predict what other authors cite. It says nothing about ingest.
+- **The ceiling is the finding.** The ingest agent cites 95% of RFC sections and code holding 79%
+  of the characters. No decider, however good, can skip much of what the writer then uses.
+- **Where ingest's money goes.** Cache writes, output and cache reads, in that order. The source
+  itself is a minority of the cache writes. Even perfect triage would touch a fraction of the bill.
+- **Tier C calibration is too small to select on.** 25 units in 7 files chose the packed level,
+  which then scored worst on test. That is the known failure of selecting on a small split, and
+  it is reported rather than repaired after the fact.
+- **One agent, one model, one constitution.** A leaner writer that cites less would leave more to skip.
 
 ## 9. Reproduce
 

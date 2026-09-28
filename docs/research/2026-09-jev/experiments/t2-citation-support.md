@@ -134,9 +134,11 @@ Confusion, test (rows are the gold label, columns the prediction):
 
 | Arm and level | Negatives judged “supports” (argmax) | Negatives accepted at τ | Real citations judged “supports” | Agreement with Opus on real citations | Cost per 1,000 |
 | --- | --- | --- | --- | --- | --- |
-| jev C0 | 16.7% (25/150; 95% CI 11.1%–23.6%) | 5.3% (8/150; 95% CI 2.3%–10.2%) | 79.3% (119/150; 95% CI 72.0%–85.5%) | — (0/0; 95% CI 0.0%–100.0%) | $0.023 |
-| jev C1 | 21.3% (32/150; 95% CI 15.1%–28.8%) | 11.3% (17/150; 95% CI 6.7%–17.5%) | 78.0% (117/150; 95% CI 70.5%–84.3%) | — (0/0; 95% CI 0.0%–100.0%) | $0.032 |
-| jev C2 | 28.0% (42/150; 95% CI 21.0%–35.9%) | 12.7% (19/150; 95% CI 7.8%–19.1%) | 82.7% (124/150; 95% CI 75.6%–88.4%) | — (0/0; 95% CI 0.0%–100.0%) | $0.040 |
+| haiku C1 | 14.0% (21/150; 95% CI 8.9%–20.6%) | — | 64.0% (96/150; 95% CI 55.8%–71.7%) | 80.0% (120/150; 95% CI 72.7%–86.1%) | $8.898 |
+| opus C1 | 16.7% (25/150; 95% CI 11.1%–23.6%) | — | 63.3% (95/150; 95% CI 55.1%–71.0%) | — | $15.686 |
+| jev C0 | 16.7% (25/150; 95% CI 11.1%–23.6%) | 5.3% (8/150; 95% CI 2.3%–10.2%) | 79.3% (119/150; 95% CI 72.0%–85.5%) | 73.3% (110/150; 95% CI 65.5%–80.2%) | $0.023 |
+| jev C1 | 21.3% (32/150; 95% CI 15.1%–28.8%) | 11.3% (17/150; 95% CI 6.7%–17.5%) | 78.0% (117/150; 95% CI 70.5%–84.3%) | 76.0% (114/150; 95% CI 68.4%–82.6%) | $0.032 |
+| jev C2 | 28.0% (42/150; 95% CI 21.0%–35.9%) | 12.7% (19/150; 95% CI 7.8%–19.1%) | 82.7% (124/150; 95% CI 75.6%–88.4%) | 70.7% (106/150; 95% CI 62.7%–77.8%) | $0.040 |
 
 <!-- /report:t2-atlas -->
 
@@ -156,7 +158,18 @@ Confusion, test (rows are the gold label, columns the prediction):
 
 ## 8. What this does and does not show
 
-_To be completed with the results._
+- **SciFact is the only human ground truth here, and it is biomedical.** Jev and Haiku are
+  indistinguishable on it. Neither passes the 5% gate at 70% acceptance; both come close.
+- **The constructed negatives are partly positives.**
+  - A different section of the same RFC sometimes does support the claim: specifications repeat
+    themselves.
+  - The frontier annotator itself calls 16.7% of RFC negatives "supports". False-"supports" rates
+    on the negatives are therefore upper bounds.
+- **"Real citations judged unsupported" overstates the problem.** The claim extractor gives each
+  footnote the whole sentence that carries it, so a footnote supporting half a sentence reads as
+  partial. The audit (`bench/jev/audit.ts t2a`) measures how much of the gap this explains.
+- **Context hurts, consistently.** Across RFCs and code, a wider state raised false "supports" at
+  every step. This matches Jev's own documentation, and it is the most stable result in the study.
 
 ## 9. Reproduce
 

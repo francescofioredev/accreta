@@ -113,7 +113,17 @@ See §3. The query file records each query's gold paths.
 
 ## 8. What this does and does not show
 
-_To be completed with the results._
+- **Queries partly written by a model.**
+  - Paraphrase queries come from Claude Sonnet 5, told to avoid the title's words. It does not
+    always comply, which favours BM25.
+  - Supersession queries are templates. Their gold comes from the RFC index, not from a model.
+- **The knowledge base is a catalogue.** One page per RFC, holding title, abstract and typed links,
+  generated without judgement. A curated knowledge base with richer links would favour navigation
+  more; a sparser one, less.
+- **The 60% with no links** is a property of the IETF's graph, not of accreta. It bounds any
+  navigator that starts without an index.
+- **Rerank sees only BM25's top 20.** A query whose answer is not in the top 20 cannot be rescued
+  by reranking. Rerank recall is therefore bounded by BM25's recall@20: 100% on title queries, 95.3% on paraphrases and 77.3% on supersession, which is where rerank's recall@5 levels off.
 
 ## 9. Reproduce
 
