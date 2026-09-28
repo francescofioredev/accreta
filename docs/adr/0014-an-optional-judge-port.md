@@ -14,8 +14,9 @@ The [decision-model study](../research/2026-09-jev/README.md) measured four of t
 a typed decision model (Jev), against the deterministic step and Claude Haiku 4.5. The findings
 split cleanly:
 
-- **Retrieval.** Reranking the top BM25 hits, or following typed links from the top hit, closes
-  most of the gap where lexical search fails: paraphrased questions, and answers one link away.
+- **Retrieval.** Reranking the top BM25 hits closes most of the gap where lexical search fails:
+  paraphrased questions, and answers one link away. Following typed links from the top hit
+  closes part of it.
 - **Citation support.** A cheap check that the cited lines back the claim is feasible, at a few
   cents per thousand citations. It is most reliable when it sees nothing but the cited lines.
 - **Drift.** Most of the gain comes from a deterministic change: intersecting citations with the
@@ -53,12 +54,12 @@ so a reader can discount it.
 
 **The state a judge sees is the narrowest that answers the question.** For citation support that
 is the cited lines and nothing else: the study measured more context raising false "supports" on
-every tier.
+RFCs and on code.
 
 ## Alternatives rejected
 
 - **Leave it to the client.** It is the status quo, and it is honest. It also means lint cannot
-  catch a fabricated citation and search cannot recover a paraphrase, the two gaps the study found
+  catch a citation whose lines do not back its claim, and search cannot recover a paraphrase: the two gaps the study found
   a model closes. Kept as the default: the port is optional.
 - **Ingest triage.** The study found too little to skip and too little cost in reading.
 - **Replacing the index with navigation.** A 9,842-page rebuild takes about five seconds, and 60%

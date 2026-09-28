@@ -19,7 +19,7 @@ The case against is structural:
 - **A page with no links cannot be reached at all.**
 
 The case for is where lexical search is weak:
-- paraphrased queries, where ADR-0001 found BM25 at 50% recall;
+- paraphrased queries, where ADR-0001 found BM25 at 50% recall (on n=6, so a wide interval);
 - questions whose answer sits one link away from the page the query names.
 
 **H1 (complement, not replacement).** On the class where BM25 is weakest, the answer reachable
@@ -113,6 +113,12 @@ See §3. The query file records each query's gold paths.
 
 ## 8. What this does and does not show
 
+**Verdict on the pre-registered hypotheses.**
+- **H1: holds.** Navigation from BM25's top hit raises supersession recall@1 from 22.7% to 57.3%,
+  well over the 20-point floor. The other two classes move up slightly rather than down.
+- **H2: holds.** Reranking raises paraphrase recall@1 from 70.0% to 86.0%, over the 10-point floor.
+- **H3:** 60.0% of the knowledge base's pages have no link in either direction.
+
 - **Queries partly written by a model.**
   - Paraphrase queries come from Claude Sonnet 5, told to avoid the title's words. It does not
     always comply, which favours BM25.
@@ -142,4 +148,5 @@ bun bench/jev/report.ts
 | Date | Commit | What | Outcome |
 | --- | --- | --- | --- |
 | 2026-09-28 | — | Knowledge base built and indexed; BM25 arm run | Deterministic, no model |
-| 2026-09-28 | _pre-registration_ | Queries, gold, arms and protocol committed | — |
+| 2026-09-28 | `fad9e11` | Pre-registration committed | — |
+| 2026-09-28 | — | Jev rerank and navigation | Complete. 10 transient `2018` errors, all succeeded on rerun |

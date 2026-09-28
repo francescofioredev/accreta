@@ -64,10 +64,15 @@ export function reportT3Got(): void {
     const floor = Math.min(...rs.filter((r) => label.get(r.id)).map((r) => r.value as number));
     const valid = rs.filter((r) => !label.get(r.id));
     const lat = rs.map((r) => r.latency_ms).filter((x) => x > 0);
+    const test = rs.filter((r) => r.split === "test");
     return [
       arm,
       rs.length,
       auroc(p, y).toFixed(3),
+      `${auroc(
+        test.map((r) => r.value as number),
+        test.map((r) => label.get(r.id)!),
+      ).toFixed(3)} (n=${test.length})`,
       floor.toFixed(2),
       fmtRate(rate(valid.filter((r) => (r.value as number) < floor).length, valid.length)),
       `${Math.round(percentile(lat, 0.5))} ms`,
@@ -91,7 +96,8 @@ export function reportT3Got(): void {
         [
           "Arm",
           "Labelled items",
-          "AUROC vs annotator",
+          "AUROC vs annotator, all touched",
+          "AUROC, pre-registered test split",
           "Lowest p on an invalidated claim",
           "Valid claims below it (cleared)",
           "Latency p50",

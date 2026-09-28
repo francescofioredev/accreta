@@ -179,7 +179,7 @@ together under 8,000 characters. That leaves 1,885 technical and 1,698 editorial
 
 **Label noise.** Not every IETF classification is one this study would make. Some Editorial
 errata fix a grammar rule's syntax, and five Technical errata differ only in whitespace.
-The label noise is measured on an audit sample of 50 items that the maintainer labels blind (see
+The label noise is measured on an audit sample of 60 items (30 per class) that the maintainer labels blind (see
 §7).
 
 ## 6. Metrics and why these
@@ -288,14 +288,27 @@ Labels are Claude Opus 5.5's, pending the maintainer's blind audit. They are to 
 
 **The decider on touched citations.** 8 of 113 labelled touched citations are invalidated, all of them in the test split. The calibration split holds none, so the pre-registered τ rule has nothing to calibrate on and degenerates to clearing nothing. The columns below are therefore **post hoc**: the lowest probability any invalidated claim received, and the share of valid claims below it, which is what a threshold at that point would clear.
 
-| Arm | Labelled items | AUROC vs annotator | Lowest p on an invalidated claim | Valid claims below it (cleared) | Latency p50 | Cost per 1,000 |
-| --- | --- | --- | --- | --- | --- | --- |
-| jev | 113 | 0.985 | 0.83 | 96.2% (101/105; 95% CI 90.5%–99.0%) | 322 ms | $0.048 |
-| haiku | 113 | 0.952 | 1.00 | 90.5% (95/105; 95% CI 83.2%–95.3%) | 11356 ms | $10.010 |
+| Arm | Labelled items | AUROC vs annotator, all touched | AUROC, pre-registered test split | Lowest p on an invalidated claim | Valid claims below it (cleared) | Latency p50 | Cost per 1,000 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| jev | 113 | 0.985 | 0.977 (n=75) | 0.83 | 96.2% (101/105; 95% CI 90.5%–99.0%) | 322 ms | $0.048 |
+| haiku | 113 | 0.952 | 0.940 (n=75) | 1.00 | 90.5% (95/105; 95% CI 83.2%–95.3%) | 11356 ms | $10.010 |
 
 <!-- /report:t3-got -->
 
 ## 8. What this does and does not show
+
+**Verdict on the pre-registered hypotheses.**
+- **H1, tier R, against the IETF label: refuted.** At τ = 0.04 the false "still valid" rate is
+  1.0% (upper bound 2.5%), well inside the gate. But only 10.3% of editorial errata are cleared,
+  below the 30% floor. Amendment 1's context ladder selected the minimal level again, with the
+  same outcome.
+- **L3: refuted.** τ rests on 25 calibration items per class, and the false "still valid" rate on
+  test is 13.1%.
+- **Tier C: not decidable as registered.** No invalidated claim fell in the calibration split, so
+  the τ rule degenerates. The post-hoc result is strongly positive, and rests on eight positives.
+- **H2:** Jev's AUROC is above Haiku's on every set, against either reference.
+- **All of the above use the IETF label or the annotator.** The audit decides which verdict
+  applies to drift as accreta means it.
 
 - **The IETF label is not the question drift asks.**
   - *Technical* means the original text was technically wrong. It does not mean that a claim
@@ -326,7 +339,18 @@ Labels are Claude Opus 5.5's, pending the maintainer's blind audit. They are to 
 bun bench/jev/fetch/rfc.ts            # errata feed and index, hash-checked
 bun bench/jev/builders/errata.ts      # rebuilds data/t3-errata.json exactly
 wrangler dev --config bench/jev/proxy/wrangler.jsonc --port 8799   # holds the Cloudflare credentials
-bun bench/jev/tasks/run-t3.ts
+bun bench/jev/tasks/run-t3.ts                          # tier R, the original arms
+bun bench/jev/tasks/run-t3-ladder.ts --stage=ladder    # amendment 1: levels and forms
+bun bench/jev/tasks/run-t3-ladder.ts --stage=haiku
+bun bench/jev/builders/claims-t3.ts                    # claims for L3 (Sonnet 5; cached)
+bun bench/jev/tasks/run-t3-ladder.ts --stage=l3
+bun bench/jev/tasks/run-t3-ladder.ts --stage=batch
+bun bench/jev/tasks/annotate-t3.ts                     # post hoc: Opus 5.5 on the errata
+bun bench/jev/tasks/annotate-l3.ts                     # post hoc: Opus 5.5 on the claims
+bun bench/jev/tasks/ingest-got.ts                      # tier C baseline ingest (Claude Code)
+bun bench/jev/builders/tier-c-drift.ts
+bun bench/jev/tasks/run-t3-got.ts
+bun bench/jev/audit.ts t3                              # the blind audit (also l3, t3c)
 bun bench/jev/report.ts
 ```
 
@@ -339,3 +363,10 @@ bun bench/jev/report.ts
 | 2026-09-27 | `971a0ee` | Blind audit sample drawn (30 per class) after the run showed label noise | — |
 | 2026-09-27 | — | Haiku (L0) and the Opus 5.5 second annotator started | Paused by the maintainer at 416 and 84 of 1,000; resumed from the cache |
 | 2026-09-28 | `4c0bba2` | Context ladder, question forms, L3 and batching committed before their calls | — |
+| 2026-09-28 | — | Ladder (8 configurations), Haiku at the selected one, batching | Complete. 76 transient `2018` errors, all succeeded on rerun. Calibration selected L0-noul |
+| 2026-09-28 | `5f47d4f` | 249 claims for L3 written by Sonnet 5 and committed before any judge (one of 250 failed to generate) | — |
+| 2026-09-28 | — | L3, Jev and Haiku | AUROC near chance against the IETF label, which is not a claim-level label |
+| 2026-09-28 | — | **Post hoc:** Opus 5.5 labels the 1,000 errata and the 249 claims | Added after the first run exposed label noise. It agrees with the IETF on 72% of errata |
+| 2026-09-28 | `88ed878` | Tier C pre-registered: 683 citations, deterministic facts, samples | — |
+| 2026-09-28 | — | Tier C, Jev, Haiku and the annotator | All eight invalidated claims fell in the test split; the τ rule degenerates and the threshold is reported post hoc |
+| 2026-09-28 | `4629f72` | Blind audit samples for l3, t3c and t2a committed | Awaiting the maintainer |

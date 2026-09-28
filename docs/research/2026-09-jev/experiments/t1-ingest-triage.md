@@ -8,7 +8,7 @@ well enough that skipping the rest loses almost nothing a reader would cite?
 ## 2. Hypothesis and falsification
 
 Ingest is the expensive phase. An agent reads the whole source, and the 8 RFCs in accreta-atlas
-alone are about 423k input tokens. Yet the [constitution](../../../../templates/constitution/base.md)
+alone are about 423k input tokens (**CITED**: the [model-economist review](../../2026-08-review/06-model-economist.md)). Yet the [constitution](../../../../templates/constitution/base.md)
 says most of a source does not deserve a page. If a cheap decider can say which sections do,
 the writing model reads only those. The risk is a silent miss: a section skipped is knowledge
 the knowledge base never gets, and nothing flags it.
@@ -110,7 +110,7 @@ In the packed level, each question is prefixed "About section N ("title") only:"
 
 <!-- report:t1-cost -->
 
-Every baseline ingest session, Claude Opus 5.5 through Claude Code. Priced at list rates checked on 2026-09-28; the recomputed total matches the CLI's own report.
+Every baseline ingest session, Claude Opus 5.5 through Claude Code. Priced at list rates checked on 2026-09-28; the recomputed total matches the CLI's own report to the cent on eight of nine sessions, and by four cents on the ninth.
 
 | Source | Run | Turns | Cache written | Cache read | Output | Cost, recomputed | Cost, CLI | Share: cache writes | Share: cache reads | Share: output |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -140,6 +140,7 @@ Test: 15 RFCs, 2,267 sections, 826 cited by another RFC. τ fixed on the 5 calib
 | jev S1 | 0.660 | 0.668 | 92.0% (760/826; 95% CI 89.9%–93.8%) | 12.1% | 9.1% | 313 ms | 1 | $0.043 |
 | jev S2 | 0.633 | 0.646 | 91.6% (757/826; 95% CI 89.5%–93.4%) | 13.3% | 11.3% | 368 ms | 1 | $0.114 |
 | jev P **(selected)** | 0.706 | 0.648 | 93.2% (770/826; 95% CI 91.3%–94.8%) | 11.2% | 9.6% | 519 ms | 14 | $0.027 |
+| haiku P | 0.526 | 0.500 | 100.0% (826/826; 95% CI 99.6%–100.0%) | 0.0% | 0.0% | 59172 ms | 14 | $2.625 |
 
 ![Recall against reading skipped, every threshold](t1-tradeoff.svg)
 
@@ -162,21 +163,28 @@ Test: 14 files of got v13.0.0, 188 declarations, 86 cited by the tier C ingest (
 
 ![Recall against reading skipped, every threshold](t1-tradeoff-got.svg)
 
-<!-- /report:t1-c -->.335 |
-
-![Recall against reading skipped, every threshold](t1-tradeoff-got.svg)
-
 <!-- /report:t1-c -->
 
 ## 8. What this does and does not show
+
+**Verdict on the pre-registered hypotheses.**
+- **H1, tier R: refuted.** At τ, Jev keeps 93.2% of the cited sections, below the 95% floor, and
+  skips about a tenth of the text, below the 30% floor.
+- **H1, tier C: refuted.** Recall holds at 95.3%, but only 5.4% of the characters are skipped.
+- **H2:** on code, the length of each declaration ranks better than Jev at every level.
 
 - **The tier R label is a proxy that fails.**
   - "Cited by another RFC" agrees with "cited by the ingest agent" at kappa 0.005.
   - The tier R result says Jev cannot predict what other authors cite. It says nothing about ingest.
 - **The ceiling is the finding.** The ingest agent cites 95% of RFC sections and code holding 79%
   of the characters. No decider, however good, can skip much of what the writer then uses.
-- **Where ingest's money goes.** Cache writes, output and cache reads, in that order. The source
-  itself is a minority of the cache writes. Even perfect triage would touch a fraction of the bill.
+- **Where ingest's money goes.** Cache writes, output and cache reads, in that order (table above).
+  The source itself is a minority of the cache writes. This is REASONED from file sizes at about four
+  characters per token: RFC 9111 is about 21k tokens, RFC 6455 about 40k, got's `source/` about
+  38k, against 77k–136k tokens written to the cache per session. Written once and re-read on every
+  turn, the source accounts for roughly a fifth to a quarter of a session's cost. Triage could
+  recover at most the share it skips of that fifth: about 5% of it on RFCs, 21% on code at perfect
+  recall, and about 5% on code as Jev performed. That is on the order of 1% of the bill.
 - **Tier C calibration is too small to select on.** 25 units in 7 files chose the packed level,
   which then scored worst on test. That is the known failure of selecting on a small split, and
   it is reported rather than repaired after the fact.
@@ -192,6 +200,12 @@ bun bench/jev/builders/t1-sections.ts
 wrangler dev --config bench/jev/proxy/wrangler.jsonc --port 8799
 bun bench/jev/tasks/run-t1.ts --stage=jev
 bun bench/jev/tasks/run-t1.ts --stage=haiku
+bun bench/jev/tasks/ingest-atlas.ts        # tier A labels and ingest cost
+bun bench/jev/builders/tier-a.ts
+bun bench/jev/tasks/ingest-got.ts          # tier C labels and ingest cost
+bun bench/jev/builders/tier-c-drift.ts
+bun bench/jev/builders/tier-c-units.ts
+bun bench/jev/tasks/run-t1-got.ts
 bun bench/jev/report.ts
 ```
 
@@ -201,4 +215,6 @@ bun bench/jev/report.ts
 | --- | --- | --- | --- |
 | 2026-09-28 | `8fb7546` | Cross-references, targets, sections, levels, question and protocol committed | — |
 | 2026-09-28 | — | Jev at every level, tier R | Complete. 65 transient Cloudflare `2018` errors, all succeeded on rerun |
-| 2026-09-28 | _pre-registration_ | Tier A ceiling and tier C units, levels and protocol committed | — |
+| 2026-09-28 | `f824a20`, `474e2ee` | Baseline ingests: 6 sessions over RFC 9111 and 6455, 3 over got | Complete. One got session exited at start because a synchronous clone blocked its stdin; rerun after the harness was fixed |
+| 2026-09-28 | `232a279` | Tier C units pre-registered after the unit definition was corrected (a local `const` no longer splits a method) | — |
+| 2026-09-28 | — | Tier C: Jev at every level, Haiku at P | P was selected on 25 calibration units and scored worst on test |

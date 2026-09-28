@@ -48,6 +48,14 @@ export function reportHeadline(): void {
     auc(pick("jev", "opus")),
     auc(pick("haiku", "opus")),
   ]);
+  const ann = load("r-t3-annotator.json")?.rows ?? [];
+  lines.push([
+    "",
+    "the annotator agrees with the IETF label",
+    pct(ann.filter((r: any) => r.annotator === r.ietf).length / (ann.length || 1), 0),
+    "",
+    "",
+  ]);
   const l3 = load("r-t3-ladder-l3.json")?.rows ?? [];
   const opusL3 = new Map(
     (load("r-t3-annotator-l3.json")?.rows ?? [])
@@ -58,13 +66,18 @@ export function reportHeadline(): void {
     l3
       .filter((r: any) => r.arm === arm && r.p !== null && opusL3.has(r.id))
       .map((r: any) => ({ p: r.p, y: opusL3.get(r.id) as boolean }));
+  const l3i = (arm: string) =>
+    l3
+      .filter((r: any) => r.arm === arm && r.p !== null && r.split === "test")
+      .map((r: any) => ({ p: r.p, y: r.label === "technical" }));
   lines.push([
     "Drift, claims over errata: is the claim still true?",
-    "AUROC vs frontier annotator",
+    "AUROC vs IETF label (test split)",
     "—",
-    auc(l3p("jev")),
-    auc(l3p("haiku")),
+    auc(l3i("jev")),
+    auc(l3i("haiku")),
   ]);
+  lines.push(["", "AUROC vs frontier annotator", "—", auc(l3p("jev")), auc(l3p("haiku"))]);
   const got = [
     ...(load("r-t3-got-jev.json")?.rows ?? []),
     ...(load("r-t3-got-haiku+opus.json")?.rows ?? []),
@@ -76,7 +89,10 @@ export function reportHeadline(): void {
   );
   const gp = (arm: string) =>
     got
-      .filter((r: any) => r.arm === arm && typeof r.value === "number" && opusGot.has(r.id))
+      .filter(
+        (r: any) =>
+          r.arm === arm && r.split === "test" && typeof r.value === "number" && opusGot.has(r.id),
+      )
       .map((r: any) => ({ p: r.value, y: opusGot.get(r.id) as boolean }));
   const items = existsSync(join(DATA, "t3-got.json"))
     ? JSON.parse(readFileSync(join(DATA, "t3-got.json"), "utf8")).items
@@ -89,7 +105,13 @@ export function reportHeadline(): void {
     "",
     "",
   ]);
-  lines.push(["", "AUROC on those, vs frontier annotator", "—", auc(gp("jev")), auc(gp("haiku"))]);
+  lines.push([
+    "",
+    "AUROC on those, vs frontier annotator (test split)",
+    "—",
+    auc(gp("jev")),
+    auc(gp("haiku")),
+  ]);
   const sf = (arm: string) => {
     const r =
       load(`r-t2-scifact-${arm}.json`)?.rows.filter((x: any) => x.split === "test" && x.choice) ??
@@ -130,15 +152,18 @@ export function reportHeadline(): void {
     "—",
   ]);
   const lat = (f: string) => {
-    const rs = (load(f)?.rows ?? []).map((r: any) => r.latency_ms).filter((x: number) => x > 0);
+    const rs = (load(f)?.rows ?? [])
+      .filter((r: any) => r.sample === 0)
+      .map((r: any) => r.latency_ms)
+      .filter((x: number) => x > 0);
     return rs.length ? `${Math.round(percentile(rs, 0.5))} ms` : "—";
   };
   lines.push([
-    "Latency per decision, p50 (errata)",
+    "Latency per decision, p50 (errata, all 1,000)",
     "",
-    "0 ms",
+    "—",
     lat("r-t3-jev+jev-repeat.json"),
-    `${lat("r-t3-haiku.json")} (CLI)`,
+    `${lat("r-t3-haiku.json")} (through the CLI)`,
   ]);
   splice(
     join(DOCS, "README.md"),

@@ -188,7 +188,7 @@ export function reportIngestCost(): void {
     CARD,
     "t1-cost",
     [
-      "Every baseline ingest session, Claude Opus 5.5 through Claude Code. Priced at list rates checked on 2026-09-28; the recomputed total matches the CLI's own report.",
+      "Every baseline ingest session, Claude Opus 5.5 through Claude Code. Priced at list rates checked on 2026-09-28; the recomputed total matches the CLI's own report to the cent on eight of nine sessions, and by four cents on the ninth.",
       "",
       table(
         [

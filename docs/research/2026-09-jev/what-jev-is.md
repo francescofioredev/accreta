@@ -18,7 +18,7 @@ named source), **REASONED** (an argument, and the weakest).
 | Questions | `noul`: P(yes). `choice`: up to 255 described options, with the full distribution. `score`: a rubric of 2–10 levels. Any number of questions per call over one state; TypeSafe documents no maximum. **CITED**: [API](https://docs.typesafe.ai/api.md) |
 | Limits | "64k tokens per request; 32k tokens for `state` plus the longest question". **CITED**: [models](https://docs.typesafe.ai/models.md) |
 | Price | $0.042 per million input tokens. Output tokens are not billed. **CITED**: [models](https://docs.typesafe.ai/models.md) |
-| Latency | Vendor: 70–500 ms end to end. **CITED**: [launch post](https://typesafe.ai/blog/introducing-system-one-models-and-jev). This study: about 300–340 ms at p50 and 450–500 ms at p95, timed inside a Cloudflare Worker for single-question calls. **MEASURED** |
+| Latency | Vendor: 70–500 ms end to end. **CITED**: [launch post](https://typesafe.ai/blog/introducing-system-one-models-and-jev). This study: about 310–420 ms at p50 and 450–600 ms at p95 for calls of one to a few questions, timed inside a Cloudflare Worker. Packed calls of dozens of questions take longer per call and far less per decision. **MEASURED** |
 | Customisation | None on the weights: "Jev is not fine-tuned or LoRA-adapted with customer data". Everything is in the state, the instructions and the option descriptions. **CITED**: [models](https://docs.typesafe.ai/models.md) |
 | Rationale | None. Every response in this study carries only the declared answers, their probabilities and token usage, never an explanation. **MEASURED** |
 

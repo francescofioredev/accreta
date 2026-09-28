@@ -21,7 +21,7 @@ Every task compares the same kinds of decider:
 
 | Tier | Corpus | What it is for |
 | --- | --- | --- |
-| **A: atlas** | Two RFCs from [accreta-atlas](https://github.com/francescofioredev/accreta-atlas) | In-domain and small: pages written the way accreta's constitution asks. Directional only. |
+| **A: atlas** | RFC 9111 and RFC 6455, two of the eight RFCs vendored in [accreta-atlas](https://github.com/francescofioredev/accreta-atlas) | In-domain and small: pages written the way accreta's constitution asks. Directional only. |
 | **R: RFC scale** | The RFC series, errata feed and index from the RFC Editor | Enough items per class to decide a gate, with labels made by people outside this project. |
 | **C: codebase** | One TypeScript repository pinned at two tags | The launch target: code, not prose. |
 
@@ -66,10 +66,26 @@ third-party text itself.
 - **RFCs and the errata feed:** published by the RFC Editor under the IETF Trust's legal
   provisions.
 - **SciFact:** CC BY-NC 2.0, which is why it is fetched rather than vendored.
-- **The tier C repository:** its own licence, named in the card.
+- **The tier C repository:** [got](https://github.com/sindresorhus/got), an HTTP client for
+  Node.js, MIT licence. It is cloned at its tags by the harness, never vendored.
 
 ## Results
 
 `bench/jev/results/` holds one row per item per arm, committed, so every figure in these cards
 can be recomputed. The call cache (`bench/jev/.cache/`) is local: a rerun of a completed task makes
 no calls.
+
+## Terms used in the cards
+
+| Term | Meaning |
+| --- | --- |
+| AUROC | The probability that a decider scores a random positive above a random negative. 0.5 is chance and 1.0 is a perfect ranking. It does not depend on any threshold |
+| τ (tau) | The threshold on a decider's probability that turns it into an action (clear, keep, accept). Fixed on a calibration split, or carried over from another task where a card says so; never tuned on the split it is reported on. The one post-hoc threshold (tier C drift) is labelled as such |
+| Recall@k | The share of queries whose relevant page is among the top k results |
+| BM25 | The lexical ranking SQLite FTS5 uses, and so the one accreta's `search_pages` uses |
+| Hunk | One contiguous changed region in a diff |
+| `noul`, `choice`, `score` | Jev's question types: a probability of yes; a distribution over described options; a level on a rubric |
+| Frontier annotator | Claude Opus 5.5, used as a second labeller where no human label exists. Its labels count only as far as the blind audit confirms them |
+| Levels | The state a decider sees, from least to most. T1: S0–S2 and P (RFC sections), U0–U1 and P (code units); P packs a whole document into one call. T2: C0–C2 (cited lines, ±10 lines, enclosing section). T3: L0–L3 (texts, diff, surrounding section, claim) |
+| Tiers | A (accreta-atlas, small), R (the RFC series, at scale), C (the got codebase) |
+| Transient `2018` error | A Cloudflare AI Gateway error ("Invalid User Credentials") returned intermittently on calls that succeed when retried with the same credentials |

@@ -150,13 +150,23 @@ Confusion, test (rows are the gold label, columns the prediction):
 
 | Arm and level | Negatives judged “supports” (argmax) | Negatives accepted at τ | Real citations judged “supports” | Agreement with Opus on real citations | Cost per 1,000 |
 | --- | --- | --- | --- | --- | --- |
-| jev C0 | 4.0% (6/150; 95% CI 1.5%–8.5%) | 1.3% (2/150; 95% CI 0.2%–4.7%) | 62.7% (94/150; 95% CI 54.4%–70.4%) | — (0/0; 95% CI 0.0%–100.0%) | $0.024 |
-| jev C1 | 6.7% (10/150; 95% CI 3.2%–11.9%) | 2.7% (4/150; 95% CI 0.7%–6.7%) | 63.3% (95/150; 95% CI 55.1%–71.0%) | — (0/0; 95% CI 0.0%–100.0%) | $0.030 |
-| jev C2 | 10.7% (16/150; 95% CI 6.2%–16.7%) | 4.0% (6/150; 95% CI 1.5%–8.5%) | 68.0% (102/150; 95% CI 59.9%–75.4%) | — (0/0; 95% CI 0.0%–100.0%) | $0.056 |
+| haiku C0 | 2.0% (3/150; 95% CI 0.4%–5.7%) | — | 48.7% (73/150; 95% CI 40.4%–57.0%) | 72.7% (109/150; 95% CI 64.8%–79.6%) | $7.696 |
+| opus C0 | 2.7% (4/150; 95% CI 0.7%–6.7%) | — | 54.0% (81/150; 95% CI 45.7%–62.2%) | — | $13.141 |
+| jev C0 | 4.0% (6/150; 95% CI 1.5%–8.5%) | 1.3% (2/150; 95% CI 0.2%–4.7%) | 62.7% (94/150; 95% CI 54.4%–70.4%) | 68.0% (102/150; 95% CI 59.9%–75.4%) | $0.024 |
+| jev C1 | 6.7% (10/150; 95% CI 3.2%–11.9%) | 2.7% (4/150; 95% CI 0.7%–6.7%) | 63.3% (95/150; 95% CI 55.1%–71.0%) | 63.3% (95/150; 95% CI 55.1%–71.0%) | $0.030 |
+| jev C2 | 10.7% (16/150; 95% CI 6.2%–16.7%) | 4.0% (6/150; 95% CI 1.5%–8.5%) | 68.0% (102/150; 95% CI 59.9%–75.4%) | 60.7% (91/150; 95% CI 52.4%–68.5%) | $0.056 |
 
 <!-- /report:t2-got -->
 
 ## 8. What this does and does not show
+
+**Verdict on the pre-registered hypotheses.**
+- **H1, SciFact: refuted, narrowly, for both deciders.** At τ, Jev accepts 6.9% of non-supporting
+  pairs and Haiku 5.0%; the gate is under 5%. Both accept 83.3% of supporting pairs.
+- **Tiers A and C: only half decidable.** On constructed negatives at C0, Jev's false "supports"
+  is 5.3% on RFCs and 1.3% on code (upper bound 4.7%). The 70% acceptance half of H1 needs gold
+  labels for the real citations, which the audit supplies.
+- **H2:** Jev and Haiku are indistinguishable on SciFact.
 
 - **SciFact is the only human ground truth here, and it is biomedical.** Jev and Haiku are
   indistinguishable on it. Neither passes the 5% gate at 70% acceptance; both come close.
@@ -177,6 +187,13 @@ Confusion, test (rows are the gold label, columns the prediction):
 bun bench/jev/fetch/scifact.ts
 wrangler dev --config bench/jev/proxy/wrangler.jsonc --port 8799
 bun bench/jev/tasks/run-t2-scifact.ts
+bun bench/jev/tasks/ingest-atlas.ts        # tier A baseline ingest (Claude Code)
+bun bench/jev/builders/tier-a.ts
+bun bench/jev/tasks/run-t2-atlas.ts
+bun bench/jev/tasks/ingest-got.ts          # tier C baseline ingest (Claude Code)
+bun bench/jev/builders/tier-c-drift.ts     # also extracts the tier C citations
+bun bench/jev/tasks/run-t2-got.ts
+bun bench/jev/audit.ts t2a                 # the blind audit
 bun bench/jev/report.ts
 ```
 
@@ -186,4 +203,7 @@ bun bench/jev/report.ts
 | --- | --- | --- | --- |
 | 2026-09-28 | `95c6c86` | SciFact question and protocol committed | — |
 | 2026-09-28 | — | Jev on SciFact | Complete. 18 calls failed with the transient Cloudflare `2018` error and succeeded on rerun |
-| 2026-09-28 | _pre-registration_ | Tier A pairs, levels and references committed | — |
+| 2026-09-28 | `c0fd6c4` | Tier A pairs, levels and references committed | — |
+| 2026-09-28 | — | Tier A: Jev at C0–C2, Haiku and Opus at C1 | Complete |
+| 2026-09-28 | `b23a354` | Tier C pairs committed; C0 declared primary from the tier A result | — |
+| 2026-09-28 | — | Tier C: Jev at C0–C2 (4 transient errors, succeeded on rerun), Haiku and Opus at C0 | Complete |
