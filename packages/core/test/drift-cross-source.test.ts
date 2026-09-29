@@ -91,7 +91,13 @@ function addPage(path: string, source: string, verifiedAt: string | null, canoni
 }
 
 let line = 0;
-function addFootnote(page: string, footnote: string, revision: string, path: string, at: string) {
+function addFootnote(
+  page: string,
+  footnote: string,
+  revision: string | null,
+  path: string,
+  at: string,
+) {
   db.query(
     `INSERT INTO citations (page_path, footnote, line, text, source, revision, path, locator, claim)
      VALUES (?, ?, ?, '', 'noaa', ?, ?, ?, '')`,
@@ -157,37 +163,55 @@ describe("a footnote into a source other than the page's own", () => {
     ]);
   });
 
-  test("a page none of whose cited files changed is not named, even per file", async () => {
-    // It never claimed to rest on the rest of this source, as the source's own pages do.
+  test("a page none of whose cited files changed is not named by a per-file source", async () => {
     addPage("knowledge/contradiction.md", "ipcc", "ipcc1");
     addFootnote("knowledge/contradiction.md", "b", "rev1", "note.md", "L5");
-    const report = await detectDrift(
-      db,
-      new ScriptedSource("noaa", "rev2", { rev1: ["other.md"] }),
-    );
+    const report = await detectDrift(db, new ScriptedSource("noaa", "rev2", { rev1: ["x.md"] }));
     expect(report.stale).toEqual([]);
   });
 
-  test("an unpinned footnote falls back to the page's last_verified_revision", async () => {
-    addPage("knowledge/contradiction.md", "ipcc", "rev1");
-    addFootnote("knowledge/contradiction.md", "b", UNPINNED_REVISION, "note.md", "L5");
+  test("a per-file source says which of the changed files such a page cites", async () => {
+    addPage("knowledge/contradiction.md", "ipcc", "ipcc1");
+    addFootnote("knowledge/contradiction.md", "b", "rev1", "note.md", "L5");
+    const changed = ["a.md", "b.md", "c.md", "d.md", "e.md", "note.md"];
+    const report = await detectDrift(db, new ScriptedSource("noaa", "rev2", { rev1: changed }));
+    expect(report.stale[0]?.citedOnly).toEqual(["knowledge/contradiction.md"]);
+    expect(report.stale[0]?.citedPaths).toEqual({ "knowledge/contradiction.md": ["note.md"] });
+  });
+
+  test("an unpinned footnote is never read against the page's own revision", async () => {
+    // The page's revision belongs to its own source; lines read against it land in the wrong place.
+    addPage("knowledge/contradiction.md", "ipcc", "p1");
+    addFootnote("knowledge/contradiction.md", "b", UNPINNED_REVISION, "note.md", "L15-L17");
     const noaa = new ScriptedSource(
       "noaa",
       "rev2",
-      { rev1: ["note.md"] },
-      { "rev1 note.md": { L5: { status: "touched" } } },
+      { p1: ["note.md"] },
+      { "p1 note.md": { "L15-L17": { status: "moved", locator: "L25-L27" } } },
     );
 
     const report = await detectDrift(db, noaa);
 
-    expect(noaa.asked).toEqual(["rev1 note.md L5"]);
-    expect(pageChanges(report.stale[0]!)?.get("knowledge/contradiction.md")).toBe("changed");
+    expect(noaa.asked).toEqual([]);
+    expect(report.stale).toEqual([]);
+    expect(report.unverifiable).toEqual(["knowledge/contradiction.md"]);
   });
 
-  test("an unpinned footnote on a page recording no revision is unverifiable", async () => {
-    addPage("knowledge/contradiction.md", "ipcc", null);
-    addFootnote("knowledge/contradiction.md", "b", UNPINNED_REVISION, "note.md", "L5");
-    const report = await detectDrift(db, new ScriptedSource("noaa", "rev2", {}));
+  for (const pin of [UNPINNED_REVISION, "", null]) {
+    test(`a footnote pinned at ${JSON.stringify(pin)} is unverifiable, not unplaceable`, async () => {
+      addPage("knowledge/contradiction.md", "ipcc", "ipcc1");
+      addFootnote("knowledge/contradiction.md", "b", pin, "note.md", "L5");
+      const report = await detectDrift(db, new ScriptedSource("noaa", "rev2", {}, {}));
+      expect(report.unresolvable).toEqual([]);
+      expect(report.unverifiable).toEqual(["knowledge/contradiction.md"]);
+    });
+  }
+
+  test("a canonical_source into this source is unverifiable: its grammar has no pin", async () => {
+    addPage("knowledge/contradiction.md", "ipcc", "rev1", " noaa:note.md#L5 ");
+    const noaa = new ScriptedSource("noaa", "rev2", { rev1: ["note.md"] }, {});
+    const report = await detectDrift(db, noaa);
+    expect(report.stale).toEqual([]);
     expect(report.unverifiable).toEqual(["knowledge/contradiction.md"]);
   });
 
@@ -196,16 +220,11 @@ describe("a footnote into a source other than the page's own", () => {
     addFootnote("knowledge/contradiction.md", "b", "gone", "note.md", "L5");
     const report = await detectDrift(db, new ScriptedSource("noaa", "rev2", {}));
     expect(report.unresolvable).toEqual([
-      { revision: "gone", pages: ["knowledge/contradiction.md"] },
-    ]);
-  });
-
-  test("a canonical_source into this source counts too", async () => {
-    addPage("knowledge/contradiction.md", "ipcc", "rev1", "noaa:note.md");
-    const noaa = new ScriptedSource("noaa", "rev2", { rev1: ["note.md"] }, {});
-    const report = await detectDrift(db, noaa);
-    expect(report.stale[0]?.citations?.map((c) => [c.page, c.change.status])).toEqual([
-      ["knowledge/contradiction.md", "touched"],
+      {
+        revision: "gone",
+        pages: ["knowledge/contradiction.md"],
+        citedOnly: ["knowledge/contradiction.md"],
+      },
     ]);
   });
 
@@ -214,7 +233,48 @@ describe("a footnote into a source other than the page's own", () => {
     addFootnote("knowledge/contradiction.md", "b", "2026-08-01", "note.md", "L5");
     const report = await detectDrift(db, new DelegatedStub("noaa"));
     expect(report.delegated?.pending).toEqual([
-      { revision: "2026-08-01", pages: ["knowledge/contradiction.md"] },
+      {
+        revision: "2026-08-01",
+        pages: ["knowledge/contradiction.md"],
+        citedOnly: ["knowledge/contradiction.md"],
+      },
     ]);
+  });
+});
+
+describe("a footnote pinned before its page's revision", () => {
+  test("is checked from its pin even when the page's revision is current", async () => {
+    addPage("knowledge/finding.md", "noaa", "rev2");
+    addFootnote("knowledge/finding.md", "old", "rev0", "note.md", "L1");
+    const noaa = new ScriptedSource(
+      "noaa",
+      "rev2",
+      { rev0: ["note.md"] },
+      { "rev0 note.md": { L1: { status: "touched" } } },
+    );
+
+    const report = await detectDrift(db, noaa);
+
+    expect(report.stale.map((e) => [e.revision, e.pages, e.citedOnly])).toEqual([
+      ["rev0", ["knowledge/finding.md"], ["knowledge/finding.md"]],
+    ]);
+    expect(pageChanges(report.stale[0]!)?.get("knowledge/finding.md")).toBe("changed");
+  });
+
+  test("is checked for files changed since its pin, not only since the page's revision", async () => {
+    addPage("knowledge/finding.md", "noaa", "rev1");
+    addFootnote("knowledge/finding.md", "old", "rev0", "note.md", "L1");
+    const noaa = new ScriptedSource(
+      "noaa",
+      "rev2",
+      { rev0: ["note.md", "other.md"], rev1: ["other.md"] },
+      { "rev0 note.md": { L1: { status: "touched" } } },
+    );
+
+    const report = await detectDrift(db, noaa);
+
+    expect(
+      report.stale[0]?.citations?.map((c) => [c.footnote, c.revision, c.change.status]),
+    ).toEqual([["old", "rev0", "touched"]]);
   });
 });

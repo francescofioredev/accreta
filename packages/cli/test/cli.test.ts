@@ -626,7 +626,7 @@ describe("accreta drift for a pull request", () => {
     expect(out).toContain(
       `| \`knowledge/first.md\` | \`a.md#L3-L5\` \`[^c]\` | \`${from.slice(0, 7)}\` | changed |`,
     );
-    expect(out).toContain("2 other page(s) were verified before this change");
+    expect(out).toContain("2 other page(s) rest on this source");
     expect(out).not.toContain("second");
     expect(out).not.toContain("third");
   });
@@ -699,7 +699,7 @@ describe("accreta drift for a pull request", () => {
 
     expect(await cli("drift", "--format", "github")).toBe(1);
     expect(stdout()).toContain("but some revisions cannot be placed");
-    expect(stdout()).toContain("1 page(s) were verified at a revision this source cannot place");
+    expect(stdout()).toContain("1 page(s) rest on a revision this source cannot place");
     expect(stdout()).not.toContain("No page in doubt");
   });
 
