@@ -346,6 +346,63 @@ describe("accreta drift", () => {
   });
 });
 
+const twentyLines = (edit: Record<number, string> = {}) =>
+  Array.from({ length: 20 }, (_, i) => edit[i + 1] ?? `line ${i + 1}`).join("\n") + "\n";
+
+describe("accreta drift at line granularity", () => {
+  test("pages are ordered and explained by what happened to their cited lines", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+
+    const docs = join(root, "sources", "docs");
+    mkdirSync(docs, { recursive: true });
+    const git = async (...args: string[]) => {
+      const proc = Bun.spawn(["git", ...args], { cwd: docs, stdout: "pipe", stderr: "pipe" });
+      if ((await proc.exited) !== 0) throw new Error(await new Response(proc.stderr).text());
+    };
+    writeFileSync(join(docs, "a.md"), twentyLines(), "utf-8");
+    writeFileSync(join(docs, "b.md"), "untouched\n", "utf-8");
+    await git("init", "-q");
+    await git("config", "user.email", "t@example.invalid");
+    await git("config", "user.name", "Test");
+    await git("add", ".");
+    await git("commit", "-qm", "first");
+    const revision = Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: docs })
+      .stdout.toString()
+      .trim();
+
+    writeFileSync(
+      join(root, "sources", "docs.yaml"),
+      "id: docs\ntype: git\nroot: sources/docs\n",
+      "utf-8",
+    );
+    const page = (name: string, citation: string) =>
+      writePage(
+        `${name}.md`,
+        `---\ntype: note\nsource: docs\nlast_verified_revision: ${revision}\n---\n\n# ${name}\n\n` +
+          `A claim.[^c]\n\n[^c]: docs @ ${revision.slice(0, 7)} · ${citation}\n`,
+      );
+    page("changed", "a.md#L3-L5");
+    page("still", "a.md#L10-L12");
+    page("elsewhere", "b.md#L1");
+    await cli("reindex");
+
+    writeFileSync(join(docs, "a.md"), twentyLines({ 4: "rewritten" }), "utf-8");
+    await git("commit", "-qam", "second");
+    output = [];
+
+    expect(await cli("drift")).toBe(1);
+    const out = stdout();
+    expect(out).toContain("3 page(s) may have drifted");
+    expect(out).toContain("knowledge/changed.md (verified at");
+    expect(out).toContain("1 cited range(s) changed");
+    expect(out).toContain("cited lines unchanged");
+    expect(out).toContain("cites none of the changed files");
+    expect(out.indexOf("knowledge/changed.md")).toBeLessThan(out.indexOf("knowledge/still.md"));
+    expect(out.indexOf("knowledge/still.md")).toBeLessThan(out.indexOf("knowledge/elsewhere.md"));
+  });
+});
+
 describe("accreta help", () => {
   test("no arguments prints usage", async () => {
     expect(await cli()).toBe(0);

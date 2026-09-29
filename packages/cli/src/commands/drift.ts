@@ -1,5 +1,11 @@
 import { existsSync } from "node:fs";
-import { detectDrift, openIndex } from "@accreta/core";
+import {
+  detectDrift,
+  openIndex,
+  pageChanges,
+  type PageChange,
+  type StaleRevision,
+} from "@accreta/core";
 import { findWorkspace } from "../workspace.ts";
 import { loadSources, type CommandContext } from "./shared.ts";
 
@@ -61,8 +67,15 @@ export async function drift(
         const pageCount = report.stale.reduce((total, entry) => total + entry.pages.length, 0);
         ctx.out(`  ${pageCount} page(s) may have drifted:`);
         for (const entry of report.stale) {
-          for (const path of entry.pages) {
-            ctx.out(`    ${path} (verified at ${entry.revision})`);
+          const doubt = pageChanges(entry);
+          const pages = doubt
+            ? entry.pages.toSorted(
+                (a, b) => DOUBT_ORDER.indexOf(doubt.get(a)!) - DOUBT_ORDER.indexOf(doubt.get(b)!),
+              )
+            : entry.pages;
+          for (const path of pages) {
+            const why = doubt ? ` — ${explainDoubt(doubt.get(path)!, entry, path)}` : "";
+            ctx.out(`    ${path} (verified at ${entry.revision})${why}`);
           }
         }
         exitCode = 1;
@@ -88,4 +101,21 @@ export async function drift(
     db.close();
   }
   return exitCode;
+}
+
+const DOUBT_ORDER: PageChange[] = ["changed", "moved", "untouched", "uncited"];
+
+function explainDoubt(doubt: PageChange, entry: StaleRevision, page: string): string {
+  const mine = (entry.citations ?? []).filter((c) => c.page === page);
+  const count = (status: string) => mine.filter((c) => c.change.status === status).length;
+  switch (doubt) {
+    case "changed":
+      return `${count("touched") + count("unknown")} cited range(s) changed`;
+    case "moved":
+      return `cited lines moved, not changed: re-pin ${count("moved")} locator(s)`;
+    case "untouched":
+      return "cited lines unchanged";
+    case "uncited":
+      return "cites none of the changed files";
+  }
 }

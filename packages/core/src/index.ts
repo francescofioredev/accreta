@@ -16,7 +16,12 @@ export { buildIndex } from "./index-db/build.ts";
 export type { Database, OpenOptions } from "./index-db/db.ts";
 export { openIndex, sealForReading } from "./index-db/db.ts";
 
-export type { LocationVerdict, ParsedCitation, SourceAdapter } from "./source/adapter.ts";
+export type {
+  LocationVerdict,
+  LocatorChange,
+  ParsedCitation,
+  SourceAdapter,
+} from "./source/adapter.ts";
 export {
   UNPINNED_REVISION,
   DelegatedSourceError,
@@ -27,12 +32,14 @@ export {
   resolveInside,
 } from "./source/adapter.ts";
 export type {
+  CitedChange,
   DelegatedWork,
+  PageChange,
   DriftReport,
   StaleRevision,
   UnresolvableRevision,
 } from "./source/drift.ts";
-export { detectDrift } from "./source/drift.ts";
+export { detectDrift, pageChanges } from "./source/drift.ts";
 export type { SourceDeclaration, SourceFactory } from "./source/registry.ts";
 export { SourceRegistry, parseSourceDeclaration } from "./source/registry.ts";
 

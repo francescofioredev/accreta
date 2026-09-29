@@ -2,11 +2,12 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { detectDrift } from "../src/source/drift.ts";
+import { detectDrift, pageChanges } from "../src/source/drift.ts";
 import {
   DelegatedSourceError,
   UnknownRevisionError,
   type LocationVerdict,
+  type LocatorChange,
   type SourceAdapter,
 } from "../src/source/adapter.ts";
 import { openIndex } from "../src/index-db/db.ts";
@@ -233,5 +234,125 @@ describe("a source only the agent can reach", () => {
     const report = await detectDrift(db, new DelegatedStub("docs"));
     expect(report.delegated?.pending).toEqual([]);
     expect(report.unverifiable).toEqual([]);
+  });
+});
+
+/** A scripted source that can also say what a change did to each cited range. */
+class LineAwareSource extends ScriptedSource {
+  readonly asked: string[] = [];
+
+  constructor(
+    id: string,
+    current: string,
+    changes: Record<string, string[] | "unknown">,
+    private readonly lines: Record<string, Record<string, LocatorChange> | "unknown">,
+  ) {
+    super(id, current, changes);
+  }
+
+  async touchedSince(revision: string, path: string, locators: readonly string[]) {
+    this.asked.push(`${revision} ${path} ${locators.join(",")}`);
+    const answer = this.lines[`${revision} ${path}`];
+    if (answer === undefined || answer === "unknown") {
+      throw new UnknownRevisionError(this.id, revision);
+    }
+    return new Map(locators.map((l) => [l, answer[l] ?? { status: "untouched" as const }]));
+  }
+}
+
+function addFootnote(
+  page: string,
+  footnote: string,
+  revision: string,
+  path: string,
+  locator: string,
+) {
+  db.query(
+    `INSERT INTO citations (page_path, footnote, line, text, source, revision, path, locator, claim)
+     VALUES (?, ?, ?, '', 'docs', ?, ?, ?, '')`,
+  ).run(page, footnote, footnote.length, revision, path, locator);
+}
+
+describe("detectDrift at line granularity", () => {
+  test("a source that cannot diff contents reports exactly what it did before", async () => {
+    addPage("knowledge/a.md", "docs", "rev1");
+    addFootnote("knowledge/a.md", "x", "rev1", "ch.md", "L1-L5");
+    const report = await detectDrift(db, new ScriptedSource("docs", "rev2", { rev1: ["ch.md"] }));
+    expect(report.stale).toEqual([
+      { revision: "rev1", changedPaths: ["ch.md"], pages: ["knowledge/a.md"] },
+    ]);
+  });
+
+  test("each citation into a changed path says what the change did to it", async () => {
+    for (const page of ["a", "b", "c", "d"]) addPage(`knowledge/${page}.md`, "docs", "rev1");
+    addFootnote("knowledge/a.md", "x", "rev1", "ch.md", "L1-L5");
+    addFootnote("knowledge/b.md", "y", "rev1", "ch.md", "L20-L30");
+    addFootnote("knowledge/c.md", "z", "rev1", "ch.md", "L40");
+    addFootnote("knowledge/d.md", "w", "rev1", "other.md", "L1");
+    const source = new LineAwareSource(
+      "docs",
+      "rev2",
+      { rev1: ["ch.md"] },
+      {
+        "rev1 ch.md": {
+          "L1-L5": { status: "touched" },
+          L40: { status: "moved", locator: "L42" },
+        },
+      },
+    );
+    const report = await detectDrift(db, source);
+    const [entry] = report.stale;
+
+    // Every page stays listed: untouched lines lower the doubt, they do not clear it.
+    expect(entry?.pages).toHaveLength(4);
+    expect(entry?.citations?.map((c) => [c.page, c.footnote, c.change.status])).toEqual([
+      ["knowledge/a.md", "x", "touched"],
+      ["knowledge/b.md", "y", "untouched"],
+      ["knowledge/c.md", "z", "moved"],
+    ]);
+    expect(Object.fromEntries(pageChanges(entry!)!)).toEqual({
+      "knowledge/a.md": "changed",
+      "knowledge/b.md": "untouched",
+      "knowledge/c.md": "moved",
+      "knowledge/d.md": "uncited",
+    });
+    // One question per revision and path, however many pages cite it.
+    expect(source.asked).toEqual(["rev1 ch.md L1-L5,L20-L30,L40"]);
+  });
+
+  test("the diff starts at the citation's own revision, whose line numbers it uses", async () => {
+    addPage("knowledge/a.md", "docs", "rev1");
+    addFootnote("knowledge/a.md", "x", "rev0", "ch.md", "L1");
+    const source = new LineAwareSource("docs", "rev2", { rev1: ["ch.md"] }, { "rev0 ch.md": {} });
+    await detectDrift(db, source);
+    expect(source.asked).toEqual(["rev0 ch.md L1"]);
+  });
+
+  test("a citation revision the source cannot place is unknown, never untouched", async () => {
+    addPage("knowledge/a.md", "docs", "rev1");
+    addFootnote("knowledge/a.md", "x", "gone", "ch.md", "L1");
+    const source = new LineAwareSource("docs", "rev2", { rev1: ["ch.md"] }, {});
+    const report = await detectDrift(db, source);
+    expect(report.stale[0]?.citations?.[0]?.change).toEqual({ status: "unknown" });
+    expect(pageChanges(report.stale[0]!)?.get("knowledge/a.md")).toBe("changed");
+  });
+
+  test("a whole-document canonical_source into a changed document is touched", async () => {
+    db.query(
+      `INSERT INTO pages (path, type, title, source, canonical_source, last_verified_revision, frontmatter_json, body, mtime)
+       VALUES ('knowledge/a.md', 'note', 'a', 'docs', 'docs:ch.md', 'rev1', '{}', '', 0)`,
+    ).run();
+    const source = new LineAwareSource("docs", "rev2", { rev1: ["ch.md"] }, {});
+    const report = await detectDrift(db, source);
+    expect(report.stale[0]?.citations).toEqual([
+      {
+        page: "knowledge/a.md",
+        footnote: null,
+        path: "ch.md",
+        locator: null,
+        change: { status: "touched" },
+      },
+    ]);
+    expect(source.asked).toEqual([]);
   });
 });

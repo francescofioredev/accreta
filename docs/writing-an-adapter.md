@@ -16,10 +16,11 @@ interface SourceAdapter {
   citation(path: string, locator?: string): string;
   pinRevision(revision: string): void;
   knowsRevision?(revision: string): Promise<boolean>; // optional
+  touchedSince?(revision: string, path: string, locators: readonly string[]): Promise<Map<string, LocatorChange>>; // optional
 }
 ```
 
-Five methods, and one optional one. `packages/core` imports no adapter and never branches on which one it holds —
+Five methods, and two optional ones. `packages/core` imports no adapter and never branches on which one it holds —
 if you find yourself wanting it to, the interface is missing something and the fix is to
 extend the interface. See [ADR-0002](adr/0002-source-adapter-interface.md).
 
@@ -114,6 +115,18 @@ fabricated or mistyped commit. Implement it only if you can answer from the hist
 `git` asks `cat-file -e`. Leave it out if you cannot. Absent means "cannot tell", which is what
 `fs` (no history) and `delegated` (nothing to ask) truthfully say. Never return `false` for a
 revision you merely do not remember: every citation into your source would become a finding.
+
+## `touchedSince()`, if your source can diff contents
+
+Drift works per file until an adapter says which cited places a change actually hit. For each
+locator, answer `touched`, `untouched`, `moved` with the locator where the same content is now,
+or `unknown` for a locator you cannot judge. `git` reads `diff -U0`. See
+[ADR-0015](adr/0015-drift-at-line-granularity.md) for the insertion rule and why nothing is
+ever cleared.
+
+Throw `UnknownRevisionError` for a revision you cannot place, as in `changedSince()`. Leave the
+method out if you keep no old contents, as `fs` does. Guessing `untouched` would hide exactly
+the drift the report exists to show.
 
 ## `pinRevision()`
 

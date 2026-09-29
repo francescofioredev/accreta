@@ -205,3 +205,78 @@ describe("GitSource scoped to paths", () => {
     expect(await scopedSource.revision()).toMatch(/^[0-9a-f]{40}$/);
   });
 });
+
+const lines = (n: number, edit: Record<number, string> = {}) =>
+  Array.from({ length: n }, (_, i) => edit[i + 1] ?? `line ${i + 1}`).join("\n") + "\n";
+
+describe("GitSource.touchedSince", () => {
+  async function after(change: () => void, locators: string[]) {
+    write("doc.md", lines(20));
+    await commit("first");
+    const git = source();
+    const from = await git.revision();
+    change();
+    await commit("second");
+    return Object.fromEntries(await git.touchedSince(from, "doc.md", locators));
+  }
+
+  test("an edit inside a range touches it, one beside it does not", async () => {
+    const result = await after(
+      () => write("doc.md", lines(20, { 8: "changed" })),
+      ["L5-L10", "L11-L15", "L1-L7"],
+    );
+    expect(result).toEqual({
+      "L5-L10": { status: "touched" },
+      "L11-L15": { status: "untouched" },
+      "L1-L7": { status: "untouched" },
+    });
+  });
+
+  test("an edit across a range's boundary touches it", async () => {
+    const result = await after(
+      () => write("doc.md", lines(20, { 10: "changed", 11: "changed" })),
+      ["L5-L10", "L11-L12"],
+    );
+    expect(result).toEqual({ "L5-L10": { status: "touched" }, "L11-L12": { status: "touched" } });
+  });
+
+  test("lines inserted above a range move it without touching it", async () => {
+    const result = await after(
+      () => write("doc.md", "new a\nnew b\n" + lines(20)),
+      ["L5-L10", "L7"],
+    );
+    expect(result).toEqual({
+      "L5-L10": { status: "moved", locator: "L7-L12" },
+      L7: { status: "moved", locator: "L9" },
+    });
+  });
+
+  const insertAfter = (n: number) => () => {
+    const all = lines(20).split("\n");
+    all.splice(n, 0, "inserted");
+    write("doc.md", all.join("\n"));
+  };
+
+  test("lines inserted inside a range touch it", async () => {
+    expect(await after(insertAfter(7), ["L5-L10"])).toEqual({ "L5-L10": { status: "touched" } });
+  });
+
+  test("lines inserted right after a range leave it untouched", async () => {
+    expect(await after(insertAfter(10), ["L5-L10"])).toEqual({
+      "L5-L10": { status: "untouched" },
+    });
+  });
+
+  test("a deleted file touches every range, a non-line locator cannot be judged", async () => {
+    const result = await after(() => rmSync(join(root, "doc.md")), ["L1-L2", "block-a1"]);
+    expect(result).toEqual({ "L1-L2": { status: "touched" }, "block-a1": { status: "unknown" } });
+  });
+
+  test("a revision the repository never had is reported, not answered", async () => {
+    write("doc.md", lines(3));
+    await commit("first");
+    expect(source().touchedSince("0".repeat(40), "doc.md", ["L1"])).rejects.toThrow(
+      UnknownRevisionError,
+    );
+  });
+});

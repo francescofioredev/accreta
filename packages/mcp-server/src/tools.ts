@@ -9,10 +9,12 @@ import {
   getPage,
   lint,
   lintCitations,
+  pageChanges,
   searchPages,
   type AccretaConfig,
   type CanonicalMatch,
   type Database,
+  type PageChange,
   type PageRecord,
   type Relation,
   type SearchHit,
@@ -220,11 +222,42 @@ export async function checkDriftTool(ctx: ToolContext, input: { source?: string 
     reports: reports.map((report) => ({
       source_id: report.sourceId,
       current_revision: report.currentRevision,
-      stale: report.stale.map((entry) => ({
-        revision: entry.revision,
-        changed_paths: entry.changedPaths,
-        pages: entry.pages,
-      })),
+      stale: report.stale.map((entry) => {
+        const doubt = pageChanges(entry);
+        if (!doubt) {
+          return {
+            revision: entry.revision,
+            changed_paths: entry.changedPaths,
+            pages: entry.pages,
+          };
+        }
+        const byChange = (change: PageChange) => entry.pages.filter((p) => doubt.get(p) === change);
+        const cited = entry.citations ?? [];
+        return {
+          revision: entry.revision,
+          changed_paths: entry.changedPaths,
+          pages: entry.pages,
+          // Grouped by how much doubt each is in; none of them is verified.
+          pages_by_change: {
+            changed: byChange("changed"),
+            moved: byChange("moved"),
+            untouched: byChange("untouched"),
+            uncited: byChange("uncited"),
+          },
+          // Untouched citations need nothing, so they are counted rather than listed.
+          citations: cited
+            .filter((c) => c.change.status !== "untouched")
+            .map((c) => ({
+              page: c.page,
+              footnote: c.footnote,
+              path: c.path,
+              locator: c.locator,
+              status: c.change.status,
+              ...(c.change.status === "moved" ? { now: c.change.locator } : {}),
+            })),
+          citations_untouched: cited.filter((c) => c.change.status === "untouched").length,
+        };
+      }),
       unverifiable: report.unverifiable,
       unresolvable: report.unresolvable,
       // Present only when accreta cannot reach the source. Kept out of
