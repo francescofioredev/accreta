@@ -74,9 +74,10 @@ export function refuseArguments(command: string | undefined, args: ParsedArgs): 
   for (const flag of args.flags) {
     if (spec.flags.includes(flag)) continue;
     const issue = spec.pending?.[flag];
-    return issue
-      ? `${command} has no ${flag} yet (${issue}).`
-      : `${command} does not take ${flag}.`;
+    if (issue) return `${command} has no ${flag} yet (${issue}).`;
+    return flag.startsWith("--")
+      ? `${command} does not take ${flag}.`
+      : `${command} does not take ${flag}. Put -- before an argument that starts with "-".`;
   }
   if (args.positional.length > spec.maxPositional) {
     const extra = args.positional.slice(spec.maxPositional).join(" ");

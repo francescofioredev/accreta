@@ -37,6 +37,8 @@ Usage: accreta <command> [arguments]
                            JSON the matching MCP tool returns
 
   --version, -v            Print the version
+  --help, -h               Print this usage, after any command too
+  --                       End of options: every later argument is positional
 
 Environment:
   ACCRETA_ROOT             Use this directory instead of searching upward
@@ -56,6 +58,7 @@ const VERSION = (
 
 /** Collect repeated `--type x` flags, returning them with the positional rest. */
 function parseArgs(argv: string[]): ParsedArgs & {
+  help: boolean;
   types: string[];
   kinds: string[];
   includeInline: boolean;
@@ -70,6 +73,8 @@ function parseArgs(argv: string[]): ParsedArgs & {
   const positional: string[] = [];
   const flags: string[] = [];
   const problems: string[] = [];
+  let help = false;
+  let endOfOptions = false;
   const types: string[] = [];
   const kinds: string[] = [];
   let includeInline = false;
@@ -82,8 +87,21 @@ function parseArgs(argv: string[]): ParsedArgs & {
   let agentFile: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     let arg = argv[i];
+    if (arg === undefined) continue;
+    if (endOfOptions) {
+      positional.push(arg);
+      continue;
+    }
+    if (arg === "--") {
+      endOfOptions = true;
+      continue;
+    }
+    if (["-h", "--help"].includes(arg)) {
+      help = true;
+      continue;
+    }
     let inline: string | undefined;
-    if (arg?.startsWith("--") && arg.includes("=")) {
+    if (arg.startsWith("--") && arg.includes("=")) {
       inline = arg.slice(arg.indexOf("=") + 1);
       arg = arg.slice(0, arg.indexOf("="));
     }
@@ -102,7 +120,7 @@ function parseArgs(argv: string[]): ParsedArgs & {
       if (inline !== undefined) problems.push(`${name} takes no value.`);
       return true;
     };
-    if (arg?.startsWith("-") && arg !== "-") flags.push(arg === "-t" ? "--type" : arg);
+    if (arg.startsWith("-") && arg !== "-") flags.push(arg === "-t" ? "--type" : arg);
 
     if (arg === "--type" || arg === "-t") {
       const type = value();
@@ -137,9 +155,10 @@ function parseArgs(argv: string[]): ParsedArgs & {
     if (arg === "--set") {
       // `key=value`, kept as written: the CLI knows no more about a source's
       // options than the core does.
-      const pair = value() ?? "";
-      const at = pair.indexOf("=");
-      if (at > 0) set[pair.slice(0, at)] = pair.slice(at + 1);
+      const pair = value();
+      const at = pair?.indexOf("=") ?? -1;
+      if (pair && at > 0) set[pair.slice(0, at)] = pair.slice(at + 1);
+      else if (pair) problems.push("--set takes key=value.");
       continue;
     }
     if (arg === "--preset") {
@@ -150,12 +169,13 @@ function parseArgs(argv: string[]): ParsedArgs & {
       agentFile = value();
       continue;
     }
-    if (arg !== undefined && !arg.startsWith("-")) positional.push(arg);
+    if (!arg.startsWith("-") || arg === "-") positional.push(arg);
   }
   return {
     positional,
     flags,
     problems,
+    help,
     types,
     kinds,
     includeInline,
@@ -175,6 +195,10 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
   const { positional, types, kinds, includeInline, strict, json, limit, source, set } = parsed;
   const { preset, agentFile } = parsed;
 
+  if (parsed.help && command !== undefined) {
+    ctx.out(USAGE);
+    return 0;
+  }
   const refusal = refuseArguments(command, parsed);
   if (refusal) {
     ctx.err(refusal);
@@ -228,7 +252,7 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
     default:
       ctx.err(`Unknown command "${command}".\n`);
       ctx.err(USAGE);
-      return 1;
+      return 2;
   }
 }
 

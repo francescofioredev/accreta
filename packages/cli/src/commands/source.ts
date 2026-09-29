@@ -24,7 +24,7 @@ export async function sourceAdd(
   const kind = kindFor(type);
   if (!kind) {
     ctx.err(`Unknown source type "${type}". Known: ${KNOWN_TYPES.join(", ")}.`);
-    return 1;
+    return 2;
   }
 
   const workspace = findWorkspace(ctx.cwd);

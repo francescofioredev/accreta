@@ -429,7 +429,7 @@ describe("accreta help", () => {
   });
 
   test("an unknown command is an error with usage", async () => {
-    expect(await cli("frobnicate")).toBe(1);
+    expect(await cli("frobnicate")).toBe(2);
     expect(stderr()).toContain("Unknown command");
   });
 
@@ -571,7 +571,7 @@ describe("accreta source add", () => {
   test("an unknown type names the ones this build has", async () => {
     await cli("init");
     errors = [];
-    expect(await cli("source", "add", "notion", "docs")).toBe(1);
+    expect(await cli("source", "add", "notion", "docs")).toBe(2);
     expect(stderr()).toContain("delegated");
   });
 });

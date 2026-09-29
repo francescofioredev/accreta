@@ -90,6 +90,12 @@ const CASES: Case[] = [
   },
   { tool: "find_consumers", args: { target: "missing" }, argv: ["consumers", "missing"], code: 0 },
   { tool: "find_canonical", args: { term: "RF" }, argv: ["canonical", "RF"], code: 0 },
+  {
+    tool: "find_canonical",
+    args: { term: "-O2" },
+    argv: ["canonical", "--", "-O2"],
+    code: 0,
+  },
   { tool: "find_canonical", args: { term: "nothing" }, argv: ["canonical", "nothing"], code: 0 },
   { tool: "lint_knowledge_base", args: {}, argv: ["lint"], code: 1 },
 ];
@@ -110,6 +116,12 @@ const REFUSED: { argv: string[]; says: string }[] = [
   { argv: ["consumers", "concepts/forcing", "--kind"], says: "--kind needs a value" },
   { argv: ["reindex", "--json"], says: "reindex does not take --json" },
   { argv: ["search"], says: "Usage" },
+  { argv: ["nosuch"], says: "Unknown command" },
+  { argv: ["search", "flux", "--limit", "0"], says: "--limit" },
+  { argv: ["search", "flux", "--limit", "2.5"], says: "--limit" },
+  { argv: ["canonical", "-O2"], says: "Put -- before" },
+  { argv: ["source", "add", "fs", "x", "--set", "novalue"], says: "--set takes key=value" },
+  { argv: ["source", "add", "nosuchtype", "x"], says: "Unknown source type" },
   { argv: ["source", "remove", "docs"], says: "Usage: accreta source add" },
 ];
 
@@ -156,7 +168,7 @@ beforeAll(async () => {
   write("src-docs/forcing.md", "one\ntwo\nthree\n");
   write(
     "knowledge/concepts/forcing.md",
-    "---\ntype: concept\nsource: docs\naliases: [RF, radiative forcing]\n" +
+    '---\ntype: concept\nsource: docs\naliases: [RF, radiative forcing, "-O2"]\n' +
       'canonical_source: "docs:forcing.md#L2"\nlast_verified_revision: r1\n' +
       "related: [[notes/odd]]\n---\n\n" +
       "# Radiative forcing\n\nTropopause flux.\n",
@@ -216,7 +228,10 @@ describe("every MCP tool has a CLI twin", () => {
 describe("--json matches the MCP tool field for field", () => {
   for (const c of CASES) {
     test(`${c.argv.join(" ")} --json = ${c.tool} ${JSON.stringify(c.args)}`, async () => {
-      const [fromCli, fromMcp] = [await cli([...c.argv, "--json"]), await mcp(c.tool, c.args)];
+      const [fromCli, fromMcp] = [
+        await cli([c.argv[0]!, "--json", ...c.argv.slice(1)]),
+        await mcp(c.tool, c.args),
+      ];
       expect(fromMcp.isError).toBe(false);
       expect(fromCli.code).toBe(c.code);
       expect(JSON.parse(fromCli.stdout)).toStrictEqual(JSON.parse(fromMcp.text));
@@ -233,6 +248,8 @@ describe("--json matches the MCP tool field for field", () => {
     const directions = consumers.results.map((r: { direction: string }) => r.direction);
     expect(directions).toContain("inbound");
     expect(directions).toContain("outbound");
+    const dashed = JSON.parse((await cli(["canonical", "--json", "--", "-O2"])).stdout);
+    expect(dashed.count).toBeGreaterThan(0);
     const lint = JSON.parse((await cli(["lint", "--json"])).stdout);
     expect(lint.count).toBeGreaterThan(0);
     expect(lint.citations_checked).toBeGreaterThan(0);
@@ -246,6 +263,18 @@ describe("an argument a command cannot honour is refused, not ignored", () => {
       expect(code).toBe(2);
       expect(stderr).toContain(r.says);
       expect(stdout).toBe("");
+    });
+  }
+
+  for (const argv of [
+    ["search", "--help"],
+    ["lint", "-h"],
+    ["drift", "--json", "--help"],
+  ]) {
+    test(`${argv.join(" ")} prints usage and exits 0`, async () => {
+      const { code, stdout } = await cli(argv);
+      expect(code).toBe(0);
+      expect(stdout).toContain("Usage: accreta");
     });
   }
 
