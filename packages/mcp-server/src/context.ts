@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { openIndex, parseConfig } from "@accreta/core";
-import { loadSources } from "@accreta/adapters";
+import { loadSources, stateDirFor } from "@accreta/adapters";
 import type { ToolContext } from "./tools.ts";
 
 const CONFIG_FILENAME = "accreta.config.yaml";
@@ -60,7 +60,11 @@ export function createContext(cwd: string = process.cwd()): ToolContext {
 
   let db = openIndex(indexPath, { readonly: true });
   let openedInode = inodeOf(indexPath);
-  const loaded = loadSources({ root, citationFormat: config.provenanceFormat });
+  const loaded = loadSources({
+    root,
+    citationFormat: config.provenanceFormat,
+    stateDir: stateDirFor(root, indexPath),
+  });
 
   return {
     get db() {

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { checkConfig, compileCitationTemplate, DEFAULT_CONFIG } from "@accreta/core";
-import { KNOWN_TYPES, kindFor, readDeclarationFiles } from "@accreta/adapters";
+import { KNOWN_TYPES, kindFor, readDeclarationFiles, stateDirFor } from "@accreta/adapters";
 import { CONFIG_FILENAME, findWorkspace } from "../workspace.ts";
 import { reportPreflight, type CommandContext } from "./shared.ts";
 import { compareVersions, findInstalledSkills, SKILL_NAME } from "./skill-floor.ts";
@@ -69,6 +69,7 @@ export async function doctor(ctx: CommandContext, version: string): Promise<numb
     const preflight = await kind.preflight(declaration, {
       root: workspace.root,
       citationFormat: workspace.config.provenanceFormat,
+      stateDir: stateDirFor(workspace.root, workspace.indexPath),
     });
     reportPreflight(ctx, preflight, "    ");
     if (preflight.reachable === "no") exitCode = 1;

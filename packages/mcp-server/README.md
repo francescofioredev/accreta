@@ -71,7 +71,7 @@ tells a reading model which text it should treat as data.
 - **`stale`** — the source changed since the page was verified.
 - **`unverifiable`** — the page records no revision, so nothing can be said about it.
 - **`unresolvable`** — the source cannot place the revision the page names. History was
-  rewritten, or the revision came from a previous run of an `fs` source.
+  rewritten, or an `fs` source no longer holds the listing that revision was taken from.
 - **`delegated`** — accreta cannot reach the source at all; the agent can. Carries the
   connector, the declared scope, and the pages grouped by the revision they are stuck at.
   `current_revision` is `null`, because there is no honest string to put there.
@@ -88,7 +88,9 @@ not examined. `unchecked_reasons` groups that count by the source's own reason.
 
 ## Writes
 
-`update_verified_revision` is the only tool that writes, and it is gated twice.
+`update_verified_revision` is the only tool that writes the knowledge base, and it is gated twice.
+`check_drift` is a read tool, but for an `fs` source it creates, replaces and deletes snapshot
+files under the state directory beside the index.
 
 1. **`ACCRETA_ALLOW_WRITES=1`** must be set or the tool is not registered at all — a
    read-only deployment does not advertise a capability it will refuse.

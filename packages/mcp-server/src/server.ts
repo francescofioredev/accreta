@@ -162,7 +162,7 @@ export function createServer(ctx: ToolContext): McpServer {
     "check_drift",
     {
       description:
-        "Report which pages their sources have moved out from under. Distinguishes three outcomes that must not be confused: `stale` (the source changed since the page was verified), `unverifiable` (the page records no revision at all), and `unresolvable` (the source cannot place the revision the page names — history rewritten, or a revision from a previous run). Only the absence of all three means 'current'. `stale` and `unresolvable` group by revision — each entry carries the revision and the list of pages verified against it — so a page appears inside an entry rather than as one. `unloaded_sources` names each declaration file that did not load, why, and how many pages cite it (null when it has no id); nothing citing it was checked.",
+        "Report which pages their sources have moved out from under. Distinguishes three outcomes that must not be confused: `stale` (the source changed since the page was verified), `unverifiable` (the page records no revision at all), and `unresolvable` (the source cannot place the revision the page names — history rewritten, or an `fs` source no longer holds the listing that revision was taken from). Only the absence of all three means 'current'. `stale` and `unresolvable` group by revision — each entry carries the revision and the list of pages verified against it — so a page appears inside an entry rather than as one. `unloaded_sources` names each declaration file that did not load, why, and how many pages cite it (null when it has no id); nothing citing it was checked.",
       inputSchema: {
         source: z.string().optional().describe("Check one source. Omit to check all of them."),
       },

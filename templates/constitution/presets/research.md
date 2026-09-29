@@ -68,14 +68,15 @@ Deleting the old page makes the knowledge base *less* accurate about the state o
 
 Papers and reports rarely carry commit SHAs. With an `fs` source, the revision is a hash of
 modification times — which means a change that preserves mtime is invisible, and a revision
-does not survive a process restart.
+can only be compared while its saved listing lasts. Listings that pages cite are kept; see
+[the pruning rule](https://github.com/francescofioredev/accreta/blob/main/docs/adr/0002-source-adapter-interface.md#consequences).
 
 Both consequences are honest rather than hidden:
 
 - Re-verification is cheap for a static corpus, so re-verify when in doubt.
-- `accreta drift` reporting **unresolvable** for a revision from a previous run is expected
-  behaviour, not a bug. It is the system saying "I cannot tell", which is the correct answer
-  and a different one from "nothing changed".
+- `accreta drift` reporting **unresolvable** for an old revision is expected behaviour, not a
+  bug. It is the system saying "I cannot tell", which is the correct answer and a different
+  one from "nothing changed".
 
 For a corpus that is genuinely versioned — a standards repository, a preprint server with
 revisions — use the git adapter and get real revisions.

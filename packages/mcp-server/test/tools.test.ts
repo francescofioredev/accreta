@@ -133,7 +133,11 @@ describe("source-backed tools", () => {
     build();
     ctx.sources.set(
       "docs",
-      buildRegistry({ root, citationFormat: "{source} @ {rev}" }).create({
+      buildRegistry({
+        root,
+        citationFormat: "{source} @ {rev}",
+        stateDir: join(root, ".accreta"),
+      }).create({
         id: "docs",
         type: "fs",
         options: { root: "src-docs" },
@@ -167,7 +171,11 @@ describe("source-backed tools", () => {
     build();
     ctx.sources.set(
       "design-docs",
-      buildRegistry({ root, citationFormat: "{source} @ {rev}" }).create({
+      buildRegistry({
+        root,
+        citationFormat: "{source} @ {rev}",
+        stateDir: join(root, ".accreta"),
+      }).create({
         id: "design-docs",
         type: "delegated",
         options: { via: "notion", scope: "The Design decisions page." },
@@ -235,7 +243,11 @@ describe("source-backed tools", () => {
   test("list_recent_changes tells the agent to go and look, not that a revision is lost", async () => {
     ctx.sources.set(
       "design-docs",
-      buildRegistry({ root, citationFormat: "{source} @ {rev}" }).create({
+      buildRegistry({
+        root,
+        citationFormat: "{source} @ {rev}",
+        stateDir: join(root, ".accreta"),
+      }).create({
         id: "design-docs",
         type: "delegated",
         options: { via: "notion", scope: "The Design decisions page." },

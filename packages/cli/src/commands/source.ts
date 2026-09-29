@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseSourceDeclaration } from "@accreta/core";
-import { KNOWN_TYPES, kindFor } from "@accreta/adapters";
+import { KNOWN_TYPES, kindFor, stateDirFor } from "@accreta/adapters";
 import { findWorkspace } from "../workspace.ts";
 import { reportPreflight, type CommandContext } from "./shared.ts";
 
@@ -42,7 +42,11 @@ export async function sourceAdd(
 
   const preflight = await kind.preflight(
     { id, type, options: parseSourceDeclaration(readFileSync(path, "utf-8")).options },
-    { root: workspace.root, citationFormat: workspace.config.provenanceFormat },
+    {
+      root: workspace.root,
+      citationFormat: workspace.config.provenanceFormat,
+      stateDir: stateDirFor(workspace.root, workspace.indexPath),
+    },
   );
   reportPreflight(ctx, preflight, "  ");
   return 0;

@@ -1,12 +1,37 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { run } from "../src/main.ts";
 import { COMMAND_ARGS } from "../src/commands/shared.ts";
 import type { CommandContext } from "../src/commands.ts";
 import type { DriftReport } from "@accreta/core";
 import { GITHUB_BODY_LIMIT, toGithub } from "../src/commands/drift.ts";
+
+const MAIN = join(import.meta.dir, "..", "src", "main.ts");
+
+/** Spawned, not called in-process: every CLI run is a new process, as a user runs it. */
+function spawnCli(env: Record<string, string>, ...args: string[]) {
+  const base = { ...process.env };
+  delete base.ACCRETA_INDEX_PATH;
+  delete base.ACCRETA_ROOT;
+  const proc = Bun.spawnSync([process.execPath, MAIN, ...args], {
+    cwd: root,
+    env: { ...base, ...env },
+  });
+  return { code: proc.exitCode, out: proc.stdout.toString() + proc.stderr.toString() };
+}
 
 let root = "";
 let output: string[] = [];
@@ -245,6 +270,98 @@ describe("accreta drift", () => {
     expect(stdout()).toContain("cannot place");
   });
 
+  test("an fs page goes stale across two separate processes", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    const docs = join(root, "sources", "docs");
+    mkdirSync(docs, { recursive: true });
+    writeFileSync(join(docs, "a.md"), "text", "utf-8");
+    utimesSync(join(docs, "a.md"), 1000, 1000);
+    writeFileSync(
+      join(root, "sources", "docs.yaml"),
+      'id: docs\ntype: fs\nroot: sources/docs\nextensions: [".md"]\n',
+      "utf-8",
+    );
+    await cli("reindex");
+    const accreta = (...args: string[]) => spawnCli({}, ...args);
+
+    const first = accreta("drift");
+    expect(first.code).toBe(0);
+    const revision = /^docs @ (\S+)$/m.exec(first.out)?.[1];
+    expect(revision).toBeDefined();
+
+    writePage(
+      "a.md",
+      `---\ntype: note\nsource: docs\nlast_verified_revision: ${revision}\n---\n\n# A\n`,
+    );
+    await cli("reindex");
+    writeFileSync(join(docs, "a.md"), "rewritten", "utf-8");
+    utimesSync(join(docs, "a.md"), 2000, 2000);
+
+    const second = accreta("drift");
+    expect(second.out).toContain("1 page(s) may have drifted");
+    expect(second.out).toContain(`knowledge/a.md (verified at ${revision})`);
+    expect(second.out).not.toContain("cannot place");
+    expect(second.code).toBe(1);
+  });
+
+  test("with ACCRETA_INDEX_PATH set, fs snapshots follow the index", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    mkdirSync(join(root, "sources", "docs"), { recursive: true });
+    writeFileSync(join(root, "sources", "docs", "a.md"), "text", "utf-8");
+    writeFileSync(join(root, "sources", "docs.yaml"), "id: docs\ntype: fs\nroot: sources/docs\n");
+    const elsewhere = mkdtempSync(join(tmpdir(), "accreta-index-"));
+    process.env.ACCRETA_INDEX_PATH = join(elsewhere, "index.sqlite");
+    try {
+      await cli("reindex");
+      output = [];
+      expect(await cli("drift")).toBe(0);
+      const revision = /^docs @ (\S+)$/m.exec(stdout())?.[1];
+      const [dir] = readdirSync(join(elsewhere, "fs-snapshots"));
+      expect(existsSync(join(elsewhere, "fs-snapshots", dir!, `${revision}.json`))).toBe(true);
+      expect(existsSync(join(root, ".accreta", "fs-snapshots"))).toBe(false);
+    } finally {
+      delete process.env.ACCRETA_INDEX_PATH;
+      rmSync(elsewhere, { recursive: true, force: true });
+    }
+  });
+
+  test("with ACCRETA_INDEX_PATH through a symlinked directory, a second process sees stale", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    const docs = join(root, "sources", "docs");
+    mkdirSync(docs, { recursive: true });
+    writeFileSync(join(docs, "a.md"), "text", "utf-8");
+    utimesSync(join(docs, "a.md"), 1000, 1000);
+    writeFileSync(join(root, "sources", "docs.yaml"), "id: docs\ntype: fs\nroot: sources/docs\n");
+    // As /tmp is on macOS: the operator names a path, and the system links it elsewhere.
+    const real = mkdtempSync(join(tmpdir(), "accreta-real-"));
+    const link = join(mkdtempSync(join(tmpdir(), "accreta-link-")), "index-dir");
+    symlinkSync(real, link);
+    const env = { ACCRETA_INDEX_PATH: join(link, "index.sqlite") };
+    process.env.ACCRETA_INDEX_PATH = env.ACCRETA_INDEX_PATH;
+    try {
+      await cli("reindex");
+      const revision = /^docs @ (\S+)$/m.exec(spawnCli(env, "drift").out)?.[1];
+      writePage(
+        "a.md",
+        `---\ntype: note\nsource: docs\nlast_verified_revision: ${revision}\n---\n\n# A\n`,
+      );
+      await cli("reindex");
+      writeFileSync(join(docs, "a.md"), "rewritten", "utf-8");
+      utimesSync(join(docs, "a.md"), 2000, 2000);
+
+      const second = spawnCli(env, "drift");
+      expect(second.out).toContain("1 page(s) may have drifted");
+      expect(second.out).not.toContain("cannot place");
+    } finally {
+      delete process.env.ACCRETA_INDEX_PATH;
+      rmSync(real, { recursive: true, force: true });
+      rmSync(dirname(link), { recursive: true, force: true });
+    }
+  });
+
   test("a delegated source produces a work order and does not fail the run", async () => {
     await cli("init");
     rmSync(join(root, "sources", "example.yaml"), { force: true });
@@ -320,10 +437,6 @@ describe("accreta drift", () => {
   // The report groups by revision, so the headline number has to be summed over
   // the groups. Taking it from `stale.length` would still print a plausible
   // count — of revisions, silently relabelled as pages.
-  //
-  // Driven through a git source because `fs` keeps its revision snapshots in
-  // memory: across two CLI invocations it can only answer "cannot place", which
-  // is the documented consequence in ADR-0002 and not the path under test here.
   test("stale pages are counted and listed individually, not per revision", async () => {
     await cli("init");
     rmSync(join(root, "sources", "example.yaml"), { force: true });
@@ -1049,6 +1162,48 @@ describe("accreta doctor", () => {
     expect(stdout()).toContain("unknown: accreta cannot check this source");
     expect(stdout()).toContain("your agent needs: notion — unverified");
   });
+
+  test("an fs source whose snapshots cannot persist says why", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    mkdirSync(join(root, "sources", "docs"), { recursive: true });
+    writeFileSync(join(root, "sources", "docs.yaml"), "id: docs\ntype: fs\nroot: sources/docs\n");
+    const elsewhere = mkdtempSync(join(tmpdir(), "accreta-elsewhere-"));
+    mkdirSync(join(root, ".accreta"), { recursive: true });
+    symlinkSync(elsewhere, join(root, ".accreta", "fs-snapshots"));
+    output = [];
+
+    try {
+      await cli("doctor");
+      expect(stdout()).toContain("snapshots cannot persist:");
+      expect(stdout()).toContain("fs-snapshots is a symlink");
+    } finally {
+      rmSync(elsewhere, { recursive: true, force: true });
+    }
+  });
+
+  test.skipIf(process.getuid === undefined)(
+    "an index in a directory anyone can write, without the sticky bit, is named",
+    async () => {
+      await cli("init");
+      rmSync(join(root, "sources", "example.yaml"), { force: true });
+      mkdirSync(join(root, "sources", "docs"), { recursive: true });
+      writeFileSync(join(root, "sources", "docs.yaml"), "id: docs\ntype: fs\nroot: sources/docs\n");
+      const open = mkdtempSync(join(tmpdir(), "accreta-open-"));
+      chmodSync(open, 0o777);
+      process.env.ACCRETA_INDEX_PATH = join(open, "index.sqlite");
+      output = [];
+
+      try {
+        await cli("doctor");
+        expect(stdout()).toContain("snapshots cannot persist:");
+        expect(stdout()).toContain("is world-writable without the sticky bit");
+      } finally {
+        delete process.env.ACCRETA_INDEX_PATH;
+        rmSync(open, { recursive: true, force: true });
+      }
+    },
+  );
 
   test("a directory that is not there is a failure with a remedy", async () => {
     await cli("init");

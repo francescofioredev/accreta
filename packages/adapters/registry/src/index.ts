@@ -11,7 +11,7 @@ import {
 import { KINDS, type SourceContext } from "./kinds.ts";
 
 export type { AgentAccess, Preflight, SourceContext, SourceKind } from "./kinds.ts";
-export { KINDS, KNOWN_TYPES, kindFor } from "./kinds.ts";
+export { KINDS, KNOWN_TYPES, kindFor, stateDirFor } from "./kinds.ts";
 
 /**
  * The adapters this build knows how to construct.
