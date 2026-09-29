@@ -2,7 +2,14 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { UnknownRevisionError } from "@accreta/core";
+import {
+  buildIndex,
+  DEFAULT_CONFIG,
+  detectDrift,
+  openIndex,
+  pageChanges,
+  UnknownRevisionError,
+} from "@accreta/core";
 import { GitSource } from "../src/index.ts";
 
 let root = "";
@@ -392,5 +399,146 @@ describe("GitSource.touchedSince", () => {
     expect(source().touchedSince("0".repeat(40), "doc.md", ["L1"])).rejects.toThrow(
       UnknownRevisionError,
     );
+  });
+
+  test("a file git diffs as binary is still read line by line", async () => {
+    write(".gitattributes", "doc.md -diff\n");
+    const result = await after(
+      () => write("doc.md", lines(20, { 6: "changed" })),
+      ["L5-L8", "L10-L12"],
+    );
+    expect(result).toEqual({ "L5-L8": { status: "touched" }, "L10-L12": { status: "untouched" } });
+  });
+
+  test("a NUL byte does not hide an edit", async () => {
+    const result = await after(
+      () => write("doc.md", lines(20, { 1: "a\0b", 6: "changed" })),
+      ["L5-L8", "L10-L12"],
+    );
+    expect(result["L5-L8"]).toEqual({ status: "touched" });
+  });
+
+  test("a textconv driver does not renumber the lines being judged", async () => {
+    write(".gitattributes", "doc.md diff=drop\n");
+    await run(["config", "diff.drop.textconv", "sed 1d"]);
+    const result = await after(() => write("doc.md", lines(20, { 5: "changed" })), ["L5"]);
+    expect(result).toEqual({ L5: { status: "touched" } });
+  });
+
+  test("diff.interHunkContext does not merge an untouched range into a hunk", async () => {
+    await run(["config", "diff.interHunkContext", "10"]);
+    const result = await after(
+      () => write("doc.md", lines(20, { 3: "changed", 9: "changed" })),
+      ["L5-L6"],
+    );
+    expect(result).toEqual({ "L5-L6": { status: "untouched" } });
+  });
+});
+
+describe("GitSource renames", () => {
+  test("changedSince names a renamed file under its old path too", async () => {
+    write("docs/a.md", lines(12));
+    await commit("first");
+    const from = await source().revision();
+    await run(["mv", "docs/a.md", "docs/a2.md"]);
+    await commit("rename");
+    expect(await source().changedSince(from)).toEqual(["docs/a.md", "docs/a2.md"]);
+  });
+
+  test("even with diff.renames set in the user's config", async () => {
+    write("docs/a.md", lines(12));
+    await commit("first");
+    const from = await source().revision();
+    await run(["config", "diff.renames", "copies"]);
+    await run(["mv", "docs/a.md", "docs/a2.md"]);
+    await commit("rename");
+    expect(await source().changedSince(from)).toContain("docs/a.md");
+  });
+
+  test("changedSince does not quote a non-ASCII path", async () => {
+    write("docs/café.md", lines(12));
+    await commit("first");
+    const from = await source().revision();
+    write("docs/café.md", lines(12, { 3: "changed" }));
+    await commit("edit");
+    expect(await source().changedSince(from)).toEqual(["docs/café.md"]);
+  });
+});
+
+describe("drift over GitSource names the page whose cited lines changed", () => {
+  let kb = "";
+
+  beforeEach(() => {
+    kb = mkdtempSync(join(tmpdir(), "accreta-git-kb-"));
+  });
+
+  afterEach(() => {
+    rmSync(kb, { recursive: true, force: true });
+  });
+
+  /** Cite `path#L5-L8` at HEAD, commit `change`, and rank the citing page as drift does. */
+  async function rankAfter(path: string, change: () => void | Promise<void>) {
+    const git = source();
+    const from = await git.revision();
+    mkdirSync(join(kb, "knowledge"), { recursive: true });
+    writeFileSync(
+      join(kb, "knowledge", "page.md"),
+      `---\ntype: note\nsource: repo\nlast_verified_revision: ${from}\n---\n\nA claim.[^a]\n\n[^a]: repo @ ${from} · ${path}#L5-L8\n`,
+    );
+    await change();
+    await commit("second");
+
+    const indexPath = join(kb, "index.sqlite");
+    buildIndex({ root: kb, config: DEFAULT_CONFIG, indexPath });
+    const db = openIndex(indexPath);
+    try {
+      const [entry] = (await detectDrift(db, git)).stale;
+      return entry && pageChanges(entry)?.get("knowledge/page.md");
+    } finally {
+      db.close();
+    }
+  }
+
+  beforeEach(async () => {
+    write("docs/a.md", lines(12));
+    write(".gitattributes", "docs/nodiff.md -diff\n");
+    write("docs/nodiff.md", lines(12));
+    write("docs/nul.md", lines(12, { 1: "a\0b" }));
+    await commit("first");
+  });
+
+  test("a rename with an edit to the cited lines", async () => {
+    const rank = await rankAfter("docs/a.md", async () => {
+      await run(["mv", "docs/a.md", "docs/a2.md"]);
+      write("docs/a2.md", lines(12, { 6: "changed" }));
+    });
+    expect(rank).toBe("changed");
+  });
+
+  // ADR-0015: a deleted file touches everything, and the old path is gone, so the citation must be re-pinned.
+  test("a pure rename touches the citation, since its path no longer exists", async () => {
+    const rank = await rankAfter("docs/a.md", () => run(["mv", "docs/a.md", "docs/a2.md"]));
+    expect(rank).toBe("changed");
+  });
+
+  test("a -diff file with an edited cited line", async () => {
+    const rank = await rankAfter("docs/nodiff.md", () =>
+      write("docs/nodiff.md", lines(12, { 6: "changed" })),
+    );
+    expect(rank).toBe("changed");
+  });
+
+  test("a file with a NUL byte and an edited cited line", async () => {
+    const rank = await rankAfter("docs/nul.md", () =>
+      write("docs/nul.md", lines(12, { 1: "a\0b", 6: "changed" })),
+    );
+    expect(rank).toBe("changed");
+  });
+
+  test("an edit beside the cited lines of a -diff file leaves them untouched", async () => {
+    const rank = await rankAfter("docs/nodiff.md", () =>
+      write("docs/nodiff.md", lines(12, { 11: "changed" })),
+    );
+    expect(rank).toBe("untouched");
   });
 });

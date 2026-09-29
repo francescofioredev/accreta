@@ -134,10 +134,11 @@ export class GitSource implements SourceAdapter {
       throw new UnknownRevisionError(this.id, revision);
     }
 
-    const args = ["diff", "--name-only", revision, "HEAD"];
+    // Citations name a renamed file's old path; -z stops git quoting a non-ASCII one.
+    const args = ["diff", "--name-only", "-z", "--no-renames", revision, "HEAD"];
     if (this.paths.length > 0) args.push("--", ...this.paths);
     const out = await git(this.root, args);
-    return out.split("\n").filter(Boolean).toSorted();
+    return out.split("\0").filter(Boolean).toSorted();
   }
 
   /**
@@ -153,8 +154,14 @@ export class GitSource implements SourceAdapter {
     const diff = await git(this.root, [
       "diff",
       "-U0",
+      // The hunks must count the lines on disk, whatever the user's diff config says.
+      "--inter-hunk-context=0",
+      "--no-renames",
       "--no-color",
       "--no-ext-diff",
+      "--no-textconv",
+      // A `-diff` attribute or a NUL byte would print "Binary files differ" and no hunks.
+      "--text",
       revision,
       "HEAD",
       "--",
