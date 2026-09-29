@@ -101,16 +101,35 @@ Under Bun 1.4, `node:sqlite` matches Node on every row that matters. There is on
 set of rules. The last column is what a two-driver design would have had to make match, and
 the double-quoted literal could not have been.
 
+[`0016-entry/`](0016-entry/) reproduces the bin entry shape. Run `node` or `bun` on
+`entry.mjs` or on `static-entry.mjs`. The directory has four modules:
+
+- `support.mjs` holds the warning filter and the unsupported-runtime message, and has no import
+  path to `node:sqlite`;
+- `program.mjs` stands in for the CLI: it imports `node:sqlite` statically and checks for FTS5;
+- `entry.mjs` imports `support.mjs`, then loads `program.mjs` with `await import(...)`;
+- `static-entry.mjs` imports both statically, filter first.
+
+| Runtime                | `entry.mjs`                                    | `static-entry.mjs`                                    |
+| ---------------------- | ---------------------------------------------- | ----------------------------------------------------- |
+| Node 22.16.0           | runs; 1 warning filtered; stderr empty         | runs; 0 filtered; the warning reaches stderr          |
+| Node 22.23.3           | runs; 1 warning filtered                       | —                                                     |
+| Node 24.21.0           | runs; no warning to filter                     | —                                                     |
+| Bun 1.4.0              | runs; no warning to filter                     | runs                                                  |
+| Bun 1.4.2              | runs; no warning to filter                     | —                                                     |
+| Node 22.14.0 (no FTS5) | prints the message, exit 1                     | —                                                     |
+| Node 22.12.0           | prints the message, exit 1                     | —                                                     |
+| Bun 1.3.13, 1.3.14     | prints the message, exit 1                     | uncaught `No such built-in module`, message never shown (1.3.13) |
+
+Node 22.12.0 runs `node:sqlite` only behind a flag, so its import failed like Bun 1.3's.
+
+So a static import works on every supported runtime. On Node 22, though, the warning fires when
+`node:sqlite` is linked, before any module code runs, so a filter imported on the line above
+catches nothing. The PR review also measured that `ERR_UNKNOWN_BUILTIN_MODULE` is catchable
+around `await import()` on Bun 1.3.13, Node 22.12 and Node 20.18.
+
 Some results come from one-off commands, not from a script in the repository:
 
-- **A static import works on every supported runtime.** `import { DatabaseSync } from
-  "node:sqlite"` followed by creating an fts5 table worked on Node 22.16.0 and 24.21.0 and on
-  Bun 1.4.0 and 1.4.2.
-- **On Node 22 the warning fires before any module code runs.** A module that installs a
-  `process.emitWarning` filter, imported on the line above the static `node:sqlite` import,
-  caught nothing, and the warning reached stderr. An entry file that imports the filter and
-  then loads the rest with `await import(...)` caught it on Node 22.16.0 and 22.23.3. Nothing
-  reached stderr.
 - **Null-prototype rows compare equal.** Under `bun test` on Bun 1.4.2, a `node:sqlite` row
   passed both `toEqual({ n: 1 })` and `toStrictEqual({ n: 1 })`.
 - **The held reader on macOS.** Under Bun 1.4.2, the SQLite probe's held reader threw `disk
@@ -194,6 +213,18 @@ does three things, in this order:
 If the dynamic import fails because `node:sqlite` is missing (Node before 22.13, or Bun before
 1.4), the entry file prints the same message as the FTS5 check.
 
+**The entry file has no static import path to `node:sqlite`.** The entry file, the warning
+filter and the message text live in a module that imports nothing that reaches `db.ts`.
+`@accreta/core`'s barrel re-exports `db.ts`, so importing the filter or the message from
+`@accreta/core` would link `node:sqlite` before the entry file runs. On Bun 1.3.13 that gave an
+uncaught `No such built-in module`, exit 1, and no message (`static-entry.mjs` above). On Node
+22.16 the filter caught nothing. The module can live in its own subpath export, or be
+duplicated per bin. Either way it is not the barrel.
+
+**Every unsupported-runtime path exits non-zero.** The message goes to stderr, and the process
+exits 1, whether the import failed or FTS5 is missing. Otherwise `drift --strict` in CI could
+pass on a runtime that never ran it.
+
 `main.ts` loses its guard. `import.meta.main` is `undefined` on Node 22.16 and 22.17, and the PR
 review found that `npx accreta drift --strict` then printed nothing and exited 0. That is a
 silent pass in CI, with the FTS5 check never run.
@@ -230,7 +261,8 @@ under a condition unique to this project, `@accreta/source`. Bun takes it as
 first decision. It keeps Bun 1.3.x, and that is its whole advantage. It costs the following:
 
 - The seam has to load the driver without a static import, because each runtime fails on the
-  other's module (`createRequire` was measured to work).
+  other's module. `createRequire` worked, measured with an earlier revision of the runtime probe
+  in this PR.
 - The seam needs its own strictness code to make `bun:sqlite` behave like `node:sqlite` on
   `undefined`, unknown keys, large integers and use after close. Bun's `strict: true` rejected
   a missing named key but still accepted an unknown key and a bound `undefined`.
@@ -273,13 +305,17 @@ issue or lane owns a file, it is named. This ADR edits none of those files.
 
 - **Bun 1.4 everywhere Bun runs.** CI moves off Bun 1.3.13 to 1.4.0 and to the current 1.4
   ([#118](https://github.com/francescofioredev/accreta/issues/118); this lane owns
-  `.github/workflows/`). So do contributors' machines and `bun.lock`. The root tsconfig loads only the
-  `bun` types today, so #117 checks that `node:sqlite`'s types resolve under it.
+  `.github/workflows/`). So do contributors' machines and `bun.lock`. The root tsconfig loads
+  only the `bun` types today, so #117 checks that `node:sqlite`'s types resolve under it.
 - **The version message.** `engines` is advisory, as ADR-0005 said. Without a check, a user on
   Node 22.13–22.15 or 23 gets `no such module: fts5` at the first reindex, and a user on Bun
   1.3 gets `No such built-in module`. Neither names a fix. The message names Node
   `^22.16.0 || >=24`, Bun 1.4, and `bunx --bun accreta`. It checks the capability rather than
-  parsing version strings. `doctor` reports the same check.
+  parsing version strings. It goes to stderr with exit 1. `doctor` reports the same check.
+- **Library users on Node 22 see the warning.** Code that imports `@accreta/core` directly,
+  rather than through a bin, gets Node 22's experimental warning on stderr. This is accepted. A
+  library that patches `process.emitWarning` on import would change its host's process behind
+  its back. Node 24 does not print the warning at all.
 - **Statement call sites.** `db.query` becomes `prepare`: 16 call sites in `packages/*/src` and
   23 in the tests on `main`, counted with `grep -rE '\.query\('`. Tests that assert `null` from
   `.get()` change to `undefined`.
@@ -301,7 +337,9 @@ issue or lane owns a file, it is named. This ADR edits none of those files.
     rather than its exit code (#118);
   - the demo commands in `README.md`, which is frozen until the launch lane
     ([#141](https://github.com/francescofioredev/accreta/issues/141));
-  - `examples/climate/README.md`.
+  - `examples/climate/README.md`;
+  - `bench/jev/tasks/ingest-got.ts`, which runs `bun <cli>/src/main.ts init`, and which the
+    evidence lane owns (`bench/`).
 - **Existing MCP configs break on upgrade.** The setup skill, the MCP server's README and
   `examples/.mcp.json` all write `args: ["run", "node_modules/@accreta/mcp-server/src/main.ts"]`.
   That path no longer ships.
@@ -318,6 +356,9 @@ issue or lane owns a file, it is named. This ADR edits none of those files.
   - The CLI's check asserts that the commands did something: an index file exists after
     `reindex`, and a search returns a hit. Exit 0 alone proved nothing on Node 22.16.
   - The MCP server's check includes an MCP `initialize` and `tools/list`.
+  - Each bin also runs once on a runtime without `node:sqlite` (Node 22.12 or Bun 1.3.14), and
+    once on a runtime without FTS5 (Node 22.14). Both assert the message and a non-zero exit.
+  - On Node 22.16, stderr is asserted empty, which proves the warning filter ran first.
 - **Source condition.** A test asserts that `@accreta/core` resolves to `src/` inside the
   repository.
 - **Build output.** `tsc` does not copy `schema.sql`. The build copies it into `dist/`, and the

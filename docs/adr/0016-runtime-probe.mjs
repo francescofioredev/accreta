@@ -2,7 +2,6 @@
 // Run with `node` or `bun`: node:sqlite on both, `--driver=bun` for bun:sqlite. Reports only.
 import { execFile, execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -10,17 +9,10 @@ import { promisify } from "node:util";
 const isBun = typeof globalThis.Bun !== "undefined";
 const runtime = isBun ? `bun ${globalThis.Bun.version}` : `node ${process.version}`;
 
-// The seam's loading pattern: filter the one warning, then load the driver synchronously.
-let filtered = 0;
-const emitWarning = process.emitWarning;
-process.emitWarning = (warning, ...rest) => {
-  const message = typeof warning === "string" ? warning : warning?.message;
-  if (/^SQLite is an experimental feature/.test(message ?? "")) return void filtered++;
-  return emitWarning.call(process, warning, ...rest);
-};
-const require = createRequire(import.meta.url);
+// Dynamic only so one file can compare drivers. The warning filter is measured in 0016-entry/.
 const driver = process.argv.includes("--driver=bun") ? "bun:sqlite" : "node:sqlite";
-const Database = driver === "bun:sqlite" ? require(driver).Database : require(driver).DatabaseSync;
+const loaded = await import(driver);
+const Database = driver === "bun:sqlite" ? loaded.Database : loaded.DatabaseSync;
 const open = (path, opts) => new Database(path, opts);
 
 const dir = mkdtempSync(join(tmpdir(), "accreta-0016-rt-"));
@@ -47,7 +39,6 @@ async function probeAsync(name, fn) {
 }
 
 probe("import.meta.main in the entry module", () => import.meta.main);
-probe("experimental warnings filtered while loading", () => filtered);
 
 const readWrite = driver === "bun:sqlite" ? { create: true } : {};
 const mem = open(":memory:", readWrite);
