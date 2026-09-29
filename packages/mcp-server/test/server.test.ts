@@ -79,3 +79,30 @@ test("the provenance block survives a real tool call", async () => {
     await client.close();
   }
 });
+
+// Only the first sentence counts: the provenance notice below it mentions aliases for another reason.
+test("search_pages names every column the FTS index searches", async () => {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "description-probe", version: "0.0.0" });
+
+  await Promise.all([createServer(ctx).connect(serverTransport), client.connect(clientTransport)]);
+
+  try {
+    const { sql } = ctx.db
+      .query("SELECT sql FROM sqlite_master WHERE name = 'pages_fts'")
+      .get() as { sql: string };
+    const searched = sql
+      .slice(sql.indexOf("(") + 1, sql.lastIndexOf(")"))
+      .split(",")
+      .map((column) => column.trim())
+      .filter((column) => !column.includes("=") && !/\bUNINDEXED\b/i.test(column));
+    expect(searched.length).toBeGreaterThan(0);
+
+    const { tools } = await client.listTools();
+    const description = tools.find((tool) => tool.name === "search_pages")?.description ?? "";
+    const firstSentence = description.split(". ")[0] ?? "";
+    for (const column of searched) expect(firstSentence).toContain(column);
+  } finally {
+    await client.close();
+  }
+});
