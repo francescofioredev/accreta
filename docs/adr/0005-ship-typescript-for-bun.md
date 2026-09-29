@@ -1,6 +1,7 @@
 # ADR-0005: Ship TypeScript, and require Bun
 
-Status: accepted
+Status: superseded by [ADR-0016](0016-run-on-node-and-bun.md) on runtime and build; the asset,
+`files` and publishing decisions stand
 Date: 2026-08-08
 
 ## Context
