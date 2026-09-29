@@ -79,8 +79,8 @@ happens with decision models.
 
 Beyond that, any use of a model reverses a standing decision: accreta has never called one
 ([F-ME-05](../2026-08-review/06-model-economist.md)). The shape that fits the evidence is an
-optional judge port, sketched in [ADR-0014](../../adr/0014-an-optional-judge-port.md) and still
-proposed:
+optional judge port, [ADR-0014](../../adr/0014-an-optional-judge-port.md), accepted for reranking and
+citation support and proposed for drift until the blind audit:
 - provider-neutral, like `SourceAdapter`, so Jev is one implementation and any structured-output
   model another;
 - off by default;

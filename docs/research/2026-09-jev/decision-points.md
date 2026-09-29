@@ -42,5 +42,6 @@ dates as text.
 citation-support labels: the IETF's classification of errata, and a frontier annotator
 (Claude Opus 5.5). Jev agrees with the annotator far more than with the IETF.
 
-The audit samples are fixed in `bench/jev/data/audit/`. Until they are labelled, every figure
+The audit is [#152](https://github.com/francescofioredev/accreta/issues/152); its samples are fixed in
+`bench/jev/data/audit/`. Until they are labelled, every figure
 measured against the annotator is the annotator's judgement, not ground truth.

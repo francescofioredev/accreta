@@ -1,7 +1,8 @@
 # ADR-0014: An optional judge port, advisory only
 
-Status: proposed
-Date: 2026-09-28
+Status: accepted in part. The port, reranking and citation support are accepted; `stillHolds` is
+proposed until the blind audit (#152)
+Date: 2026-09-28; accepted in part 2026-09-29
 
 ## Context
 
@@ -28,16 +29,15 @@ Two of these would make accreta call a model on its own initiative, from `lint` 
 `search_pages`. That is the reversal F-ME-05 warned about, and it deserves a decision rather than
 a feature.
 
-## Decision (proposed)
+## Decision
 
-**Drift at line granularity comes first, and needs no model.** `detectDrift` intersects each
-citation's line locator with the changed hunks, and reports untouched citations separately from
-touched ones. This is independent of everything below, and could be taken on its own.
+**Drift at line granularity comes first, and needs no model.** Intersecting each citation's line
+locator with the changed hunks is independent of everything below, and is taken on its own (#134).
 
 **A `Judge` port in core, modelled on `SourceAdapter`.**
 - It exposes a small set of typed questions:
   - `supports(claim, citedText)` → supports / contradicts / says nothing, with probabilities;
-  - `stillHolds(claim, before, after)` → a probability;
+  - `stillHolds(claim, before, after)` → a probability. Proposed only, pending the audit (#154);
   - `rank(query, candidates)` → probabilities.
 - Core never knows which judge it talks to. A Jev judge and a structured-output LLM judge are two
   implementations, so the vendor can be replaced, and so can a vendor that closes sign-ups.
@@ -78,5 +78,5 @@ RFCs and on code.
   owner has to know that before configuring one, so the configuration says so in words.
 - **Findings from a judge are probabilistic**, and must be reported as such, never as lint errors
   that fail CI by default.
-- **This ADR stays proposed until the study's audit settles the drift labels.** That audit
-  decides whether `stillHolds` is worth wiring at all.
+- **`stillHolds` stays proposed until the study's audit settles the drift labels** (#152). That
+  audit decides whether it is worth wiring at all. The rest is built in #153.
