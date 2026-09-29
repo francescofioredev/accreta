@@ -44,6 +44,11 @@ function nameOf(tarball: string): string {
   return stem === "accreta" ? stem : `@accreta/${stem.replace(/^accreta-/, "")}`;
 }
 
+// A hook timeout SIGTERMs the child; say so, or it reads as the child's own failure.
+function killedBy(result: { signalCode?: string }): string {
+  return result.signalCode ? ` (killed by ${result.signalCode})` : "";
+}
+
 beforeAll(() => {
   staging = mkdtempSync(join(tmpdir(), "accreta-staging-"));
   consumer = mkdtempSync(join(tmpdir(), "accreta-consumer-"));
@@ -55,7 +60,7 @@ beforeAll(() => {
       stderr: "pipe",
     });
     if (packed.exitCode !== 0) {
-      throw new Error(`packing ${pkg} failed:\n${packed.stderr.toString()}`);
+      throw new Error(`packing ${pkg} failed${killedBy(packed)}:\n${packed.stderr.toString()}`);
     }
   }
 
@@ -84,11 +89,14 @@ beforeAll(() => {
 
   const install = Bun.spawnSync(["bun", "install"], { cwd: consumer, stderr: "pipe" });
   if (install.exitCode !== 0) {
-    throw new Error(`installing the tarballs failed:\n${install.stderr.toString()}`);
+    throw new Error(
+      `installing the tarballs failed${killedBy(install)}:\n${install.stderr.toString()}`,
+    );
   }
 
   accreta = join(consumer, "node_modules", ".bin", "accreta");
-});
+  // Seven packs and an install that may hit the network: bun's 5s default killed it under load.
+}, 60_000);
 
 afterAll(() => {
   for (const dir of [staging, consumer]) {
