@@ -21,23 +21,32 @@ export interface DriftOptions {
   base?: string;
 }
 
-/** Read the flags only `drift` takes, which the shared parser leaves positional. */
+/**
+ * Pair drift's flags with their values in the raw arguments. `COMMAND_ARGS` has already refused
+ * any flag drift does not take; what is left to refuse is a value without its flag.
+ */
 export function driftOptions(args: readonly string[]): DriftOptions {
   const options: DriftOptions = { format: "text" };
   for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === "--json") {
+    const arg = args[i]!;
+    const at = arg.startsWith("--") ? arg.indexOf("=") : -1;
+    const name = at > 0 ? arg.slice(0, at) : arg;
+    const value = () => (at > 0 ? arg.slice(at + 1) : args[++i]);
+    if (name === "--strict") continue;
+    if (name === "--json") {
       options.format = "json";
-    } else if (arg === "--format") {
-      const value = args[++i];
-      if (value !== "text" && value !== "json" && value !== "github") {
-        throw new Error(`--format takes text, json or github, not "${value ?? ""}".`);
+    } else if (name === "--format") {
+      const format = value();
+      if (format !== "text" && format !== "json" && format !== "github") {
+        throw new Error(`--format takes text, json or github, not "${format ?? ""}".`);
       }
-      options.format = value;
-    } else if (arg === "--base") {
-      const value = args[++i];
-      if (!value) throw new Error("--base takes the path of a `drift --json` report.");
-      options.base = value;
+      options.format = format;
+    } else if (name === "--base") {
+      const path = value();
+      if (!path || path.startsWith("--")) {
+        throw new Error("--base takes the path of a `drift --json` report.");
+      }
+      options.base = path;
     } else {
       throw new Error(`drift does not take "${arg}".`);
     }
@@ -50,12 +59,20 @@ export async function drift(
   args: readonly string[] = [],
   strict = false,
 ): Promise<number> {
-  const options = driftOptions(args);
   const workspace = findWorkspace(ctx.cwd);
   if (!existsSync(workspace.indexPath)) {
     throw new Error(`No index at ${workspace.indexPath}. Run \`accreta reindex\` first.`);
   }
-  const base = options.base ? readBase(resolve(ctx.cwd, options.base)) : undefined;
+  let options: DriftOptions;
+  let base: BaseKeys | undefined;
+  try {
+    options = driftOptions(args);
+    base = options.base ? readBase(resolve(ctx.cwd, options.base)) : undefined;
+  } catch (error) {
+    // 2, as for any refused argument: 1 already means drift found something.
+    ctx.err(error instanceof Error ? error.message : String(error));
+    return 2;
+  }
 
   const sources = loadSources(workspace);
   const reports: DriftReport[] = [];

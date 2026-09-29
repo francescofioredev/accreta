@@ -590,8 +590,24 @@ describe("accreta drift for a pull request", () => {
 
   test("an unknown format or flag is refused rather than ignored", async () => {
     await fixture();
-    await expect(cli("drift", "--format", "html")).rejects.toThrow(/--format takes/);
-    await expect(cli("drift", "--jsn")).rejects.toThrow(/does not take "--jsn"/);
+    for (const [argv, says] of [
+      [["--format", "html"], "--format takes text, json or github"],
+      [["--format"], "--format takes"],
+      [["--jsn"], "drift does not take --jsn"],
+      [["github"], 'drift does not take "github"'],
+      [["--json", "github", "extra"], 'drift does not take "github"'],
+      [["--base", "--json"], "--base takes the path"],
+    ] as const) {
+      errors = [];
+      expect(await cli("drift", ...argv)).toBe(2);
+      expect(stderr()).toContain(says);
+    }
+  });
+
+  test("flag values can be joined with =", async () => {
+    await fixture();
+    expect(await cli("drift", "--format=json")).toBe(1);
+    expect(JSON.parse(stdout()).pages_in_doubt).toBe(1);
   });
 });
 
@@ -755,7 +771,8 @@ describe("accreta drift --base", () => {
   test("a base that is not a drift report is refused", async () => {
     await repo();
     writeFileSync(join(root, "base.json"), "{}", "utf-8");
-    await expect(cli("drift", "--json", "--base", "base.json")).rejects.toThrow(/has no sources/);
+    expect(await cli("drift", "--json", "--base", "base.json")).toBe(2);
+    expect(stderr()).toContain("has no sources");
   });
 });
 
