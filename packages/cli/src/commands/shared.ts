@@ -39,6 +39,8 @@ export interface ParsedArgs {
   positional: string[];
   /** Every flag given, `-t` normalized to `--type`. */
   flags: string[];
+  /** Arguments after `--`, which are positional however they look. */
+  afterEndOfOptions: string[];
   problems: string[];
 }
 
@@ -71,6 +73,11 @@ export function refuseArguments(command: string | undefined, args: ParsedArgs): 
   const spec = command === undefined ? undefined : COMMAND_ARGS[command];
   if (!spec) return null;
   if (args.problems.length > 0) return args.problems[0]!;
+  // `canonical -- -O2 --json` once searched for "-O2 --json" and printed prose.
+  const misplaced = args.afterEndOfOptions.find((arg) =>
+    spec.flags.includes(arg === "-t" ? "--type" : arg.split("=")[0]!),
+  );
+  if (misplaced) return `${command}: options go before --, and ${misplaced} came after it.`;
   for (const flag of args.flags) {
     if (spec.flags.includes(flag)) continue;
     const issue = spec.pending?.[flag];

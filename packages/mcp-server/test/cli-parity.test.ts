@@ -117,6 +117,8 @@ const REFUSED: { argv: string[]; says: string }[] = [
   { argv: ["reindex", "--json"], says: "reindex does not take --json" },
   { argv: ["search"], says: "Usage" },
   { argv: ["nosuch"], says: "Unknown command" },
+  { argv: ["nosuch", "--help"], says: "Unknown command" },
+  { argv: ["canonical", "--", "-O2", "--json"], says: "options go before --" },
   { argv: ["search", "flux", "--limit", "0"], says: "--limit" },
   { argv: ["search", "flux", "--limit", "2.5"], says: "--limit" },
   { argv: ["canonical", "-O2"], says: "Put -- before" },
@@ -229,7 +231,11 @@ describe("--json matches the MCP tool field for field", () => {
   for (const c of CASES) {
     test(`${c.argv.join(" ")} --json = ${c.tool} ${JSON.stringify(c.args)}`, async () => {
       const [fromCli, fromMcp] = [
-        await cli([c.argv[0]!, "--json", ...c.argv.slice(1)]),
+        await cli(
+          c.argv.includes("--")
+            ? [c.argv[0]!, "--json", ...c.argv.slice(1)]
+            : [...c.argv, "--json"],
+        ),
         await mcp(c.tool, c.args),
       ];
       expect(fromMcp.isError).toBe(false);

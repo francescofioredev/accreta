@@ -1,7 +1,12 @@
 #!/usr/bin/env bun
 import { readFileSync } from "node:fs";
 
-import { refuseArguments, type CommandContext, type ParsedArgs } from "./commands/shared.ts";
+import {
+  COMMAND_ARGS,
+  refuseArguments,
+  type CommandContext,
+  type ParsedArgs,
+} from "./commands/shared.ts";
 import { canonical } from "./commands/canonical.ts";
 import { consumers } from "./commands/consumers.ts";
 import { doctor } from "./commands/doctor.ts";
@@ -72,6 +77,7 @@ function parseArgs(argv: string[]): ParsedArgs & {
 } {
   const positional: string[] = [];
   const flags: string[] = [];
+  const afterEndOfOptions: string[] = [];
   const problems: string[] = [];
   let help = false;
   let endOfOptions = false;
@@ -90,6 +96,7 @@ function parseArgs(argv: string[]): ParsedArgs & {
     if (arg === undefined) continue;
     if (endOfOptions) {
       positional.push(arg);
+      afterEndOfOptions.push(arg);
       continue;
     }
     if (arg === "--") {
@@ -174,6 +181,7 @@ function parseArgs(argv: string[]): ParsedArgs & {
   return {
     positional,
     flags,
+    afterEndOfOptions,
     problems,
     help,
     types,
@@ -195,7 +203,8 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
   const { positional, types, kinds, includeInline, strict, json, limit, source, set } = parsed;
   const { preset, agentFile } = parsed;
 
-  if (parsed.help && command !== undefined) {
+  // Only a command this install has: `cite --help` on an older one must not look like success.
+  if (parsed.help && command !== undefined && Object.hasOwn(COMMAND_ARGS, command)) {
     ctx.out(USAGE);
     return 0;
   }
