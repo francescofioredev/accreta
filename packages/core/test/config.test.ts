@@ -49,15 +49,19 @@ supersession_fields:
     expect(parseConfig("supersession_fields: false").supersessionFields).toBeNull();
   });
 
-  test("a malformed pair falls back to the default, like every other key", () => {
-    for (const value of [
-      "supersession_fields: yes please",
-      "supersession_fields: [supersedes, superseded_by]",
-      "supersession_fields: { supersedes: replaces }",
-      "supersession_fields: { supersedes: same, superseded_by: same }",
-      "supersession_fields:",
-    ]) {
-      expect(parseConfig(value)).not.toHaveProperty("supersessionFields");
+  // Defaulting would check a pair the user did not choose; lint reports the value instead.
+  test("a malformed pair is kept as invalid, not replaced by the default", () => {
+    for (const [value, raw] of [
+      ["no", "no"],
+      ["off", "off"],
+      ["[supersedes, superseded_by]", ["supersedes", "superseded_by"]],
+      ["{ supersedes: replaces }", { supersedes: "replaces" }],
+      ["{ supersedes: same, superseded_by: same }", { supersedes: "same", superseded_by: "same" }],
+      ["", null],
+    ] as const) {
+      expect(parseConfig(`supersession_fields: ${value}`).supersessionFields).toEqual({
+        invalid: raw,
+      });
     }
   });
 });

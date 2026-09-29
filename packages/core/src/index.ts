@@ -1,4 +1,9 @@
-export type { AccretaConfig, ConfigCheck, SupersessionFields } from "./config.ts";
+export type {
+  AccretaConfig,
+  ConfigCheck,
+  InvalidSupersessionFields,
+  SupersessionFields,
+} from "./config.ts";
 export {
   DEFAULT_CONFIG,
   DEFAULT_SUPERSESSION_FIELDS,

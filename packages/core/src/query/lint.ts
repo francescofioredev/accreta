@@ -28,6 +28,7 @@ export const LINT_FINDING_KINDS = [
   "unreadable-provenance-format",
   "unloaded-source",
   "inconsistent-supersession",
+  "unreadable-supersession-fields",
 ] as const;
 
 export type LintFindingKind = (typeof LINT_FINDING_KINDS)[number];

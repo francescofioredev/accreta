@@ -93,9 +93,10 @@ supersession_fields: { supersedes: supersedes, superseded_by: superseded_by }
 `lint` reports an `inconsistent-supersession` finding for a loop of such claims, including two
 pages that each supersede the other, and for a claim only one of its two pages records. Unset,
 the check applies only when both default fields are in `link_fields`; a knowledge base without
-them does not use supersession and gets no finding. Set explicitly to a field that is not in
-`link_fields`, it is reported once, against the config. `supersession_fields: false` turns the
-check off.
+them does not use supersession and gets no finding. Set to anything but two distinct fields
+that are both in `link_fields`, it is reported once, against the config, as
+`unreadable-supersession-fields`, and the check does not run. `supersession_fields: false` turns
+the check off.
 
 Code-oriented types (`repository`, `module`, `api`, `usecase`, `integration`) ship as the
 `codebase` preset.
