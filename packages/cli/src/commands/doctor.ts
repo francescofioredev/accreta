@@ -4,6 +4,13 @@ import { checkConfig, compileCitationTemplate, DEFAULT_CONFIG } from "@accreta/c
 import { KNOWN_TYPES, kindFor, readDeclarations } from "@accreta/adapters";
 import { CONFIG_FILENAME, findWorkspace } from "../workspace.ts";
 import { reportPreflight, type CommandContext } from "./shared.ts";
+import {
+  CLI_VERSION,
+  compareVersions,
+  findInstalledSkills,
+  SKILL_NAME,
+  skillDirectories,
+} from "./skill-floor.ts";
 
 /**
  * Say what is wired up and what is not, read-only, and never guess at the difference. Whether
@@ -73,7 +80,33 @@ export async function doctor(ctx: CommandContext): Promise<number> {
       : "  unknown: no .mcp.json here names accreta's server — the agent may be configured elsewhere",
   );
 
+  reportSkill(ctx, workspace.root);
+
   return exitCode;
+}
+
+/** Never a failure: the copy found may not be the one the agent loads, and none found proves nothing. */
+function reportSkill(ctx: CommandContext, root: string): void {
+  ctx.out("\nskill");
+  const pinned = `npx skills add "https://github.com/francescofioredev/accreta/tree/v${CLI_VERSION}/skills/${SKILL_NAME}"`;
+  const installed = findInstalledSkills(root);
+  if (installed.length === 0) {
+    const searched = skillDirectories(root).map((dir) => dir.label);
+    ctx.out(
+      `  unknown: no ${SKILL_NAME} in ${searched.join(", ")} — the agent may load it from elsewhere`,
+    );
+  }
+  for (const skill of installed) {
+    if (!skill.floor.ok) {
+      ctx.out(`  unknown: ${skill.where} found, but ${skill.floor.reason}`);
+      ctx.out(`    → reinstall it pinned to this release: ${pinned}`);
+    } else if (compareVersions(skill.floor.requires, CLI_VERSION) > 0) {
+      ctx.out(`  stale: ${skill.where} requires ${skill.floor.requires}, this is ${CLI_VERSION}`);
+      ctx.out(`    → upgrade accreta, or pin the skill to this release: ${pinned}`);
+    } else {
+      ctx.out(`  ok: ${skill.where} found, requires ${skill.floor.requires}`);
+    }
+  }
 }
 
 /** Only this workspace's file. An agent configured elsewhere is invisible, and saying so is the point. */
