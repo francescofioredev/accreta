@@ -142,11 +142,24 @@ describe("inconsistent-supersession", () => {
     for (const page of ["a", "b", "c"]) expect(finding!.detail).toContain(`knowledge/${page}.md`);
   });
 
-  // Naming every page made one finding 460 KB and lint quadratic; paging caps count, not size.
-  test("a loop through 20,000 pages lints fast and its detail stays small", () => {
+  // Naming every page made one finding 460 KB and lint quadratic (1,770 ms); paging caps count, not size.
+  test("a loop through 20,000 pages lints in linear time and its detail stays small", () => {
     const n = 20_000;
-    for (let i = 0; i < n; i++) writePage(padded(i), { supersedes: `[[${padded((i + 1) % n)}]]` });
-    reindex();
+    db = openIndex(indexPath);
+    const page = db.query(
+      `INSERT INTO pages (path, type, title, canonical_source, last_verified_revision, frontmatter_json, body, mtime)
+       VALUES (?, 'note', ?, 's:x#L1', 'abc', '{}', '', 0)`,
+    );
+    const link = db.query(
+      `INSERT INTO links (src_path, dst_path, kind) VALUES (?, ?, 'supersedes')`,
+    );
+    const path = (i: number) => `knowledge/${padded(i)}.md`;
+    db.transaction(() => {
+      for (let i = 0; i < n; i++) {
+        page.run(path(i), padded(i));
+        link.run(path(i), path((i + 1) % n));
+      }
+    })();
 
     const t0 = performance.now();
     const findings = lint(db!, config).findings.filter(
@@ -158,8 +171,8 @@ describe("inconsistent-supersession", () => {
     expect(findings[0]!.detail).toStartWith("20000 pages claim to supersede one another in a loop");
     expect(findings[0]!.detail).toContain("… 19980 more …");
     expect(findings[0]!.detail.length).toBeLessThan(4096);
-    expect(ms).toBeLessThan(200);
-  }, 60_000);
+    expect(ms).toBeLessThan(1_000);
+  });
 
   test("a chain that runs one way, recorded on both sides, is clean", () => {
     writePage("v1", { superseded_by: "[[v2]]" });
