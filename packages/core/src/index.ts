@@ -1,6 +1,9 @@
 export type { AccretaConfig, ConfigCheck } from "./config.ts";
 export { DEFAULT_CONFIG, checkConfig, configFromObject, parseConfig } from "./config.ts";
 
+export type { CitationParts, CitationTemplate, Footnote, TemplateResult } from "./citations.ts";
+export { compileCitationTemplate, extractFootnotes } from "./citations.ts";
+
 export type { Frontmatter, ParsedPage } from "./page.ts";
 export { parsePage } from "./page.ts";
 

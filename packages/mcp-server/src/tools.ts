@@ -287,6 +287,7 @@ export async function lintTool(ctx: ToolContext) {
     // Citations whose source could not be questioned. A number rather than
     // findings: reporting them would say a problem was found where nothing was
     // looked at.
+    citations_checked: citations.citationsChecked,
     citations_unchecked: citations.citationsUnchecked,
     findings,
     _provenance: provenance(LINT_FIELDS),

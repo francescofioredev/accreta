@@ -2,8 +2,8 @@
 type: concept
 source: ipcc-ar6-wg1
 aliases: ["equilibrium climate sensitivity", "ECS"]
-canonical_source: "ipcc-ar6-wg1:examples/climate/sources/ipcc-ar6-wg1/chapter-07.md#L26"
-last_verified_revision: a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d
+canonical_source: "ipcc-ar6-wg1:examples/climate/sources/ipcc-ar6-wg1/chapter-07.md#L22"
+last_verified_revision: 553a13edf7d1b9753b60eecf69f7e0b3bc45d0cb
 related: [[concepts/radiative-forcing]]
 cites: [[sources/ipcc-ar6-wg1]]
 ---
@@ -20,6 +20,6 @@ The narrowing relative to earlier assessments comes from combining process under
 instrumental record and paleoclimate evidence, rather than from any single line of
 evidence.[^why]
 
-[^def]: ipcc-ar6-wg1 @ a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d · examples/climate/sources/ipcc-ar6-wg1/chapter-07.md#L26-L29
-[^range]: ipcc-ar6-wg1 @ a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d · examples/climate/sources/ipcc-ar6-wg1/chapter-07.md#L28-L30
-[^why]: ipcc-ar6-wg1 @ a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d · examples/climate/sources/ipcc-ar6-wg1/chapter-07.md#L31-L33
+[^def]: ipcc-ar6-wg1 @ 553a13edf7d1b9753b60eecf69f7e0b3bc45d0cb · examples/climate/sources/ipcc-ar6-wg1/chapter-07.md#L22-L23
+[^range]: ipcc-ar6-wg1 @ 553a13edf7d1b9753b60eecf69f7e0b3bc45d0cb · examples/climate/sources/ipcc-ar6-wg1/chapter-07.md#L23-L24
+[^why]: ipcc-ar6-wg1 @ 553a13edf7d1b9753b60eecf69f7e0b3bc45d0cb · examples/climate/sources/ipcc-ar6-wg1/chapter-07.md#L26-L27

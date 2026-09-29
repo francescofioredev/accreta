@@ -2,7 +2,7 @@
 type: source
 source: ipcc-ar6-wg1
 canonical_source: "ipcc-ar6-wg1:examples/climate/sources/ipcc-ar6-wg1/chapter-07.md#L1"
-last_verified_revision: a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d
+last_verified_revision: 553a13edf7d1b9753b60eecf69f7e0b3bc45d0cb
 cited_by: [[concepts/climate-sensitivity]]
 ---
 

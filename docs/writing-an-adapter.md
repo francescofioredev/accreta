@@ -15,10 +15,11 @@ interface SourceAdapter {
   locate(path: string, locator?: string): Promise<LocationVerdict>;
   citation(path: string, locator?: string): string;
   pinRevision(revision: string): void;
+  knowsRevision?(revision: string): Promise<boolean>; // optional
 }
 ```
 
-Five methods. `packages/core` imports no adapter and never branches on which one it holds —
+Five methods, and one optional one. `packages/core` imports no adapter and never branches on which one it holds —
 if you find yourself wanting it to, the interface is missing something and the fix is to
 extend the interface. See [ADR-0002](adr/0002-source-adapter-interface.md).
 
@@ -105,6 +106,14 @@ differently would make a citation mean different things depending on which sourc
 `citation()` renders the configured provenance format. Use `formatCitation()` from the core
 rather than building the string yourself — it drops the `#{locator}` decoration when there is
 no locator, instead of emitting `undefined`.
+
+## `knowsRevision()`, if your source keeps history
+
+`lint` uses it to flag a footnote citing a revision your source never had, such as a
+fabricated or mistyped commit. Implement it only if you can answer from the history itself;
+`git` asks `cat-file -e`. Leave it out if you cannot. Absent means "cannot tell", which is what
+`fs` (no history) and `delegated` (nothing to ask) truthfully say. Never return `false` for a
+revision you merely do not remember: every citation into your source would become a finding.
 
 ## `pinRevision()`
 

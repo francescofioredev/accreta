@@ -21,8 +21,9 @@ Expected:
 ```
 Indexed 10 pages and 27 links in 37ms.
 10 page(s) checked, nothing to report.
-ipcc-ar6-wg1 @ a80a1b6… up to date
-noaa-gml @ a80a1b6…     up to date
+31 citation(s) checked against their source.
+ipcc-ar6-wg1 @ 553a13e… up to date
+noaa-gml @ 553a13e…     up to date
 ```
 
 Then query it:

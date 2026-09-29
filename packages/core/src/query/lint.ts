@@ -1,6 +1,12 @@
 import type { Database } from "../index-db/db.ts";
+import { compileCitationTemplate } from "../citations.ts";
 import type { AccretaConfig } from "../config.ts";
-import { parseCitation, type LocationVerdict, type SourceAdapter } from "../source/adapter.ts";
+import {
+  parseCitation,
+  UNPINNED_REVISION,
+  type LocationVerdict,
+  type SourceAdapter,
+} from "../source/adapter.ts";
 
 export interface LintFinding {
   kind:
@@ -12,7 +18,11 @@ export interface LintFinding {
     | "unparseable-frontmatter"
     | "unparseable-citation"
     | "citation-path-missing"
-    | "citation-locator-missing";
+    | "citation-locator-missing"
+    | "citation-unpinned"
+    | "citation-revision-unknown"
+    | "duplicate-footnote"
+    | "unreadable-provenance-format";
   path: string;
   detail: string;
 }
@@ -20,6 +30,8 @@ export interface LintFinding {
 export interface LintReport {
   findings: LintFinding[];
   pagesChecked: number;
+  /** Citations a source answered for, `canonical_source` and footnotes alike. */
+  citationsChecked: number;
   /**
    * Citations whose source could not check them.
    *
@@ -98,6 +110,16 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
     )
     .all() as PageRow[];
 
+  // Reported once, against the config: every footnote in the knowledge base goes unchecked.
+  const format = compileCitationTemplate(config.provenanceFormat);
+  if (!format.ok) {
+    findings.push({
+      kind: "unreadable-provenance-format",
+      path: "accreta.config.yaml",
+      detail: `${format.reason}; footnote citations are not checked`,
+    });
+  }
+
   const knownTypes = new Set(config.pageTypes);
   for (const page of pages) {
     // Reported first, and *alongside* the three below rather than instead of
@@ -142,12 +164,23 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
     }
   }
 
-  return { findings, pagesChecked: pages.length, citationsUnchecked: 0 };
+  return { findings, pagesChecked: pages.length, citationsChecked: 0, citationsUnchecked: 0 };
 }
 
 interface CitationRow {
   path: string;
   canonical_source: string;
+}
+
+interface FootnoteRow {
+  page_path: string;
+  footnote: string;
+  line: number;
+  text: string;
+  source: string | null;
+  revision: string | null;
+  path: string | null;
+  locator: string | null;
 }
 
 /**
@@ -187,9 +220,21 @@ export async function lintCitations(
 
   // One question per distinct location, not per citation: a knowledge base
   // cites the same place from many pages.
-  const verdicts = new Map<string, LocationVerdict>();
+  const verdicts = new Map<string, Promise<LocationVerdict>>();
+  const locate = (adapter: SourceAdapter, path: string, locator?: string) => {
+    const key = `${adapter.id}\0${path}\0${locator ?? ""}`;
+    let verdict = verdicts.get(key);
+    if (verdict === undefined) {
+      verdict = adapter.locate(path, locator).catch((error) => unknownVerdict(error));
+      verdicts.set(key, verdict);
+    }
+    return verdict;
+  };
+  let citationsChecked = 0;
+  const checkedPages = new Set<string>();
 
   for (const page of pages) {
+    checkedPages.add(page.path);
     const citation = parseCitation(page.canonical_source);
     if (!citation) {
       findings.push({
@@ -206,19 +251,12 @@ export async function lintCitations(
     // against a subset of the declared sources is a normal thing to do.
     if (!adapter) continue;
 
-    const key = `${citation.sourceId}\0${citation.path}\0${citation.locator ?? ""}`;
-    let verdict = verdicts.get(key);
-    if (verdict === undefined) {
-      verdict = await adapter
-        .locate(citation.path, citation.locator)
-        .catch((error) => unknownVerdict(error));
-      verdicts.set(key, verdict);
-    }
-
+    const verdict = await locate(adapter, citation.path, citation.locator);
     if (verdict.verdict === "unknown") {
       citationsUnchecked++;
       continue;
     }
+    citationsChecked++;
     if (verdict.verdict === "missing") {
       findings.push({
         kind: verdict.part === "path" ? "citation-path-missing" : "citation-locator-missing",
@@ -228,7 +266,87 @@ export async function lintCitations(
     }
   }
 
-  return { findings, pagesChecked: pages.length, citationsUnchecked };
+  const footnotes = db
+    .query(
+      `SELECT page_path, footnote, line, text, source, revision, path, locator
+       FROM citations ORDER BY page_path, line`,
+    )
+    .all() as FootnoteRow[];
+
+  // One question per revision, for the same reason as per location.
+  const revisions = new Map<string, Promise<boolean | null>>();
+  const knows = (adapter: SourceAdapter, revision: string) => {
+    const key = `${adapter.id}\0${revision}`;
+    let known = revisions.get(key);
+    if (known === undefined) {
+      known = adapter.knowsRevision
+        ? adapter.knowsRevision(revision).catch(() => null)
+        : Promise.resolve(null);
+      revisions.set(key, known);
+    }
+    return known;
+  };
+
+  const firstLine = new Map<string, number>();
+  for (const row of footnotes) {
+    checkedPages.add(row.page_path);
+    const id = `${row.page_path}\0${row.footnote}`;
+    const first = firstLine.get(id);
+    if (first !== undefined) {
+      findings.push({
+        kind: "duplicate-footnote",
+        path: row.page_path,
+        detail: `[^${row.footnote}] is defined again at line ${row.line} (first at line ${first}); a renderer shows only the first`,
+      });
+      continue;
+    }
+    firstLine.set(id, row.line);
+    const label = `[^${row.footnote}] (line ${row.line})`;
+    if (row.source === null || row.path === null) {
+      findings.push({
+        kind: "unparseable-citation",
+        path: row.page_path,
+        detail: `${label} "${row.text}" does not read as the configured provenance.format`,
+      });
+      continue;
+    }
+    if (row.revision !== null && (row.revision === "" || row.revision === UNPINNED_REVISION)) {
+      findings.push({
+        kind: "citation-unpinned",
+        path: row.page_path,
+        detail: `${label} names no revision, so drift cannot be detected for it`,
+      });
+    }
+
+    const adapter = sources.get(row.source);
+    if (!adapter) continue;
+
+    const verdict = await locate(adapter, row.path, row.locator ?? undefined);
+    if (verdict.verdict === "unknown") {
+      citationsUnchecked++;
+      continue;
+    }
+    citationsChecked++;
+    if (verdict.verdict === "missing") {
+      findings.push({
+        kind: verdict.part === "path" ? "citation-path-missing" : "citation-locator-missing",
+        path: row.page_path,
+        detail: `${label} ${verdict.detail}`,
+      });
+    }
+
+    if (row.revision && row.revision !== UNPINNED_REVISION) {
+      if ((await knows(adapter, row.revision)) === false) {
+        findings.push({
+          kind: "citation-revision-unknown",
+          path: row.page_path,
+          detail: `${label} cites revision ${row.revision}, which source "${adapter.id}" does not have`,
+        });
+      }
+    }
+  }
+
+  return { findings, pagesChecked: checkedPages.size, citationsChecked, citationsUnchecked };
 }
 
 /**

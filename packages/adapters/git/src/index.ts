@@ -110,14 +110,23 @@ export class GitSource implements SourceAdapter {
     return out || (await git(this.root, ["rev-parse", "HEAD"])).trim();
   }
 
-  async changedSince(revision: string): Promise<string[]> {
-    // `cat-file -e` is the cheap way to ask whether this repository has ever
-    // heard of the revision. A shallow clone, a rewritten history or a revision
-    // from a different repository all land here, and answering "nothing
-    // changed" would be a lie that drift detection cannot detect.
+  /**
+   * `cat-file -e` is the cheap way to ask whether this repository has ever heard of the
+   * revision. A shallow clone, a rewritten history or another repository's revision all say no.
+   */
+  async knowsRevision(revision: string): Promise<boolean> {
     try {
       await git(this.root, ["cat-file", "-e", `${revision}^{commit}`]);
+      return true;
     } catch {
+      return false;
+    }
+  }
+
+  async changedSince(revision: string): Promise<string[]> {
+    // Answering "nothing changed" for a revision this repository cannot place
+    // would be a lie that drift detection cannot detect.
+    if (!(await this.knowsRevision(revision))) {
       throw new UnknownRevisionError(this.id, revision);
     }
 

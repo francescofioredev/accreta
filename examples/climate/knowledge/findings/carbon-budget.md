@@ -3,7 +3,7 @@ type: finding
 source: ipcc-ar6-wg1
 aliases: ["remaining carbon budget"]
 canonical_source: "ipcc-ar6-wg1:examples/climate/sources/ipcc-ar6-wg1/chapter-05.md#L17"
-last_verified_revision: a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d
+last_verified_revision: 553a13edf7d1b9753b60eecf69f7e0b3bc45d0cb
 related: [[contradictions/permafrost-feedback-strength]]
 ---
 
@@ -17,6 +17,6 @@ warming.[^linear] The reported uncertainty includes the strength of non-CO2 forc
 permafrost response — and the latter is itself
 [[contradictions/permafrost-feedback-strength|disputed]].[^unc]
 
-[^budget]: ipcc-ar6-wg1 @ a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d · examples/climate/sources/ipcc-ar6-wg1/chapter-05.md#L17-L19
-[^linear]: ipcc-ar6-wg1 @ a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d · examples/climate/sources/ipcc-ar6-wg1/chapter-05.md#L15-L16
-[^unc]: ipcc-ar6-wg1 @ a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d · examples/climate/sources/ipcc-ar6-wg1/chapter-05.md#L21-L22
+[^budget]: ipcc-ar6-wg1 @ 553a13edf7d1b9753b60eecf69f7e0b3bc45d0cb · examples/climate/sources/ipcc-ar6-wg1/chapter-05.md#L17-L18
+[^linear]: ipcc-ar6-wg1 @ 553a13edf7d1b9753b60eecf69f7e0b3bc45d0cb · examples/climate/sources/ipcc-ar6-wg1/chapter-05.md#L16-L17
+[^unc]: ipcc-ar6-wg1 @ 553a13edf7d1b9753b60eecf69f7e0b3bc45d0cb · examples/climate/sources/ipcc-ar6-wg1/chapter-05.md#L20-L21

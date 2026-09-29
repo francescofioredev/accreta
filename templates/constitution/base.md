@@ -203,8 +203,11 @@ an interruption to work around.
 - **unknown page types** — a `type` outside the configured vocabulary
 - **missing provenance** — no `canonical_source`
 - **unverified pages** — no `last_verified_revision`
-- **citations that point at nothing** — a `canonical_source` naming a path the source does
-  not have, or a locator the source cannot place
+- **citations that point at nothing** — a `canonical_source` or footnote naming a path the
+  source does not have, or a locator the source cannot place
+- **citations that name no revision, or one the source never had** — `unknown` where a
+  revision belongs, or a commit that is not in the history
+- **footnotes that do not read as the configured format**, and footnote ids defined twice
 
 It also prints how many citations it could not check. That is not a finding: those citations
 point into sources accreta cannot reach, so nobody looked. The number is the size of what the

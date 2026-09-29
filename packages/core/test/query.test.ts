@@ -468,3 +468,72 @@ describe("lintCitations", () => {
     expect(report.citationsUnchecked).toBe(1);
   });
 });
+
+const page = (footnotes: string[]) =>
+  `---\ntype: note\n---\n\n# A\n\nA claim.[^a]\n\n${footnotes.join("\n")}\n`;
+
+describe("lintCitations on footnotes", () => {
+  const tenLines = Array.from({ length: 10 }, (_, i) => `line ${i + 1}`).join("\n");
+  const withHistory = (revisions: string[]): SourceAdapter => ({
+    ...source("s", { "doc.md": tenLines }),
+    knowsRevision: async (revision) => revisions.includes(revision),
+  });
+
+  test("one correct and three broken footnotes give exactly three findings", async () => {
+    writePage(
+      "a.md",
+      "---\ntype: note\n---\n\n# A\n\nOne.[^ok] Two.[^path] Three.[^lines] Four.[^rev]\n\n" +
+        "[^ok]: s @ r1 · doc.md#L2-L4\n" +
+        "[^path]: s @ r1 · invented.md#L1\n" +
+        "[^lines]: s @ r1 · doc.md#L8-L40\n" +
+        "[^rev]: s @ f00dfeed · doc.md#L1\n",
+    );
+    reindex();
+    const report = await lintCitations(db, sources(withHistory(["r1"])));
+    expect(report.findings.map((f) => f.kind)).toEqual([
+      "citation-path-missing",
+      "citation-locator-missing",
+      "citation-revision-unknown",
+    ]);
+    expect(report.findings[0]?.detail).toContain("[^path] (line 10)");
+    expect(report.citationsChecked).toBe(4);
+  });
+
+  test("a footnote id defined twice is reported, not silently dropped", async () => {
+    writePage("a.md", page(["[^a]: s @ r1 · doc.md#L1", "[^a]: s @ r1 · doc.md#L2"]));
+    reindex();
+    const { findings } = await lintCitations(db, sources(withHistory(["r1"])));
+    expect(findings.map((f) => f.kind)).toEqual(["duplicate-footnote"]);
+  });
+
+  test("a footnote naming no revision is unpinned", async () => {
+    writePage("a.md", page(["[^a]: s @ unknown · doc.md#L1"]));
+    reindex();
+    const { findings } = await lintCitations(db, sources(withHistory(["r1"])));
+    expect(findings.map((f) => f.kind)).toEqual(["citation-unpinned"]);
+  });
+
+  test("a source that keeps no history is not asked about revisions", async () => {
+    writePage("a.md", page(["[^a]: s @ anything · doc.md#L1"]));
+    reindex();
+    const { findings } = await lintCitations(db, sources(source("s", { "doc.md": tenLines })));
+    expect(findings).toEqual([]);
+  });
+
+  test("a mangled citation is reported, a prose footnote is not", async () => {
+    writePage("a.md", page(["[^a]: s @ r1 · ", "[^note]: See the design notes for the history."]));
+    reindex();
+    const report = await lintCitations(db, sources(withHistory(["r1"])));
+    expect(report.findings.map((f) => f.kind)).toEqual(["unparseable-citation"]);
+  });
+
+  test("a format that cannot be read back is one finding against the config", () => {
+    writePage("a.md", page(["[^a]: s @ r1 · doc.md#L1"]));
+    buildIndex({ root, config: { ...config, provenanceFormat: "{source}{path}" }, indexPath });
+    db = openIndex(indexPath, { readonly: true });
+    const report = lint(db, { ...config, provenanceFormat: "{source}{path}" });
+    const format = report.findings.filter((f) => f.kind === "unreadable-provenance-format");
+    expect(format).toHaveLength(1);
+    expect(format[0]?.path).toBe("accreta.config.yaml");
+  });
+});

@@ -71,6 +71,24 @@ CREATE TABLE IF NOT EXISTS broken_links (
   PRIMARY KEY (src_path, target, kind)
 );
 
+-- One row per footnote that reads as a citation attempt. `source` is NULL when the
+-- definition does not parse as provenance.format, which lint reports rather than drops.
+CREATE TABLE IF NOT EXISTS citations (
+  page_path TEXT NOT NULL,
+  footnote TEXT NOT NULL,
+  line INTEGER NOT NULL,
+  text TEXT NOT NULL,
+  source TEXT,
+  revision TEXT,
+  path TEXT,
+  locator TEXT,
+  claim TEXT NOT NULL,
+  -- Keyed by line: a footnote id defined twice is a finding, and the second copy must survive to be one.
+  PRIMARY KEY (page_path, line)
+);
+
+CREATE INDEX IF NOT EXISTS idx_citations_source ON citations(source, path);
+
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL

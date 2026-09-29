@@ -30,8 +30,10 @@ export async function runLint(ctx: CommandContext): Promise<number> {
           `their source is one only the agent can read.`
         : null;
 
+    const checked = `${citations.citationsChecked} citation(s) checked against their source.`;
     if (findings.length === 0) {
       ctx.out(`${report.pagesChecked} page(s) checked, nothing to report.`);
+      ctx.out(checked);
       if (unchecked) ctx.out(unchecked);
       return 0;
     }
@@ -48,6 +50,7 @@ export async function runLint(ctx: CommandContext): Promise<number> {
       for (const finding of group) ctx.out(`  ${finding.path}: ${finding.detail}`);
     }
     ctx.out(`\n${findings.length} finding(s) across ${report.pagesChecked} page(s).`);
+    ctx.out(checked);
     if (unchecked) ctx.out(unchecked);
 
     // A non-zero exit so CI can fail on an unresolvable link.

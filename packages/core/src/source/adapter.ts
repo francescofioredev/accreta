@@ -42,6 +42,12 @@ export interface SourceAdapter {
    */
   locate(path: string, locator?: string): Promise<LocationVerdict>;
 
+  /**
+   * Is this revision in the source's history? Optional, because a directory keeps no history
+   * and a delegated source answers nothing: absent means "cannot tell", never "no".
+   */
+  knowsRevision?(revision: string): Promise<boolean>;
+
   /** Render a citation to a location, per the configured provenance format. */
   citation(path: string, locator?: string): string;
 
@@ -190,7 +196,8 @@ export interface ParsedCitation {
 /**
  * Read a `canonical_source` value back into its parts.
  *
- * This is deliberately *not* the inverse of `formatCitation`. That renders the
+ * This is deliberately *not* the inverse of `formatCitation`; footnotes, which are, are read by
+ * `compileCitationTemplate` in `citations.ts`. `formatCitation` renders the
  * configured `provenance.format`, which is prose a human reads in a footnote
  * and which every knowledge base may shape differently. `canonical_source` is a
  * fixed machine-readable convention — `source:path[#locator]` — documented in
