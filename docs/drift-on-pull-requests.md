@@ -47,7 +47,7 @@ The only token is the workflow's own `GITHUB_TOKEN`, with `pull-requests: write`
 |---|---|---|
 | `working-directory` | `.` | The knowledge base to check. Each one gets its own comment. |
 | `comment-when-clean` | `false` | Also post when nothing is new. |
-| `fail-on-drift` | `false` | Fail the job when a page is newly in doubt or newly unplaceable. |
+| `fail-on-drift` | `false` | Fail the job when a page is newly in doubt or newly unplaceable, or a source declaration does not load. |
 | `github-token` | the workflow's | Token that posts the comment. |
 | `comment-author` | `github-actions[bot]` | Login of that token, used to find the comment again. Change it with `github-token`. |
 
@@ -57,6 +57,7 @@ The only token is the workflow's own `GITHUB_TOKEN`, with `pull-requests: write`
 | `pages-in-doubt` | All pages whose cited lines changed, including those. |
 | `pages-unplaceable` | Pages verified at a revision the source cannot place. |
 | `pages-newly-unplaceable` | Those the base branch did not have at the same revision. |
+| `sources-unloaded` | Source declarations that did not load, so nothing citing them was checked. |
 
 With a token other than the workflow's, set `comment-author` to the login it posts as. The action
 warns when the two differ, because the comment would not be found again on the next push.
@@ -92,11 +93,14 @@ Run the same comparison locally with `accreta drift --format github --base base.
 
 - One comment per knowledge base, found again by a hidden marker and its author's login, and
   edited in place on every push. It never posts a second one.
-- A new comment appears only when a page is newly in doubt or newly at a revision nobody can
-  place, unless `comment-when-clean` is set. An existing comment is always updated, so it turns
-  clean when the pages are re-verified.
-- `fail-on-drift` keys on the same two counts, not on drift's exit code, so drift the base
+- A new comment appears only when a page is newly in doubt, newly at a revision nobody can
+  place, or a source declaration did not load, unless `comment-when-clean` is set. An existing
+  comment is always updated, so it turns clean when the pages are re-verified.
+- `fail-on-drift` keys on the same three counts, not on drift's exit code, so drift the base
   branch already had does not fail every pull request.
+- An unloaded source is the exception, on purpose. It counts even when the base branch already
+  had it, so it fails every pull request until the declaration is fixed: nothing citing it is
+  checked until then.
 
 ## Pull requests from forks
 

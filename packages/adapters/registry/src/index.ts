@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  countPagesOfSource,
+  countPagesCiting,
   parseSourceDeclaration,
   SourceRegistry,
   type Database,
@@ -111,7 +111,7 @@ export function loadSources(ctx: SourceContext): LoadedSources {
   return { sources, unloaded };
 }
 
-/** An unloaded source and the pages naming it; `pages` is null when there is no id to count by. */
+/** An unloaded source and how many pages cite it; `pages` is null when there is no id to count by. */
 export interface UncheckedSource extends UnloadedSource {
   pages: number | null;
 }
@@ -123,7 +123,7 @@ export function countUnchecked(
 ): UncheckedSource[] {
   return unloaded.map((source) => ({
     ...source,
-    pages: source.id === undefined ? null : countPagesOfSource(db, source.id),
+    pages: source.id === undefined ? null : countPagesCiting(db, source.id),
   }));
 }
 

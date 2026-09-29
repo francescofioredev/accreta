@@ -194,6 +194,14 @@ export function findCanonicalTool(ctx: ToolContext, input: { term: string }) {
   };
 }
 
+/** Why a declared id has no adapter, or undefined when nothing declares it. */
+function notLoaded(ctx: ToolContext, id: string): string | undefined {
+  const broken = ctx.unloadedSources.find((u) => u.id === id);
+  return (
+    broken && `Source "${id}" is declared in ${broken.file} but did not load: ${broken.reason}`
+  );
+}
+
 // No provenance block on this tool or the next: nothing here is page prose. Revisions and
 // paths come from the adapter; `unloaded_sources` quotes sources/*.yaml, one line per file.
 export async function checkDriftTool(ctx: ToolContext, input: { source?: string }) {
@@ -201,12 +209,15 @@ export async function checkDriftTool(ctx: ToolContext, input: { source?: string 
   // this loop spans awaits. Re-reading it per adapter could draw one report
   // from two different indexes.
   const db = ctx.db;
-  const broken = input.source && ctx.unloadedSources.find((u) => u.id === input.source);
-  if (broken) {
+  const why = input.source === undefined ? undefined : notLoaded(ctx, input.source);
+  if (why) {
     return {
-      message: `Source "${broken.id}" is declared in ${broken.file} but did not load: ${broken.reason}`,
+      message: why,
       reports: [],
-      unloaded_sources: countUnchecked(db, [broken]),
+      unloaded_sources: countUnchecked(
+        db,
+        ctx.unloadedSources.filter((u) => u.id === input.source),
+      ),
     };
   }
 
@@ -295,7 +306,10 @@ export async function listRecentChangesTool(
 ) {
   const adapter = ctx.sources.get(input.source);
   if (!adapter) {
-    return { message: `No source named "${input.source}".`, changed: [] };
+    return {
+      message: notLoaded(ctx, input.source) ?? `No source named "${input.source}".`,
+      changed: [],
+    };
   }
   try {
     return { source: adapter.id, changed: await adapter.changedSince(input.since) };

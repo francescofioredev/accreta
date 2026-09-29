@@ -560,9 +560,10 @@ function pagesHeadline(json: DriftJson, compared: boolean): string {
   if (compared && json.pages_in_doubt > 0) {
     return `**No page newly in doubt.** ${json.pages_in_doubt} page(s) were already in doubt on the base branch.`;
   }
+  const pages = json.unloaded_sources.length > 0 ? "any checked page" : "any page";
   return compared
-    ? "**No page newly in doubt.** No line any page cites has changed."
-    : "**No page in doubt.** No line any page cites has changed.";
+    ? `**No page newly in doubt.** No line ${pages} cites has changed.`
+    : `**No page in doubt.** No line ${pages} cites has changed.`;
 }
 
 /** Rows of one page, split by whether the base branch already had them in doubt. */

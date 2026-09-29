@@ -129,6 +129,7 @@ describe("one delegated source still missing its scope, next to a git source", (
     const line = out.indexOf("- `sources/design-docs.yaml` did not load, so 1 page(s)");
     expect(line).toBeGreaterThan(-1);
     expect(line).toBeLessThan(out.indexOf("**"));
+    expect(out).toContain("No line any checked page cites has changed.");
     expect(out).toContain("`docs` at");
   });
 });
@@ -141,6 +142,27 @@ describe("a declaration that cannot build at all", () => {
     expect(await cli("drift")).toBe(1);
     expect(stdout()).toContain("sources/docs.yaml — did not load, so 1 page(s) cite it");
     expect(stdout()).toContain('Unknown source type "fss"');
+  });
+
+  test("a page counts as citing it through a footnote or canonical_source, not only `source`", async () => {
+    await workspace();
+    writeFileSync(join(root, "sources", "docs.yaml"), "id: docs\ntype: fss\nroot: sources/docs\n");
+    writeFileSync(
+      join(root, "knowledge", "a.md"),
+      "---\ntype: note\nsource: other\n---\n\n# A\n\nA claim.[^c]\n\n[^c]: docs @ abc1234 · a.md#L2\n",
+    );
+    writeFileSync(
+      join(root, "knowledge", "c.md"),
+      '---\ntype: note\ncanonical_source: "docs:a.md#L1"\n---\n\n# C\n',
+    );
+    await cli("reindex");
+    output = [];
+
+    expect(await cli("drift")).toBe(1);
+    expect(stdout()).toContain("sources/docs.yaml — did not load, so 2 page(s) cite it");
+    output = [];
+    await cli("lint");
+    expect(stdout()).toContain("sources/docs.yaml: did not load, so 2 page(s) cite it");
   });
 
   test("the github format puts the reason in a code span, whatever the declaration says", async () => {

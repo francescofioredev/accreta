@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildIndex, DEFAULT_CONFIG, type AccretaConfig } from "@accreta/core";
 import { createContext } from "../src/context.ts";
-import { checkDriftTool, lintTool, searchPagesTool } from "../src/tools.ts";
+import { checkDriftTool, lintTool, listRecentChangesTool, searchPagesTool } from "../src/tools.ts";
 
 let root = "";
 
@@ -91,6 +91,8 @@ test("a half-declared delegated source does not stop the server, and lint and dr
   const one = await checkDriftTool(ctx, { source: "design" });
   expect(one.message).toStartWith(`Source "design" is declared in ${file} but did not load:`);
   expect(one.message).toContain("`scope`");
+  const changes = await listRecentChangesTool(ctx, { source: "design", since: "r1" });
+  expect(changes.message).toBe(one.message);
 });
 
 test("a rebuild does not replace the context the server captured", () => {
