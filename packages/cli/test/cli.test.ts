@@ -131,6 +131,24 @@ describe("accreta search", () => {
     expect(await cli("search")).toBe(1);
     expect(stderr()).toContain("Usage");
   });
+
+  test("--limit and --source narrow the plain output too", async () => {
+    writePage("b.md", "---\ntype: note\nsource: other\n---\n\n# B\n\ntropopause again\n");
+    await cli("reindex");
+    output = [];
+
+    await cli("search", "tropopause", "--limit", "1");
+    expect(stdout()).toContain("1 result(s)");
+    output = [];
+    await cli("search", "tropopause", "--source", "other");
+    expect(stdout()).toContain("knowledge/b.md");
+    expect(stdout()).not.toContain("knowledge/a.md");
+  });
+
+  test("a --limit the MCP tool would refuse is refused here", async () => {
+    expect(await cli("search", "tropopause", "--limit", "51")).toBe(1);
+    expect(stderr()).toContain("--limit");
+  });
 });
 
 describe("accreta show", () => {

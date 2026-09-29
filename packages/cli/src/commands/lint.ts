@@ -1,13 +1,18 @@
 import { existsSync } from "node:fs";
 import { lint, lintCitations, openIndex } from "@accreta/core";
 import { findWorkspace } from "../workspace.ts";
-import { loadSources, type CommandContext } from "./shared.ts";
+import { loadSources, printJson, provenance, type CommandContext } from "./shared.ts";
+
+const LINT_FIELDS = ["findings[].detail"] as const;
 
 // Opens and closes the index itself rather than going through `withIndex`:
 // citation checks read from the sources, and `withIndex` closes the database in
 // a synchronous `finally` that would fire before the first await resolved.
 // `drift` has the same shape for the same reason.
-export async function runLint(ctx: CommandContext): Promise<number> {
+export async function runLint(
+  ctx: CommandContext,
+  options: { json?: boolean } = {},
+): Promise<number> {
   const workspace = findWorkspace(ctx.cwd);
   if (!existsSync(workspace.indexPath)) {
     throw new Error(`No index at ${workspace.indexPath}. Run \`accreta reindex\` first.`);
@@ -20,6 +25,18 @@ export async function runLint(ctx: CommandContext): Promise<number> {
     const sources = new Map(loadSources(workspace).map((adapter) => [adapter.id, adapter]));
     const citations = await lintCitations(db, sources);
     const findings = [...report.findings, ...citations.findings];
+
+    if (options.json) {
+      printJson(ctx, {
+        pages_checked: report.pagesChecked,
+        count: findings.length,
+        citations_checked: citations.citationsChecked,
+        citations_unchecked: citations.citationsUnchecked,
+        findings,
+        _provenance: provenance(LINT_FIELDS),
+      });
+      return findings.length > 0 ? 1 : 0;
+    }
 
     // A count rather than findings: the citations belong to a source accreta
     // cannot question, and "I did not look" must not be printed as a problem

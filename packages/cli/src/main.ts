@@ -26,10 +26,14 @@ Usage: accreta <command> [arguments]
                            --strict also fails on anything left unchecked
   doctor                   Report what is wired up, and what cannot be checked from here
   source add <type> <id>   Write a source declaration (--set key=value, repeatable)
-  search <query>           Full-text search (--type <type>, repeatable)
+  search <query>           Full-text search (--type <type>, repeatable; --source <id>;
+                           --limit <n>, 1-50, default 20)
   show <path|wikilink>     Print a page
   consumers <path>         What links to this page, and what it links to (--inline)
   canonical <term>         Resolve a term to the page that defines it
+
+  --json                   On lint, search, show, consumers and canonical: print the
+                           JSON the matching MCP tool returns
 
   --version, -v            Print the version
 
@@ -55,6 +59,9 @@ function parseArgs(argv: string[]): {
   types: string[];
   includeInline: boolean;
   strict: boolean;
+  json: boolean;
+  limit?: string;
+  source?: string;
   set: Record<string, string>;
   preset?: string;
   agentFile?: string;
@@ -63,6 +70,9 @@ function parseArgs(argv: string[]): {
   const types: string[] = [];
   let includeInline = false;
   let strict = false;
+  let json = false;
+  let limit: string | undefined;
+  let source: string | undefined;
   const set: Record<string, string> = {};
   let preset: string | undefined;
   let agentFile: string | undefined;
@@ -79,6 +89,18 @@ function parseArgs(argv: string[]): {
     }
     if (arg === "--strict") {
       strict = true;
+      continue;
+    }
+    if (arg === "--json") {
+      json = true;
+      continue;
+    }
+    if (arg === "--limit") {
+      limit = argv[++i];
+      continue;
+    }
+    if (arg === "--source") {
+      source = argv[++i];
       continue;
     }
     if (arg === "--set") {
@@ -99,12 +121,13 @@ function parseArgs(argv: string[]): {
     }
     if (arg !== undefined) positional.push(arg);
   }
-  return { positional, types, includeInline, strict, set, preset, agentFile };
+  return { positional, types, includeInline, strict, json, limit, source, set, preset, agentFile };
 }
 
 export async function run(argv: string[], ctx: CommandContext): Promise<number> {
   const [command, ...rest] = argv;
-  const { positional, types, includeInline, strict, set, preset, agentFile } = parseArgs(rest);
+  const { positional, types, includeInline, strict, json, limit, source, set, preset, agentFile } =
+    parseArgs(rest);
 
   switch (command) {
     case undefined:
@@ -122,7 +145,7 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
     case "reindex":
       return reindex(ctx);
     case "lint":
-      return runLint(ctx);
+      return runLint(ctx, { json });
     case "drift":
       return drift(ctx, { strict });
     case "doctor":
@@ -134,13 +157,18 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
       }
       return sourceAdd(ctx, positional[1] ?? "", positional[2] ?? "", set);
     case "search":
-      return search(ctx, positional.join(" "), types.length > 0 ? types : undefined);
+      return search(ctx, positional.join(" "), {
+        types: types.length > 0 ? types : undefined,
+        source,
+        limit,
+        json,
+      });
     case "show":
-      return show(ctx, positional[0] ?? "");
+      return show(ctx, positional[0] ?? "", { json });
     case "consumers":
-      return consumers(ctx, positional[0] ?? "", { includeInline });
+      return consumers(ctx, positional[0] ?? "", { includeInline, json });
     case "canonical":
-      return canonical(ctx, positional.join(" "));
+      return canonical(ctx, positional.join(" "), { json });
     default:
       ctx.err(`Unknown command "${command}".\n`);
       ctx.err(USAGE);
