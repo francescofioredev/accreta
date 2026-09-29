@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "../src/main.ts";
+import { COMMAND_ARGS } from "../src/commands/shared.ts";
 import type { CommandContext } from "../src/commands.ts";
 
 let root = "";
@@ -128,8 +129,26 @@ describe("accreta search", () => {
   });
 
   test("without a query it prints usage", async () => {
-    expect(await cli("search")).toBe(1);
+    expect(await cli("search")).toBe(2);
     expect(stderr()).toContain("Usage");
+  });
+
+  test("--limit and --source narrow the plain output too", async () => {
+    writePage("b.md", "---\ntype: note\nsource: other\n---\n\n# B\n\ntropopause again\n");
+    await cli("reindex");
+    output = [];
+
+    await cli("search", "tropopause", "--limit", "1");
+    expect(stdout()).toContain("1 result(s)");
+    output = [];
+    await cli("search", "tropopause", "--source", "other");
+    expect(stdout()).toContain("knowledge/b.md");
+    expect(stdout()).not.toContain("knowledge/a.md");
+  });
+
+  test("a --limit the MCP tool would refuse is refused here", async () => {
+    expect(await cli("search", "tropopause", "--limit", "51")).toBe(2);
+    expect(stderr()).toContain("--limit");
   });
 });
 
@@ -410,7 +429,7 @@ describe("accreta help", () => {
   });
 
   test("an unknown command is an error with usage", async () => {
-    expect(await cli("frobnicate")).toBe(1);
+    expect(await cli("frobnicate")).toBe(2);
     expect(stderr()).toContain("Unknown command");
   });
 
@@ -421,6 +440,13 @@ describe("accreta help", () => {
 
     await cli("help");
     for (const flag of flags) expect(stdout()).toContain(flag);
+  });
+
+  test("every flag the parser accepts is accepted by some command", async () => {
+    const source = readFileSync(join(import.meta.dir, "..", "src", "main.ts"), "utf-8");
+    const flags = [...source.matchAll(/arg === "(--[a-z-]+)"/g)].map((match) => match[1]!);
+    const accepted = new Set(Object.values(COMMAND_ARGS).flatMap((spec) => spec.flags));
+    expect(flags.filter((flag) => !accepted.has(flag))).toEqual([]);
   });
 });
 
@@ -545,7 +571,7 @@ describe("accreta source add", () => {
   test("an unknown type names the ones this build has", async () => {
     await cli("init");
     errors = [];
-    expect(await cli("source", "add", "notion", "docs")).toBe(1);
+    expect(await cli("source", "add", "notion", "docs")).toBe(2);
     expect(stderr()).toContain("delegated");
   });
 });

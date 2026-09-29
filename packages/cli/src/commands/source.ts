@@ -18,13 +18,13 @@ export async function sourceAdd(
   if (!type || !id) {
     ctx.err("Usage: accreta source add <type> <id> [--set key=value]");
     ctx.err(`Types: ${KNOWN_TYPES.join(", ")}`);
-    return 1;
+    return 2;
   }
 
   const kind = kindFor(type);
   if (!kind) {
     ctx.err(`Unknown source type "${type}". Known: ${KNOWN_TYPES.join(", ")}.`);
-    return 1;
+    return 2;
   }
 
   const workspace = findWorkspace(ctx.cwd);
