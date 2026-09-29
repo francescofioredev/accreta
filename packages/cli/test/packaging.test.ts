@@ -163,6 +163,51 @@ test("an installed core carries the schema its index is built from", () => {
   }
 });
 
+test("an installed CLI starts the MCP server it depends on", async () => {
+  // Resolved through the installed layout, which the workspace symlinks in mcp.test.ts never exercise.
+  const project = mkdtempSync(join(tmpdir(), "accreta-project-"));
+  try {
+    Bun.spawnSync([accreta, "init"], { cwd: project, stderr: "pipe", stdout: "pipe" });
+    Bun.spawnSync([accreta, "reindex"], { cwd: project, stderr: "pipe", stdout: "pipe" });
+
+    const server = Bun.spawn([accreta, "mcp"], {
+      cwd: project,
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    server.stdin.write(
+      `${JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities: {},
+          clientInfo: { name: "packaging-test", version: "0.0.0" },
+        },
+      })}\n`,
+    );
+    await server.stdin.flush();
+    server.stdin.end();
+
+    const stdout = await new Response(server.stdout).text();
+    expect(await server.exited).toBe(0);
+    const response = JSON.parse(stdout.trim()) as {
+      result: { serverInfo: { name: string; version: string } };
+    };
+    const installed = JSON.parse(
+      readFileSync(
+        join(consumer, "node_modules", "@accreta", "mcp-server", "package.json"),
+        "utf-8",
+      ),
+    ) as { version: string };
+    expect(response.result.serverInfo).toEqual({ name: "accreta", version: installed.version });
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+}, 15_000);
+
 test("the published manifests name real versions, not workspace protocols", () => {
   // npm publishes, and unlike bun it copies `workspace:*` into the tarball
   // verbatim. Such a package installs for nobody and cannot be republished, so

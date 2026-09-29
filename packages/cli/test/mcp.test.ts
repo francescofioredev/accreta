@@ -33,18 +33,6 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-/** Read stdout up to the first newline: the stdio transport frames one JSON-RPC message per line. */
-async function firstLine(stream: ReadableStream<Uint8Array>): Promise<string> {
-  const decoder = new TextDecoder();
-  let text = "";
-  for await (const chunk of stream) {
-    text += decoder.decode(chunk, { stream: true });
-    const newline = text.indexOf("\n");
-    if (newline >= 0) return text.slice(0, newline);
-  }
-  return text;
-}
-
 test("the CLI depends on the MCP server at its own version, so one install brings both", () => {
   // Inside the workspace every package resolves whether declared or not, so only
   // the manifest shows whether an installed CLI would find the server.
@@ -75,8 +63,13 @@ test("accreta mcp answers an MCP initialize on stdio, and writes nothing else to
     })}\n`,
   );
   await proc.stdin.flush();
+  // A client disconnecting closes stdin; the server has to exit on that, cleanly.
+  proc.stdin.end();
 
-  const response = JSON.parse(await firstLine(proc.stdout)) as {
+  const lines = (await new Response(proc.stdout).text()).split("\n").filter(Boolean);
+  expect(await proc.exited).toBe(0);
+  expect(lines).toHaveLength(1);
+  const response = JSON.parse(lines[0]!) as {
     id: number;
     result: { serverInfo: { name: string; version: string } };
   };
@@ -85,10 +78,6 @@ test("accreta mcp answers an MCP initialize on stdio, and writes nothing else to
     name: "accreta",
     version: MANIFEST("mcp-server").version,
   });
-
-  // A client disconnecting closes stdin; the server has to exit on that, cleanly.
-  proc.stdin.end();
-  expect(await proc.exited).toBe(0);
 }, 15_000);
 
 test("accreta mcp outside a knowledge base says so and fails", async () => {
