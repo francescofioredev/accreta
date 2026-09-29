@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { lint, lintCitations, openIndex } from "@accreta/core";
+import { unloadedFindings } from "@accreta/adapters";
 import { findWorkspace } from "../workspace.ts";
 import { loadSources, printJson, provenance, type CommandContext } from "./shared.ts";
 
@@ -26,9 +27,14 @@ export async function runLint(
   try {
     const report = lint(db, workspace.config);
 
-    const sources = new Map(loadSources(workspace).map((adapter) => [adapter.id, adapter]));
+    const loaded = loadSources(workspace);
+    const sources = new Map(loaded.sources.map((adapter) => [adapter.id, adapter]));
     const citations = await lintCitations(db, sources);
-    const findings = [...report.findings, ...citations.findings];
+    const findings = [
+      ...report.findings,
+      ...unloadedFindings(loaded.unloaded),
+      ...citations.findings,
+    ];
 
     if (options.json) {
       printJson(ctx, {

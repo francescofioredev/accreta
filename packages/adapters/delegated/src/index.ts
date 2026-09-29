@@ -56,8 +56,8 @@ export class DelegatedSource implements SourceAdapter {
   constructor(options: DelegatedSourceOptions) {
     // Refused at construction rather than defaulted. A delegated source whose
     // scope is empty tells the agent to check "the connector", which is either
-    // nothing or everything, and both are worse than a startup error naming the
-    // file to fix.
+    // nothing or everything, and both are worse than a finding naming the file
+    // to fix. `loadSources` turns this throw into that finding.
     if (!options.via.trim()) {
       throw new Error(`Source "${options.id}" is delegated but declares no \`via\`.`);
     }

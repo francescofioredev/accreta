@@ -20,12 +20,15 @@ import {
   type SearchHit,
   type SourceAdapter,
 } from "@accreta/core";
+import { unloadedFindings, type UnloadedSource } from "@accreta/adapters";
 
 export interface ToolContext {
   db: Database;
   config: AccretaConfig;
   root: string;
   sources: Map<string, SourceAdapter>;
+  /** Declarations that did not build; reported by lint and drift instead of stopping the server. */
+  unloadedSources?: UnloadedSource[];
   /** Whether write tools are permitted. Off unless ACCRETA_ALLOW_WRITES is set. */
   writesEnabled: boolean;
 }
@@ -197,13 +200,17 @@ export async function checkDriftTool(ctx: ToolContext, input: { source?: string 
   const adapters = input.source
     ? [ctx.sources.get(input.source)].filter((a): a is SourceAdapter => Boolean(a))
     : [...ctx.sources.values()];
+  const unloaded = ctx.unloadedSources?.length ? { unloaded_sources: ctx.unloadedSources } : {};
 
   if (adapters.length === 0) {
     return {
       message: input.source
         ? `No source named "${input.source}". Known: ${[...ctx.sources.keys()].join(", ") || "none"}.`
-        : "No sources are declared.",
+        : unloaded.unloaded_sources
+          ? "No declared source loaded; see unloaded_sources."
+          : "No sources are declared.",
       reports: [],
+      ...unloaded,
     };
   }
 
@@ -269,6 +276,7 @@ export async function checkDriftTool(ctx: ToolContext, input: { source?: string 
         pending: report.delegated.pending,
       },
     })),
+    ...unloaded,
   };
 }
 
@@ -317,7 +325,11 @@ export async function lintTool(ctx: ToolContext) {
   const db = ctx.db;
   const report = lint(db, ctx.config);
   const citations = await lintCitations(db, ctx.sources);
-  const findings = [...report.findings, ...citations.findings];
+  const findings = [
+    ...report.findings,
+    ...unloadedFindings(ctx.unloadedSources ?? []),
+    ...citations.findings,
+  ];
   return {
     pages_checked: report.pagesChecked,
     count: findings.length,

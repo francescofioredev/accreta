@@ -74,7 +74,7 @@ export async function drift(
     return 2;
   }
 
-  const sources = loadSources(workspace);
+  const { sources, unloaded } = loadSources(workspace);
   const reports: DriftReport[] = [];
   if (sources.length > 0) {
     const db = openIndex(workspace.indexPath, { readonly: true });
@@ -85,12 +85,29 @@ export async function drift(
     }
   }
 
-  if (options.format === "json") ctx.out(JSON.stringify(toJson(reports, base), null, 2));
-  else if (options.format === "github") ctx.out(toGithub(reports, base));
-  else if (reports.length === 0) ctx.out("No sources declared in sources/. Nothing to check.");
-  else for (const report of reports) printText(ctx, report);
+  const notLoaded = unloaded.length > 0 ? { unloaded_sources: unloaded } : {};
+  if (options.format === "json") {
+    ctx.out(JSON.stringify({ ...toJson(reports, base), ...notLoaded }, null, 2));
+  } else if (options.format === "github") {
+    const lines = unloaded.map(
+      (u) => `${code(u.file)} was not loaded, so not checked: ${u.reason}`,
+    );
+    const body =
+      reports.length > 0 || lines.length === 0 ? toGithub(reports, base) : "### accreta drift";
+    ctx.out([body, ...lines].join("\n\n"));
+  } else {
+    for (const source of unloaded) {
+      ctx.out(`${source.file} — not loaded, so not checked`);
+      ctx.out(`  ${source.reason}`);
+    }
+    if (reports.length === 0 && unloaded.length === 0) {
+      ctx.out("No sources declared in sources/. Nothing to check.");
+    } else for (const report of reports) printText(ctx, report);
+  }
 
-  return reports.some((report) => fails(report, strict)) ? 1 : 0;
+  // Unchecked rather than wrong, like a delegated source: only --strict fails on it.
+  const failed = reports.some((report) => fails(report, strict)) || (strict && unloaded.length > 0);
+  return failed ? 1 : 0;
 }
 
 function fails(report: DriftReport, strict: boolean): boolean {

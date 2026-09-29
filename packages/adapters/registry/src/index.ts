@@ -23,38 +23,79 @@ export function buildRegistry(ctx: SourceContext): SourceRegistry {
   return registry;
 }
 
-/** Read every `*.yaml` declaration in `<root>/sources`, in a stable order. */
-export function readDeclarations(root: string) {
+/** The declaration files in `<root>/sources`, relative to `root`, in a stable order. */
+function declarationFiles(root: string): string[] {
   const dir = join(root, "sources");
   if (!existsSync(dir)) return [];
 
   return readdirSync(dir)
     .toSorted()
     .filter((name) => name.endsWith(".yaml") || name.endsWith(".yml"))
-    .map((name) => parseSourceDeclaration(readFileSync(join(dir, name), "utf-8")));
+    .map((name) => join("sources", name));
+}
+
+/** Read every `*.yaml` declaration in `<root>/sources`, in a stable order. */
+export function readDeclarations(root: string) {
+  return declarationFiles(root).map((file) =>
+    parseSourceDeclaration(readFileSync(join(root, file), "utf-8")),
+  );
+}
+
+/** A declaration in `sources/` that did not become an adapter. */
+export interface UnloadedSource {
+  /** Relative to the workspace root: the file somebody has to open. */
+  file: string;
+  reason: string;
+}
+
+export interface LoadedSources {
+  /** Every source that built, keyed by id. */
+  sources: Map<string, SourceAdapter>;
+  unloaded: UnloadedSource[];
 }
 
 /**
- * Every source declared in the workspace, keyed by id.
- *
- * Which is also where two declarations sharing an id are caught. It makes
- * `source:path` ambiguous and `pages.source` unable to tell them apart, so it
- * was never valid — but it was silent, and silent in two different ways: the
- * CLI built both and checked drift twice, the MCP server kept whichever file
- * sorted last.
+ * Every source that builds, plus each declaration that did not: one half-written file
+ * must not stop lint, drift and the MCP server for every other source.
+ * A shared id still throws, since keeping either declaration would be picking a winner.
  */
-export function loadSources(ctx: SourceContext): Map<string, SourceAdapter> {
+export function loadSources(ctx: SourceContext): LoadedSources {
   const registry = buildRegistry(ctx);
-  const out = new Map<string, SourceAdapter>();
+  const sources = new Map<string, SourceAdapter>();
+  const unloaded: UnloadedSource[] = [];
+  const seen = new Set<string>();
 
-  for (const declaration of readDeclarations(ctx.root)) {
-    if (out.has(declaration.id)) {
+  for (const file of declarationFiles(ctx.root)) {
+    let declaration;
+    try {
+      declaration = parseSourceDeclaration(readFileSync(join(ctx.root, file), "utf-8"));
+    } catch (error) {
+      unloaded.push({ file, reason: messageOf(error) });
+      continue;
+    }
+    if (seen.has(declaration.id)) {
       throw new Error(
         `Two sources in sources/ are declared with id "${declaration.id}". ` +
           `An id names a source in every citation, so it has to name only one.`,
       );
     }
-    out.set(declaration.id, registry.create(declaration));
+    seen.add(declaration.id);
+    try {
+      sources.set(declaration.id, registry.create(declaration));
+    } catch (error) {
+      unloaded.push({ file, reason: messageOf(error) });
+    }
   }
-  return out;
+  return { sources, unloaded };
 }
+
+/** The same finding for the CLI and the MCP server, so they cannot word it differently. */
+export function unloadedFindings(unloaded: readonly UnloadedSource[]) {
+  return unloaded.map((source) => ({
+    kind: "unloaded-source" as const,
+    path: source.file,
+    detail: `not loaded, so nothing citing it was checked: ${source.reason}`,
+  }));
+}
+
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));

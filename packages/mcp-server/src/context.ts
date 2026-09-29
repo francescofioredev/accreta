@@ -60,6 +60,7 @@ export function createContext(cwd: string = process.cwd()): ToolContext {
 
   let db = openIndex(indexPath, { readonly: true });
   let openedInode = inodeOf(indexPath);
+  const loaded = loadSources({ root, citationFormat: config.provenanceFormat });
 
   return {
     get db() {
@@ -87,7 +88,8 @@ export function createContext(cwd: string = process.cwd()): ToolContext {
     },
     config,
     root,
-    sources: loadSources({ root, citationFormat: config.provenanceFormat }),
+    sources: loaded.sources,
+    unloadedSources: loaded.unloaded,
     // Writes are off unless explicitly enabled. Provenance is the substance of
     // the project, so the tool that can rewrite it does not exist by default.
     writesEnabled: process.env.ACCRETA_ALLOW_WRITES === "1",
