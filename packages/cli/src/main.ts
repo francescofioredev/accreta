@@ -1,19 +1,17 @@
 #!/usr/bin/env bun
 import { readFileSync } from "node:fs";
 
-import {
-  canonical,
-  consumers,
-  doctor,
-  drift,
-  init,
-  reindex,
-  runLint,
-  search,
-  show,
-  sourceAdd,
-} from "./commands.ts";
-import type { CommandContext } from "./commands.ts";
+import type { CommandContext } from "./commands/shared.ts";
+import { canonical } from "./commands/canonical.ts";
+import { consumers } from "./commands/consumers.ts";
+import { doctor } from "./commands/doctor.ts";
+import { drift } from "./commands/drift.ts";
+import { init } from "./commands/init.ts";
+import { runLint } from "./commands/lint.ts";
+import { reindex } from "./commands/reindex.ts";
+import { search } from "./commands/search.ts";
+import { show } from "./commands/show.ts";
+import { sourceAdd } from "./commands/source.ts";
 
 const USAGE = `accreta — a knowledge base an agent writes and keeps current
 

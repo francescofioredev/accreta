@@ -70,6 +70,42 @@ All four must pass before a pull request is ready. CI enforces them.
 > honestly scoped — and when a second maintainer arrives, the override stops being used and
 > nothing else has to change.
 
+## Working in parallel
+
+The launch work ([#109](https://github.com/francescofioredev/accreta/issues/109)) runs in
+lanes. Each lane is an epic that one session works end to end, in its own worktree off `main`:
+
+```bash
+git worktree add ../accreta-<lane> -b <lane>/<issue>-<slug> origin/main
+```
+
+| Lane        | Epic                                                            | Owns                                                                                                                                                    |
+| ----------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| groundwork  | [#110](https://github.com/francescofioredev/accreta/issues/110) | publish checks, `docs/architecture.md`, ADR status lines, the layout of `packages/cli/src/`                                                             |
+| runtime     | [#115](https://github.com/francescofioredev/accreta/issues/115) | build config, dependencies and `bun.lock`, the SQLite driver, git process spawning, `.github/workflows/`, the `init`, `doctor` and `mcp install` commands |
+| provenance  | [#122](https://github.com/francescofioredev/accreta/issues/122) | `packages/core/src/query/`, `packages/core/src/source/` except `drift.ts`, the fs and delegated adapters                                                |
+| surfaces    | [#127](https://github.com/francescofioredev/accreta/issues/127) | the other CLI commands, `packages/mcp-server/src/`, `templates/`, `skills/`                                                                             |
+| evidence    | [#133](https://github.com/francescofioredev/accreta/issues/133) | `bench/`, the eval, the demo knowledge base, `drift.ts`, git change detection, the `drift` command, the PR action                                       |
+| launch      | [#141](https://github.com/francescofioredev/accreta/issues/141) | `README.md`, the release, the announcement                                                                                                              |
+| team access | [#145](https://github.com/francescofioredev/accreta/issues/145) | HTTP transport, auth, sync loop, deployment                                                                                                             |
+
+- Take the next open task in your lane whose blockers are all closed: `launch-critical`
+  first, then the lowest number. One task is one pull request.
+- Stay inside your lane's paths. A task that has to touch another lane's file says so in its
+  body; keep that change small and name it in the pull request.
+- State lives on the issue, not in a local file. Comment when you start, link the pull
+  request, close the issue on merge.
+
+Hotspots, where two lanes would otherwise collide:
+
+- **Dependencies and `bun.lock`** change only in the runtime lane. Another lane that needs a
+  dependency lands it first, alone, in a small pull request.
+- **`README.md`** is frozen until the launch lane, except for factual fixes. New docs go under
+  `docs/`.
+- **CLI commands** live one per file in `packages/cli/src/commands/`, with shared helpers in
+  `commands/shared.ts`. A new command is a new file there; in `packages/cli/src/main.ts` it
+  adds its import, its dispatch line and its line in `USAGE`, and touches nothing else.
+
 ## Releasing
 
 Publishing is triggered by a tag and gated on the full suite, because a tag is not a review and
