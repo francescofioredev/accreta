@@ -118,7 +118,7 @@ export function supersessionFindings(db: Database, config: AccretaConfig): LintF
       findings.push({
         kind: KIND,
         path: successor,
-        detail: `${successor} says ${supersedes}: ${predecessor}, but ${predecessor} does not record it. Find the line in ${successor}'s source that says so; if it exists, record ${supersededBy} on ${predecessor} citing that line. If no source says it, remove the claim`,
+        detail: `${successor} says ${supersedes}: ${predecessor}, but ${predecessor} does not record it. Find the line in ${successor}'s source that says so; if it exists, record ${supersededBy} on ${predecessor} citing that line. If no source says it and no one declared it, remove the claim`,
       });
     } else {
       if (unreadable.has(successor)) continue;
@@ -126,7 +126,7 @@ export function supersessionFindings(db: Database, config: AccretaConfig): LintF
       findings.push({
         kind: KIND,
         path: predecessor,
-        detail: `${predecessor} says ${supersededBy}: ${successor}, but ${successor} does not record it. The evidence must come from ${successor}'s source or a registry, never from ${predecessor}'s own source; if such a line exists, record ${supersedes} on ${successor} citing it. If no source says it, remove the claim`,
+        detail: `${predecessor} says ${supersededBy}: ${successor}, but ${successor} does not record it. The evidence must come from ${successor}'s source or a registry, never from ${predecessor}'s own source; if such a line exists, record ${supersedes} on ${successor} citing it. If no source says it and no one declared it, remove the claim`,
       });
     }
   }
@@ -158,10 +158,11 @@ function describeLoop(members: string[], next: Map<string, string[]>): string {
       budget -= Math.min(rest.length, budget);
     }
   }
+  // Self-edges are few, and each is its own fix, so they are always named.
   if (selves.length > 0) {
     const one = selves.length === 1;
     parts.push(
-      `${named(selves, budget)} ${one ? "claims" : "claim"} to supersede ${one ? "itself" : "themselves"}`,
+      `${selves.join(", ")} ${one ? "claims" : "claim"} to supersede ${one ? "itself" : "themselves"}`,
     );
   }
   return `${parts.join(", and ")}. ${LOOP_ADVICE}`;

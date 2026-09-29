@@ -174,6 +174,17 @@ describe("inconsistent-supersession", () => {
     expect(ms).toBeLessThan(1_000);
   });
 
+  test("a self-edge in a loop that fills the naming budget is still named", () => {
+    const n = 25;
+    for (let i = 0; i < n; i++) {
+      const next = `[[${padded((i + 1) % n)}]]`;
+      writePage(padded(i), { supersedes: i === 10 ? `${next}, [[${padded(i)}]]` : next });
+    }
+    const [finding, ...rest] = supersessionFindings();
+    expect(rest).toEqual([]);
+    expect(finding!.detail).toContain(", and knowledge/p00010.md claims to supersede itself. ");
+  });
+
   test("a chain that runs one way, recorded on both sides, is clean", () => {
     writePage("v1", { superseded_by: "[[v2]]" });
     writePage("v2", { supersedes: "[[v1]]", superseded_by: "[[v3]]" });
@@ -190,7 +201,7 @@ describe("inconsistent-supersession", () => {
     expect(findings).toHaveLength(1);
     expect(findings[0]!.path).toBe("knowledge/new.md");
     expect(findings[0]!.detail).toBe(
-      "knowledge/new.md says supersedes: knowledge/a-old.md, but knowledge/a-old.md does not record it. Find the line in knowledge/new.md's source that says so; if it exists, record superseded_by on knowledge/a-old.md citing that line. If no source says it, remove the claim",
+      "knowledge/new.md says supersedes: knowledge/a-old.md, but knowledge/a-old.md does not record it. Find the line in knowledge/new.md's source that says so; if it exists, record superseded_by on knowledge/a-old.md citing that line. If no source says it and no one declared it, remove the claim",
     );
   });
 
@@ -203,7 +214,7 @@ describe("inconsistent-supersession", () => {
     expect(findings).toHaveLength(1);
     expect(findings[0]!.path).toBe("knowledge/old.md");
     expect(findings[0]!.detail).toBe(
-      "knowledge/old.md says superseded_by: knowledge/new.md, but knowledge/new.md does not record it. The evidence must come from knowledge/new.md's source or a registry, never from knowledge/old.md's own source; if such a line exists, record supersedes on knowledge/new.md citing it. If no source says it, remove the claim",
+      "knowledge/old.md says superseded_by: knowledge/new.md, but knowledge/new.md does not record it. The evidence must come from knowledge/new.md's source or a registry, never from knowledge/old.md's own source; if such a line exists, record supersedes on knowledge/new.md citing it. If no source says it and no one declared it, remove the claim",
     );
   });
 
