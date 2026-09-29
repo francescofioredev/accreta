@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { Database as SqliteDatabase } from "bun:sqlite";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +9,8 @@ import { openIndex, type Database } from "../src/index-db/db.ts";
 import { findCanonical, findRelated, getPage } from "../src/query/page.ts";
 import { searchPages } from "../src/query/search.ts";
 import { lint, lintCitations } from "../src/query/lint.ts";
+import { countPagesCiting } from "../src/query/citing.ts";
+import { StaleIndexError } from "../src/query/tables.ts";
 import {
   parseCitation,
   parseLineLocator,
@@ -232,6 +235,33 @@ describe("findCanonical", () => {
     db.close();
     reindex();
     expect(findCanonical(db, "climate forcing", config)).toEqual([]);
+  });
+});
+
+describe("an index built before a table existed", () => {
+  function dropTable(table: string): void {
+    writePage("a.md", '---\ntype: note\naliases: ["x"]\n---\n\n# A\n');
+    buildIndex({ root, config, indexPath });
+    const writable = new SqliteDatabase(indexPath);
+    writable.run(`DROP TABLE ${table}`);
+    writable.close();
+    db = openIndex(indexPath, { readonly: true });
+  }
+
+  test("findCanonical says to reindex when aliases is missing", () => {
+    dropTable("aliases");
+    expect(() => findCanonical(db, "x", config)).toThrow(StaleIndexError);
+    expect(() => findCanonical(db, "x", config)).toThrow(
+      "This index predates the aliases table; run `accreta reindex`.",
+    );
+  });
+
+  test("citation readers say to reindex when citations is missing", async () => {
+    dropTable("citations");
+    expect(() => countPagesCiting(db, "s")).toThrow(
+      "This index predates the citations table; run `accreta reindex`.",
+    );
+    await expect(lintCitations(db, new Map())).rejects.toThrow(StaleIndexError);
   });
 });
 

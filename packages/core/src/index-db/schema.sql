@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS pages (
 
 CREATE INDEX IF NOT EXISTS idx_pages_type ON pages(type);
 CREATE INDEX IF NOT EXISTS idx_pages_source ON pages(source);
+-- findCanonical compares titles through LOWER(); a plain index on title would not serve it.
+CREATE INDEX IF NOT EXISTS idx_pages_title_lower ON pages(LOWER(title));
 
 -- `aliases` is indexed alongside title and body because the name a question
 -- arrives under is rarely the name the page was filed under. Leaving it out

@@ -1,6 +1,7 @@
 import type { AccretaConfig } from "../config.ts";
 import type { Database } from "../index-db/db.ts";
 import { tryResolveWikilink } from "../links.ts";
+import { requireTable } from "./tables.ts";
 import {
   clampLimit,
   cursorOffset,
@@ -205,6 +206,7 @@ export interface CanonicalMatch {
  * should reach the same place.
  */
 export function findCanonical(db: Database, term: string, config: AccretaConfig): CanonicalMatch[] {
+  requireTable(db, "aliases");
   const needle = term.trim().toLowerCase();
   const out: CanonicalMatch[] = [];
   const seen = new Set<string>();

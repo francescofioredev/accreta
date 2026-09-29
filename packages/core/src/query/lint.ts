@@ -11,6 +11,7 @@ import {
 } from "../source/adapter.ts";
 import { paginate, type PageInfo, type PageRequest } from "./paging.ts";
 import { supersessionFindings } from "./supersession.ts";
+import { requireTable } from "./tables.ts";
 
 export const LINT_FINDING_KINDS = [
   "broken-link",
@@ -231,6 +232,7 @@ export async function lintCitations(
   db: Database,
   sources: Map<string, SourceAdapter>,
 ): Promise<LintReport> {
+  requireTable(db, "citations");
   const findings: LintFinding[] = [];
   const unchecked = new Map<string, { citations: number; paths: Set<string> }>();
   const skip = (detail: string, sourceId: string, path: string) => {

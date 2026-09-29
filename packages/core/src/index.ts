@@ -66,3 +66,4 @@ export { LINT_FINDING_KINDS, lint, lintCitations, lintKnowledgeBase } from "./qu
 export { countPagesCiting } from "./query/citing.ts";
 export type { PageInfo, PageRequest } from "./query/paging.ts";
 export { DEFAULT_PAGE_LIMIT, InvalidCursorError, MAX_PAGE_LIMIT } from "./query/paging.ts";
+export { StaleIndexError } from "./query/tables.ts";
