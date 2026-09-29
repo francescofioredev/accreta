@@ -10,7 +10,7 @@ import { findCanonical, findRelated, getPage } from "../src/query/page.ts";
 import { searchPages } from "../src/query/search.ts";
 import { lint, lintCitations } from "../src/query/lint.ts";
 import { countPagesCiting } from "../src/query/citing.ts";
-import { StaleIndexError } from "../src/query/tables.ts";
+import { requireTable, StaleIndexError } from "../src/query/tables.ts";
 import {
   parseCitation,
   parseLineLocator,
@@ -224,6 +224,32 @@ describe("findCanonical", () => {
     expect(match?.path).toBe("knowledge/concepts/emission.md");
   });
 
+  test("a non-ASCII title resolves case-insensitively", () => {
+    writePage("concepts/emission.md", "---\ntype: concept\n---\n\n# Émissions\n");
+    reindex();
+    const [match] = findCanonical(db, "émissions", config);
+    expect(match?.path).toBe("knowledge/concepts/emission.md");
+    expect(match?.matchedOn).toBe("title");
+  });
+
+  test("a decomposed É matches a composed one, in titles and aliases", () => {
+    const composed = "Été";
+    const decomposed = "Été";
+    writePage("concepts/title.md", `---\ntype: concept\n---\n\n# ${decomposed}\n`);
+    writePage(
+      "concepts/alias.md",
+      `---\ntype: concept\naliases: ["${decomposed} x"]\n---\n\n# A\n`,
+    );
+    reindex();
+    expect(findCanonical(db, composed, config).map((m) => m.path)).toEqual([
+      "knowledge/concepts/title.md",
+    ]);
+    expect(findCanonical(db, `${composed} x`, config).map((m) => m.path)).toEqual([
+      "knowledge/concepts/alias.md",
+    ]);
+    expect(findCanonical(db, `${decomposed} x`, config)).toHaveLength(1);
+  });
+
   test("aliases differing only in case yield one match", () => {
     writePage("concepts/rf.md", '---\ntype: concept\naliases: ["RF", "rf"]\n---\n\n# R\n');
     reindex();
@@ -247,6 +273,20 @@ describe("an index built before a table existed", () => {
     writable.close();
     db = openIndex(indexPath, { readonly: true });
   }
+
+  test("a table found once is not looked up again, and a missing one always is", () => {
+    writePage("a.md", "---\ntype: note\n---\n\n# A\n");
+    reindex();
+    requireTable(db, "aliases");
+    const writable = new SqliteDatabase(indexPath);
+    writable.run("DROP TABLE aliases");
+    expect(() => requireTable(db, "aliases")).not.toThrow();
+
+    expect(() => requireTable(db, "later")).toThrow(StaleIndexError);
+    writable.run("CREATE TABLE later (x)");
+    writable.close();
+    expect(() => requireTable(db, "later")).not.toThrow();
+  });
 
   test("findCanonical says to reindex when aliases is missing", () => {
     dropTable("aliases");

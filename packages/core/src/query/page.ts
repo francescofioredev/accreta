@@ -1,6 +1,7 @@
 import type { AccretaConfig } from "../config.ts";
 import type { Database } from "../index-db/db.ts";
 import { tryResolveWikilink } from "../links.ts";
+import { nameKey } from "../name-key.ts";
 import { requireTable } from "./tables.ts";
 import {
   clampLimit,
@@ -207,7 +208,7 @@ export interface CanonicalMatch {
  */
 export function findCanonical(db: Database, term: string, config: AccretaConfig): CanonicalMatch[] {
   requireTable(db, "aliases");
-  const needle = term.trim().toLowerCase();
+  const needle = nameKey(term);
   const out: CanonicalMatch[] = [];
   const seen = new Set<string>();
 
@@ -233,8 +234,10 @@ export function findCanonical(db: Database, term: string, config: AccretaConfig)
   }
 
   const byTitle = db
-    .query(`${SELECT} WHERE LOWER(title) = ? ORDER BY path`)
-    .all(needle) as PageRow[];
+    .query(
+      `SELECT path, title, type, canonical_source FROM pages WHERE title_key = ? ORDER BY path`,
+    )
+    .all(needle) as Pick<PageRow, "path" | "title" | "type" | "canonical_source">[];
   for (const row of byTitle) push(row, "title");
 
   // Equality on whole declared aliases, so a page merely containing the words elsewhere never matches.

@@ -4,6 +4,7 @@ import { join, relative, sep } from "node:path";
 import type { AccretaConfig } from "../config.ts";
 import { compileCitationTemplate, extractFootnotes } from "../citations.ts";
 import { extractLinks, tryResolveWikilink } from "../links.ts";
+import { nameKey } from "../name-key.ts";
 import { parsePage } from "../page.ts";
 import { openIndex, sealForReading, type Database } from "./db.ts";
 
@@ -65,7 +66,7 @@ function aliasesOf(frontmatter: Record<string, unknown>): string {
 function canonicalAliases(frontmatter: Record<string, unknown>): string[] {
   const value = frontmatter.aliases;
   if (!Array.isArray(value)) return [];
-  return value.filter((a): a is string => typeof a === "string").map((a) => a.trim().toLowerCase());
+  return value.filter((a): a is string => typeof a === "string").map(nameKey);
 }
 
 /** Record paths with `/` regardless of platform: they are identifiers, not filesystem locations. */
@@ -155,11 +156,11 @@ function removeIndexFiles(path: string): void {
 function runBuild(db: Database, root: string, config: AccretaConfig, started: number): BuildResult {
   const insertPage = db.prepare(`
     INSERT INTO pages (
-      path, type, title, source, canonical_source,
+      path, type, title, title_key, source, canonical_source,
       last_verified_revision, last_ingest_revision, last_ingest_at,
       frontmatter_json, body, mtime, frontmatter_error
     ) VALUES (
-      $path, $type, $title, $source, $canonical_source,
+      $path, $type, $title, $title_key, $source, $canonical_source,
       $last_verified_revision, $last_ingest_revision, $last_ingest_at,
       $frontmatter_json, $body, $mtime, $frontmatter_error
     )
@@ -227,6 +228,7 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
         $path: path,
         $type: type,
         $title: title,
+        $title_key: nameKey(title),
         $source: source,
         $canonical_source: asString(frontmatter.canonical_source),
         $last_verified_revision: asString(frontmatter.last_verified_revision),

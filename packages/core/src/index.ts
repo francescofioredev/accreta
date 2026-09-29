@@ -17,6 +17,7 @@ export { compileCitationTemplate, extractFootnotes } from "./citations.ts";
 
 export type { Frontmatter, ParsedPage } from "./page.ts";
 export { parsePage } from "./page.ts";
+export { nameKey } from "./name-key.ts";
 
 export type { ExtractedLink, LinkKind } from "./links.ts";
 export type { ResolvedWikilink } from "./links.ts";
