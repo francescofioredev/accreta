@@ -142,7 +142,8 @@ check("wal: journal_mode=WAL returns wal on a file DB", () => {
   return `journal_mode=${mode}`;
 });
 
-check("wal: a second connection reads while the first holds an open write", () => {
+// Informational: accreta's readers only ever open the sealed file, never one being written.
+check("wal (informational): a second connection reads during an open write", () => {
   const path = join(dir, "wal2.sqlite");
   const writer = openIndex(path);
   insertPage(writer, "kb/one.md", "One", "first");
