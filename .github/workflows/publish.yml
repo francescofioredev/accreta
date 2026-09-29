@@ -49,6 +49,13 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      # The same gates as ci.yml, so a tag cannot publish what a pull request would be refused.
+      - name: Lint
+        run: bun run lint
+
+      - name: Format
+        run: bun run format:check
+
       # The tag names a version; the manifests name a version. If they disagree
       # this publishes the wrong number, and it cannot be taken back.
       - name: Check the tag against the manifests
