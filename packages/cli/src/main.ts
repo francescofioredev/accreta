@@ -10,7 +10,7 @@ import {
 import { canonical } from "./commands/canonical.ts";
 import { consumers } from "./commands/consumers.ts";
 import { doctor } from "./commands/doctor.ts";
-import { drift } from "./commands/drift.ts";
+import { drift, driftOptions } from "./commands/drift.ts";
 import { init } from "./commands/init.ts";
 import { runLint } from "./commands/lint.ts";
 import { reindex } from "./commands/reindex.ts";
@@ -29,6 +29,7 @@ Usage: accreta <command> [arguments]
   lint                     Report unresolvable links, missing provenance, unknown types
   drift [--strict]         Report which pages their sources have moved out from under.
                            --strict also fails on anything left unchecked
+                           --json, or --format github for a pull request comment
   doctor                   Report what is wired up, and what cannot be checked from here
   source add <type> <id>   Write a source declaration (--set key=value, repeatable)
   search <query>           Full-text search (--type <type>, repeatable; --source <id>;
@@ -232,7 +233,7 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
     case "lint":
       return runLint(ctx, { json });
     case "drift":
-      return drift(ctx, { strict });
+      return drift(ctx, driftOptions(positional, strict));
     case "doctor":
       return doctor(ctx, VERSION);
     case "source":

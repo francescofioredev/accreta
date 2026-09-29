@@ -324,8 +324,10 @@ describe("detectDrift at line granularity", () => {
     addPage("knowledge/a.md", "docs", "rev1");
     addFootnote("knowledge/a.md", "x", "rev0", "ch.md", "L1");
     const source = new LineAwareSource("docs", "rev2", { rev1: ["ch.md"] }, { "rev0 ch.md": {} });
-    await detectDrift(db, source);
+    const report = await detectDrift(db, source);
     expect(source.asked).toEqual(["rev0 ch.md L1"]);
+    // Reported with it too, so a reader resolves the lines against the right revision.
+    expect(report.stale[0]?.citations?.[0]?.revision).toBe("rev0");
   });
 
   test("a citation revision the source cannot place is unknown, never untouched", async () => {
@@ -350,6 +352,7 @@ describe("detectDrift at line granularity", () => {
         footnote: null,
         path: "ch.md",
         locator: null,
+        revision: "rev1",
         change: { status: "touched" },
       },
     ]);

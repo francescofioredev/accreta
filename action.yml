@@ -1,0 +1,75 @@
+name: accreta drift
+description: Comment on a pull request with the knowledge base pages whose cited lines it changed.
+author: francescofioredev
+branding:
+  icon: book-open
+  color: blue
+
+inputs:
+  working-directory:
+    description: The knowledge base to check, relative to the repository root.
+    default: "."
+  github-token:
+    description: Token that posts the comment. The workflow's own is enough.
+    default: ${{ github.token }}
+  comment-when-clean:
+    description: Post a comment even when drift finds nothing. An existing comment is always updated.
+    default: "false"
+  fail-on-drift:
+    description: Fail the step when drift exits non-zero, as `accreta drift` does.
+    default: "false"
+
+outputs:
+  pages-in-doubt:
+    description: How many pages cite lines that changed.
+    value: ${{ steps.drift.outputs.pages-in-doubt }}
+
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: 1.3.13
+
+    # The action runs accreta from its own checkout, so the CLI is the version the action is pinned to.
+    - name: Install accreta
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: bun install --frozen-lockfile --production
+
+    - name: Check drift
+      id: drift
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        ACCRETA_INDEX_PATH: ${{ runner.temp }}/accreta-drift.sqlite
+      run: |
+        cli="$GITHUB_ACTION_PATH/packages/cli/src/main.ts"
+        bun "$cli" reindex
+        # Exit 1 means drift found something; any other failure leaves the report empty.
+        code=0
+        bun "$cli" drift --format github > "$RUNNER_TEMP/accreta-drift.md" || code=$?
+        if [ ! -s "$RUNNER_TEMP/accreta-drift.md" ]; then
+          echo "::error::accreta drift failed before writing a report."
+          exit 1
+        fi
+        bun "$cli" drift --json > "$RUNNER_TEMP/accreta-drift.json" || true
+        doubt=$(bun -e 'console.log(JSON.parse(await Bun.file(process.argv[1]).text()).pages_in_doubt)' "$RUNNER_TEMP/accreta-drift.json")
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        echo "pages-in-doubt=$doubt" >> "$GITHUB_OUTPUT"
+
+    - name: Comment on the pull request
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        DRIFT_REPORT: ${{ runner.temp }}/accreta-drift.md
+        DRIFT_KEY: ${{ inputs.working-directory }}
+        DRIFT_CREATE: ${{ inputs.comment-when-clean == 'true' || steps.drift.outputs.exit-code != '0' }}
+      run: bun "$GITHUB_ACTION_PATH/scripts/drift-comment.ts"
+
+    - name: Fail on drift
+      if: ${{ inputs.fail-on-drift == 'true' && steps.drift.outputs.exit-code != '0' }}
+      shell: bash
+      run: |
+        echo "::error::accreta drift found pages to re-verify."
+        exit 1

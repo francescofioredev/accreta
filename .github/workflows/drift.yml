@@ -1,0 +1,28 @@
+name: Drift
+
+# Comments on each pull request with the demo knowledge base pages whose cited lines it changed.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# Two runs racing on one pull request could each find no comment and both post one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  drift:
+    name: pages in doubt
+    runs-on: ubuntu-latest
+    steps:
+      # Citations name the commit they were verified at; a shallow clone cannot place it.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./
+        with:
+          working-directory: examples/climate
