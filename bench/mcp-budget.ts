@@ -50,9 +50,19 @@ link_fields: [related, supersedes, superseded_by, discussed_in]
 const TOKENS_PER_BYTE = 1 / 4;
 const estTokens = (bytes: number) => Math.round(bytes * TOKENS_PER_BYTE);
 
+const EMPTY_BODIES = new Set(["{}", "[]", '""', "null"]);
+
 /** Exactly what the server sends: one text block of pretty-printed JSON. */
-function serialize(value: unknown): number {
-  return Buffer.byteLength(JSON.stringify(value, null, 2), "utf-8");
+export function serialize(tool: string, value: unknown): number {
+  // A Promise serializes to "{}", so an unawaited async tool would read as a 0KB response.
+  if (typeof (value as { then?: unknown } | null)?.then === "function") {
+    throw new Error(`${tool}: measured a pending Promise; await the tool`);
+  }
+  const text = JSON.stringify(value, null, 2);
+  if (text === undefined || EMPTY_BODIES.has(text)) {
+    throw new Error(`${tool}: serialized to an empty body (${String(text)})`);
+  }
+  return Buffer.byteLength(text, "utf-8");
 }
 
 interface Corpus {
@@ -106,7 +116,7 @@ ${body}
   return { root, hubPath: "knowledge/page-000000.md" };
 }
 
-interface Row {
+export interface Row {
   pages: number;
   search: number;
   getPage: number;
@@ -116,7 +126,7 @@ interface Row {
   lintFindings: number;
 }
 
-function measure(size: number): Row {
+export async function measure(size: number): Promise<Row> {
   const corpus = generate(size);
   try {
     const config: AccretaConfig = parseConfig(CONFIG_YAML);
@@ -131,14 +141,17 @@ function measure(size: number): Row {
       writesEnabled: false,
     };
 
-    const lintResult = lintTool(ctx);
+    const lintResult = await lintTool(ctx);
     const row: Row = {
       pages: size,
-      search: serialize(searchPagesTool(ctx, { query: "forcing" })),
-      getPage: serialize(getPageTool(ctx, { path: corpus.hubPath })),
-      findConsumers: serialize(findConsumersTool(ctx, { target: corpus.hubPath })),
-      findCanonical: serialize(findCanonicalTool(ctx, { term: "concept 1" })),
-      lint: serialize(lintResult),
+      search: serialize("search_pages", searchPagesTool(ctx, { query: "forcing" })),
+      getPage: serialize("get_page", getPageTool(ctx, { path: corpus.hubPath })),
+      findConsumers: serialize(
+        "find_consumers",
+        findConsumersTool(ctx, { target: corpus.hubPath }),
+      ),
+      findCanonical: serialize("find_canonical", findCanonicalTool(ctx, { term: "concept 1" })),
+      lint: serialize("lint_knowledge_base", lintResult),
       lintFindings: lintResult.count,
     };
     db.close();
@@ -155,54 +168,58 @@ const tok = (bytes: number) => {
   return t >= 1000 ? `${(t / 1000).toFixed(1)}k` : String(t);
 };
 
-console.log(`platform: ${process.platform} ${process.arch}, bun ${Bun.version}`);
-console.log(`token estimate: bytes/4 (understates JSON; see the comment in this file)`);
-console.log(`sizes: ${SIZES.join(", ")}\n`);
+async function main(): Promise<void> {
+  console.log(`platform: ${process.platform} ${process.arch}, bun ${Bun.version}`);
+  console.log(`token estimate: bytes/4 (understates JSON; see the comment in this file)`);
+  console.log(`sizes: ${SIZES.join(", ")}\n`);
 
-const rows: Row[] = [];
-for (const size of SIZES) {
-  process.stderr.write(`  measuring ${size} pages...\n`);
-  rows.push(measure(size));
-}
+  const rows: Row[] = [];
+  for (const size of SIZES) {
+    process.stderr.write(`  measuring ${size} pages...\n`);
+    rows.push(await measure(size));
+  }
 
-console.log("RESPONSE SIZE (bytes as serialized by the server)");
-console.log("  pages   search    get_page  find_consumers  find_canonical      lint  findings");
-for (const r of rows) {
-  console.log(
-    `  ${String(r.pages).padStart(5)}  ${kb(r.search).padStart(7)}  ${kb(r.getPage).padStart(10)}  ${kb(r.findConsumers).padStart(14)}  ${kb(r.findCanonical).padStart(14)}  ${kb(r.lint).padStart(8)}  ${String(r.lintFindings).padStart(8)}`,
-  );
-}
-
-console.log("\nESTIMATED TOKENS");
-console.log("  pages   search    get_page  find_consumers  find_canonical      lint");
-for (const r of rows) {
-  console.log(
-    `  ${String(r.pages).padStart(5)}  ${tok(r.search).padStart(7)}  ${tok(r.getPage).padStart(10)}  ${tok(r.findConsumers).padStart(14)}  ${tok(r.findCanonical).padStart(14)}  ${tok(r.lint).padStart(8)}`,
-  );
-}
-
-console.log("\nSHARE OF A 200k CONTEXT WINDOW (one call)");
-console.log("  pages   search    get_page  find_consumers  find_canonical      lint");
-const pct = (bytes: number) => `${((estTokens(bytes) / 200_000) * 100).toFixed(1)}%`;
-for (const r of rows) {
-  console.log(
-    `  ${String(r.pages).padStart(5)}  ${pct(r.search).padStart(7)}  ${pct(r.getPage).padStart(10)}  ${pct(r.findConsumers).padStart(14)}  ${pct(r.findCanonical).padStart(14)}  ${pct(r.lint).padStart(8)}`,
-  );
-}
-
-// Linear extrapolation from the largest measured size. Stated as extrapolation, not as
-// measurement: the growth is linear in findings and the constant is what was measured.
-const last = rows[rows.length - 1]!;
-if (last.pages > 0) {
-  console.log(`\nEXTRAPOLATION from ${last.pages} pages (linear; not measured)`);
-  for (const target of [10_000, 100_000]) {
-    const factor = target / last.pages;
-    const lintTokens = estTokens(last.lint * factor);
-    const consumersTokens = estTokens(last.findConsumers * factor);
+  console.log("RESPONSE SIZE (bytes as serialized by the server)");
+  console.log("  pages   search    get_page  find_consumers  find_canonical      lint  findings");
+  for (const r of rows) {
     console.log(
-      `  ${String(target).padStart(7)} pages: lint ~${(lintTokens / 1000).toFixed(0)}k tokens ` +
-        `(${(lintTokens / 200_000).toFixed(0)}x a 200k window), ` +
-        `find_consumers on the hub ~${(consumersTokens / 1000).toFixed(0)}k tokens`,
+      `  ${String(r.pages).padStart(5)}  ${kb(r.search).padStart(7)}  ${kb(r.getPage).padStart(10)}  ${kb(r.findConsumers).padStart(14)}  ${kb(r.findCanonical).padStart(14)}  ${kb(r.lint).padStart(8)}  ${String(r.lintFindings).padStart(8)}`,
     );
   }
+
+  console.log("\nESTIMATED TOKENS");
+  console.log("  pages   search    get_page  find_consumers  find_canonical      lint");
+  for (const r of rows) {
+    console.log(
+      `  ${String(r.pages).padStart(5)}  ${tok(r.search).padStart(7)}  ${tok(r.getPage).padStart(10)}  ${tok(r.findConsumers).padStart(14)}  ${tok(r.findCanonical).padStart(14)}  ${tok(r.lint).padStart(8)}`,
+    );
+  }
+
+  console.log("\nSHARE OF A 200k CONTEXT WINDOW (one call)");
+  console.log("  pages   search    get_page  find_consumers  find_canonical      lint");
+  const pct = (bytes: number) => `${((estTokens(bytes) / 200_000) * 100).toFixed(1)}%`;
+  for (const r of rows) {
+    console.log(
+      `  ${String(r.pages).padStart(5)}  ${pct(r.search).padStart(7)}  ${pct(r.getPage).padStart(10)}  ${pct(r.findConsumers).padStart(14)}  ${pct(r.findCanonical).padStart(14)}  ${pct(r.lint).padStart(8)}`,
+    );
+  }
+
+  // Linear extrapolation from the largest measured size. Stated as extrapolation, not as
+  // measurement: the growth is linear in findings and the constant is what was measured.
+  const last = rows[rows.length - 1]!;
+  if (last.pages > 0) {
+    console.log(`\nEXTRAPOLATION from ${last.pages} pages (linear; not measured)`);
+    for (const target of [10_000, 100_000]) {
+      const factor = target / last.pages;
+      const lintTokens = estTokens(last.lint * factor);
+      const consumersTokens = estTokens(last.findConsumers * factor);
+      console.log(
+        `  ${String(target).padStart(7)} pages: lint ~${(lintTokens / 1000).toFixed(0)}k tokens ` +
+          `(${(lintTokens / 200_000).toFixed(0)}x a 200k window), ` +
+          `find_consumers on the hub ~${(consumersTokens / 1000).toFixed(0)}k tokens`,
+      );
+    }
+  }
 }
+
+if (import.meta.main) await main();
