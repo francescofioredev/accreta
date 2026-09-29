@@ -17,8 +17,8 @@ export const PUBLISHABLE = [
   "packages/adapters/git",
   "packages/adapters/delegated",
   "packages/adapters/registry",
-  "packages/cli",
   "packages/mcp-server",
+  "packages/cli",
 ];
 
 export interface Manifest {

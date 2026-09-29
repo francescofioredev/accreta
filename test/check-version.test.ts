@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   PUBLISHABLE,
   floorTooNew,
+  manifestOf,
   mismatches,
   skillRequires,
   versionOf,
@@ -51,4 +52,16 @@ test("the workflow publishes the packages in dependency order", async () => {
   const loop = workflow.match(/for package in ([^;]+);/);
   expect(loop).not.toBeNull();
   expect(loop![1]!.trim().split(/\s+/)).toEqual(PUBLISHABLE);
+});
+
+test("every package is published after the packages it depends on", () => {
+  // Internal dependencies are pinned exactly, so a dependent that goes first fails to install
+  // (ETARGET) until its dependency lands, and stays broken if that later publish fails.
+  const names = PUBLISHABLE.map((dir) => manifestOf(dir).name);
+  const late = PUBLISHABLE.flatMap((dir, at) =>
+    Object.keys(manifestOf(dir).dependencies ?? {})
+      .filter((dep) => names.includes(dep) && names.indexOf(dep) > at)
+      .map((dep) => `${names[at]} is published before its dependency ${dep}`),
+  );
+  expect(late).toEqual([]);
 });
