@@ -15,12 +15,9 @@ test("serialize counts the bytes the server would send", () => {
   expect(serialize("tool", { a: 1 })).toBe(Buffer.byteLength('{\n  "a": 1\n}'));
 });
 
-test("every measured tool returns a body, and lint reports its findings", async () => {
+test("every probe hits the corpus, and lint reports one finding per page", async () => {
+  // measure throws if any probe misses, so resolving is the content check.
   const row = await measure(10);
-  for (const bytes of [row.search, row.getPage, row.findConsumers, row.findCanonical, row.lint]) {
-    expect(bytes).toBeGreaterThan(0);
-  }
-  // Five of the ten pages carry no provenance and a dangling link.
-  expect(row.lintFindings).toBeGreaterThanOrEqual(5);
+  expect(row.lintFindings).toBe(10);
   expect(row.lint).toBeGreaterThan(1024);
 });

@@ -32,8 +32,11 @@ import {
 
 const SIZES = ((): number[] => {
   const arg = process.argv.find((a) => a.startsWith("--sizes="));
-  if (arg) return arg.slice("--sizes=".length).split(",").map(Number);
-  return [10, 100, 1_000];
+  if (!arg) return [10, 100, 1_000];
+  const sizes = arg.slice("--sizes=".length).split(",").map(Number);
+  // find_canonical probes "concept 1", which needs a second page.
+  if (sizes.some((n) => !Number.isInteger(n) || n < 2)) throw new Error("--sizes: integers >= 2");
+  return sizes;
 })();
 
 const CONFIG_YAML = `knowledge_base: knowledge
@@ -65,16 +68,21 @@ export function serialize(tool: string, value: unknown): number {
   return Buffer.byteLength(text, "utf-8");
 }
 
+/** A miss still serializes to a non-empty body, so the probe checks the content it measures. */
+function expectProbe(tool: string, ok: boolean, detail: string): void {
+  if (!ok) throw new Error(`${tool}: probe missed the corpus (${detail})`);
+}
+
 interface Corpus {
   root: string;
   hubPath: string;
+  lintFindings: number;
 }
 
 /**
  * A corpus in the state a knowledge base is in when an agent most needs to lint it:
- * pages missing provenance and missing a verified revision, and links that point at
- * nothing. Every page here produces at least two lint findings, which is not pessimistic
- * — it is what a half-finished ingest looks like.
+ * half the pages lack provenance and a verified revision, two lint findings each, which
+ * is not pessimistic — it is what a half-finished ingest looks like.
  */
 function generate(n: number): Corpus {
   const root = mkdtempSync(join(tmpdir(), "accreta-mcp-budget-"));
@@ -113,7 +121,8 @@ ${body}
 `,
     );
   }
-  return { root, hubPath: "knowledge/page-000000.md" };
+  // Odd pages: missing-provenance and unverified-page. `related_dangling` is not a link field.
+  return { root, hubPath: "knowledge/page-000000.md", lintFindings: 2 * Math.floor(n / 2) };
 }
 
 export interface Row {
@@ -133,29 +142,47 @@ export async function measure(size: number): Promise<Row> {
     const indexPath = join(corpus.root, ".accreta", "index.sqlite");
     buildIndex({ root: corpus.root, config, indexPath });
     const db = openIndex(indexPath, { readonly: true });
-    const ctx: ToolContext = {
-      db,
-      config,
-      root: corpus.root,
-      sources: new Map(),
-      writesEnabled: false,
-    };
+    try {
+      const ctx: ToolContext = {
+        db,
+        config,
+        root: corpus.root,
+        sources: new Map(),
+        writesEnabled: false,
+      };
 
-    const lintResult = await lintTool(ctx);
-    const row: Row = {
-      pages: size,
-      search: serialize("search_pages", searchPagesTool(ctx, { query: "forcing" })),
-      getPage: serialize("get_page", getPageTool(ctx, { path: corpus.hubPath })),
-      findConsumers: serialize(
+      const search = searchPagesTool(ctx, { query: "forcing" });
+      expectProbe("search_pages", search.count > 0, `count ${search.count}`);
+      const page = getPageTool(ctx, { path: corpus.hubPath });
+      expectProbe("get_page", page.found, `found ${page.found}`);
+      const consumers = findConsumersTool(ctx, { target: corpus.hubPath });
+      expectProbe(
         "find_consumers",
-        findConsumersTool(ctx, { target: corpus.hubPath }),
-      ),
-      findCanonical: serialize("find_canonical", findCanonicalTool(ctx, { term: "concept 1" })),
-      lint: serialize("lint_knowledge_base", lintResult),
-      lintFindings: lintResult.count,
-    };
-    db.close();
-    return row;
+        consumers.target_exists && consumers.count === size - 1,
+        `target_exists ${consumers.target_exists}, count ${consumers.count}, want ${size - 1}`,
+      );
+      const canonical = findCanonicalTool(ctx, { term: "concept 1" });
+      expectProbe("find_canonical", canonical.count >= 1, `count ${canonical.count}`);
+      const lintResult = await lintTool(ctx);
+      expectProbe(
+        "lint_knowledge_base",
+        lintResult.count === corpus.lintFindings,
+        `count ${lintResult.count}, want ${corpus.lintFindings}`,
+      );
+
+      return {
+        pages: size,
+        search: serialize("search_pages", search),
+        getPage: serialize("get_page", page),
+        findConsumers: serialize("find_consumers", consumers),
+        findCanonical: serialize("find_canonical", canonical),
+        lint: serialize("lint_knowledge_base", lintResult),
+        lintFindings: lintResult.count,
+      };
+    } finally {
+      // Close before rmSync deletes the directory the handle points into.
+      db.close();
+    }
   } finally {
     rmSync(corpus.root, { recursive: true, force: true });
   }
