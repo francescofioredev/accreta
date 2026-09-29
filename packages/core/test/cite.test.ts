@@ -273,8 +273,8 @@ describe("cite refuses what lint and drift cannot read back", () => {
     ).rejects.toThrow("its path differs");
   });
 
-  test("a path with . or .. segments", async () => {
-    for (const path of ["./a.md", "docs/../a.md", ".."]) {
+  test("a path with empty, . or .. segments", async () => {
+    for (const path of ["./a.md", "docs/../a.md", "..", "/a.md", "a.md/", "docs//a.md", ""]) {
       await expect(cite(sources(docs()), FORMAT, { sourceId: "docs", path })).rejects.toThrow(
         "is not canonical",
       );
@@ -295,7 +295,7 @@ describe("cite refuses what lint and drift cannot read back", () => {
     ).rejects.toThrow("uses the retired {start} and {end}");
   });
 
-  test("a format without {rev} or {locator} is honoured, not refused", async () => {
+  test("a format without {rev} or {locator} gives a whole-document footnote, not a refusal", async () => {
     const result = await cite(sources(docs()), "{source} · {path}", {
       sourceId: "docs",
       path: "a.md",

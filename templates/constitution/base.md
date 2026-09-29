@@ -209,9 +209,11 @@ an interruption to work around.
   revision belongs, or a commit that is not in the history
 - **footnotes that do not read as the configured format**, and footnote ids defined twice
 
-It also prints how many citations it could not check. That is not a finding: those citations
-point into sources accreta cannot reach, so nobody looked. The number is the size of what the
-knowledge base is taking on your word.
+It also prints how many citations it could not check, grouped by why. That is not a finding:
+nobody looked. The reason may be a source accreta cannot reach, a git file with uncommitted
+changes (commit, then cite again), or a source that failed, such as "git refused the
+repository", which you should fix. The number is the size of what the knowledge base is taking on
+your word.
 
 It exits non-zero, so it belongs in CI. Broken and dangling links deserve particular
 attention: **they fail silently in normal use.** The page renders, the link is blue, and only

@@ -83,8 +83,8 @@ the scope instead, because "nobody asked" and "the revision is lost" are differe
 to whoever reads them.
 
 `lint_knowledge_base` draws the same distinction with `citations_unchecked`: a count rather
-than findings, because a citation into a source nothing here can question was not found to be
-wrong, it was not examined.
+than findings, because a citation the source could not check was not found to be wrong, it was
+not examined. `unchecked_reasons` groups that count by the source's own reason.
 
 ## Writes
 

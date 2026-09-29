@@ -17,8 +17,8 @@ export interface Citation {
   revision: string | null;
   location: LocationVerdict;
   /**
-   * Rendered in `provenance.format`. With a null revision it names `UNPINNED_REVISION`, which lint
-   * flags `citation-unpinned` until the agent substitutes the revision it read through the connector.
+   * In `provenance.format`. A null revision renders `UNPINNED_REVISION`, flagged `citation-unpinned`:
+   * substitute the revision read through the connector, or for an uncommitted file commit and re-cite.
    */
   footnote: string;
   /** `source:path[#locator]`, the fixed grammar `parseCitation` reads. */
@@ -43,8 +43,8 @@ export async function cite(
     const known = [...sources.keys()].toSorted().join(", ") || "none";
     throw new Error(`Unknown source "${sourceId}". Configured sources: ${known}.`);
   }
-  if (path.split("/").some((segment) => segment === "." || segment === "..")) {
-    throw new Error(`Path "${path}" is not canonical: it has a "." or ".." segment`);
+  if (path.split("/").some((segment) => segment === "" || segment === "." || segment === "..")) {
+    throw new Error(`Path "${path}" is not canonical: it has an empty, "." or ".." segment`);
   }
 
   // Sequential so the revision is taken no later than the place it vouches for.

@@ -451,6 +451,9 @@ describe("lintCitations", () => {
     const report = await lintCitations(db, sources(opaque));
     expect(report.findings).toEqual([]);
     expect(report.citationsUnchecked).toBe(1);
+    expect(report.uncheckedReasons).toEqual([
+      { detail: "only the agent can reach this", citations: 1 },
+    ]);
   });
 
   test("an adapter that throws leaves the citation unchecked, not broken", async () => {
@@ -466,6 +469,7 @@ describe("lintCitations", () => {
     const report = await lintCitations(db, sources(failing));
     expect(report.findings).toEqual([]);
     expect(report.citationsUnchecked).toBe(1);
+    expect(report.uncheckedReasons).toEqual([{ detail: "connection refused", citations: 1 }]);
   });
 });
 

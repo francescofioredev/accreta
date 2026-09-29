@@ -147,7 +147,11 @@ The citation the agent pastes does not come from `citation()`. The core's `cite(
 from your `revision()` and `locate()` and renders it with `formatCitation()`, without pinning
 you: one adapter serves every caller, so a pin set for one lookup would leak into the next. So
 `locate()` must not say `found` for content your `revision()` does not hold. `git` answers
-`unknown` for a file with uncommitted changes, and `cite()` then names no revision.
+`unknown` for a file with uncommitted changes, and `cite()` then names no revision. `fs` with
+`extensions` and `git` with `paths` do not yet enforce this (#178).
+
+`locate()` may be called for many places at once, as `lint` does. If each answer costs a process
+or a request, batch the calls that arrive together, as `git` does with one `git status`.
 
 ## Registration
 

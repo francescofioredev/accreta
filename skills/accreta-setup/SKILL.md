@@ -178,9 +178,11 @@ Then:
 accreta drift
 ```
 
-`lint` also prints how many citations it **could not** check. That number is not a finding and
-not a failure: it is the citations into delegated sources, which nothing here can verify. It is
-the size of what you are being trusted on.
+`lint` also prints how many citations it **could not** check, grouped by why. That number is not
+a finding and not a failure. Some reasons are expected: a delegated source nothing here can
+verify, or a git file with uncommitted changes (commit it, then cite again). Some mean the source
+itself failed, such as "git refused the repository", and those need fixing. The number is the
+size of what you are being trusted on.
 
 ### The drift loop for a delegated source
 

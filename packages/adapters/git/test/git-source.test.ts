@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { UnknownRevisionError } from "@accreta/core";
@@ -142,6 +142,86 @@ describe("GitSource", () => {
 
     expect(await source().locate("new.md", "L1")).toMatchObject({ verdict: "unknown" });
     expect(await source().locate("a.md", "L1")).toEqual({ verdict: "found" });
+  });
+
+  test("locates issued together share one status and still answer each path", async () => {
+    write("a.md", "one");
+    write("b.md", "one");
+    await commit("first");
+    write("b.md", "one\ntwo");
+    const git = source();
+
+    const [a, b] = await Promise.all([git.locate("a.md", "L1"), git.locate("b.md", "L1")]);
+    expect(a).toEqual({ verdict: "found" });
+    expect(b).toMatchObject({ verdict: "unknown" });
+  });
+
+  test("a source rooted below the repository top still sees its dirty files", async () => {
+    write("docs/a.md", "one");
+    write("docs/b.md", "one");
+    await commit("first");
+    write("docs/b.md", "one\ntwo");
+    const docs = new GitSource({ id: "docs", root: join(root, "docs"), citationFormat: "{path}" });
+
+    expect(await docs.locate("a.md", "L1")).toEqual({ verdict: "found" });
+    expect(await docs.locate("b.md", "L1")).toMatchObject({ verdict: "unknown" });
+  });
+
+  test("a tracked file that matches .gitignore is still found", async () => {
+    write("a.md", "one");
+    await commit("first");
+    write(".gitignore", "a.md\n");
+    await commit("ignore it");
+
+    expect(await source().locate("a.md", "L1")).toEqual({ verdict: "found" });
+  });
+
+  test("a file inside a submodule is unknown: the superproject's commits hold only a pointer", async () => {
+    const inner = mkdtempSync(join(tmpdir(), "accreta-git-inner-"));
+    try {
+      const sub = (args: string[]) => Bun.spawnSync(["git", ...args], { cwd: inner });
+      sub(["init", "-q", "-b", "main"]);
+      writeFileSync(join(inner, "f.md"), "x\n");
+      sub(["add", "-A"]);
+      sub(["-c", "user.email=t@e", "-c", "user.name=T", "commit", "-q", "-m", "inner"]);
+      write("top.md", "y");
+      await run(["-c", "protocol.file.allow=always", "submodule", "add", "-q", inner, "sub"]);
+      await commit("with submodule");
+
+      expect(await source().locate("sub/f.md", "L1")).toMatchObject({ verdict: "unknown" });
+      expect(await source().locate("top.md", "L1")).toEqual({ verdict: "found" });
+    } finally {
+      rmSync(inner, { recursive: true, force: true });
+    }
+  });
+
+  test("locate never rewrites .git/index, so a user's own commit cannot hit index.lock", async () => {
+    write("a.md", "one");
+    await commit("first");
+    // A newer mtime with the same content makes a locking `git status` refresh and rewrite the index.
+    utimesSync(join(root, "a.md"), new Date(Date.now() + 60_000), new Date(Date.now() + 60_000));
+    const before = statSync(join(root, ".git", "index")).mtimeMs;
+
+    expect(await source().locate("a.md", "L1")).toEqual({ verdict: "found" });
+    expect(statSync(join(root, ".git", "index")).mtimeMs).toBe(before);
+  });
+
+  test("a root that is not a repository is the source failing, not a delegated one", async () => {
+    const plain = mkdtempSync(join(tmpdir(), "accreta-not-git-"));
+    try {
+      writeFileSync(join(plain, "a.md"), "one\n");
+      const verdict = await new GitSource({
+        id: "x",
+        root: plain,
+        citationFormat: "{path}",
+      }).locate("a.md", "L1");
+      expect(verdict).toMatchObject({ verdict: "unknown" });
+      expect(verdict.verdict === "unknown" && verdict.detail).toStartWith(
+        "git refused the repository: ",
+      );
+    } finally {
+      rmSync(plain, { recursive: true, force: true });
+    }
   });
 
   test("a citation pins the revision it was verified against", async () => {

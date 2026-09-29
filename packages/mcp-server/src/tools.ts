@@ -322,6 +322,7 @@ export async function lintTool(ctx: ToolContext) {
     // looked at.
     citations_checked: citations.citationsChecked,
     citations_unchecked: citations.citationsUnchecked,
+    unchecked_reasons: citations.uncheckedReasons,
     findings,
     _provenance: provenance(LINT_FIELDS),
   };

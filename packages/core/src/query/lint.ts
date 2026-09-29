@@ -43,6 +43,8 @@ export interface LintReport {
    * pass did not cover.
    */
   citationsUnchecked: number;
+  /** Why they went unchecked, by the source's own detail: a delegated source, a dirty file, git failing. */
+  uncheckedReasons: { detail: string; citations: number }[];
 }
 
 interface BrokenRow {
@@ -165,7 +167,13 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
     }
   }
 
-  return { findings, pagesChecked: pages.length, citationsChecked: 0, citationsUnchecked: 0 };
+  return {
+    findings,
+    pagesChecked: pages.length,
+    citationsChecked: 0,
+    citationsUnchecked: 0,
+    uncheckedReasons: [],
+  };
 }
 
 interface CitationRow {
@@ -209,7 +217,7 @@ export async function lintCitations(
   sources: Map<string, SourceAdapter>,
 ): Promise<LintReport> {
   const findings: LintFinding[] = [];
-  let citationsUnchecked = 0;
+  const unchecked = new Map<string, number>();
 
   const pages = db
     .query(
@@ -231,6 +239,25 @@ export async function lintCitations(
     }
     return verdict;
   };
+
+  const footnotes = db
+    .query(
+      `SELECT page_path, footnote, line, text, source, revision, path, locator
+       FROM citations ORDER BY page_path, line`,
+    )
+    .all() as FootnoteRow[];
+
+  // Asked all at once, so an adapter can answer a pass in one batch rather than one per location.
+  for (const page of pages) {
+    const citation = parseCitation(page.canonical_source);
+    const adapter = citation && sources.get(citation.sourceId);
+    if (citation && adapter) void locate(adapter, citation.path, citation.locator);
+  }
+  for (const row of footnotes) {
+    const adapter = row.source === null ? undefined : sources.get(row.source);
+    if (adapter && row.path !== null) void locate(adapter, row.path, row.locator ?? undefined);
+  }
+
   let citationsChecked = 0;
   const checkedPages = new Set<string>();
 
@@ -254,7 +281,7 @@ export async function lintCitations(
 
     const verdict = await locate(adapter, citation.path, citation.locator);
     if (verdict.verdict === "unknown") {
-      citationsUnchecked++;
+      unchecked.set(verdict.detail, (unchecked.get(verdict.detail) ?? 0) + 1);
       continue;
     }
     citationsChecked++;
@@ -266,13 +293,6 @@ export async function lintCitations(
       });
     }
   }
-
-  const footnotes = db
-    .query(
-      `SELECT page_path, footnote, line, text, source, revision, path, locator
-       FROM citations ORDER BY page_path, line`,
-    )
-    .all() as FootnoteRow[];
 
   // One question per revision, for the same reason as per location.
   const revisions = new Map<string, Promise<boolean | null>>();
@@ -324,7 +344,7 @@ export async function lintCitations(
 
     const verdict = await locate(adapter, row.path, row.locator ?? undefined);
     if (verdict.verdict === "unknown") {
-      citationsUnchecked++;
+      unchecked.set(verdict.detail, (unchecked.get(verdict.detail) ?? 0) + 1);
       continue;
     }
     citationsChecked++;
@@ -347,5 +367,14 @@ export async function lintCitations(
     }
   }
 
-  return { findings, pagesChecked: checkedPages.size, citationsChecked, citationsUnchecked };
+  const uncheckedReasons = [...unchecked]
+    .map(([detail, citations]) => ({ detail, citations }))
+    .toSorted((a, b) => b.citations - a.citations || a.detail.localeCompare(b.detail));
+  return {
+    findings,
+    pagesChecked: checkedPages.size,
+    citationsChecked,
+    citationsUnchecked: uncheckedReasons.reduce((sum, r) => sum + r.citations, 0),
+    uncheckedReasons,
+  };
 }

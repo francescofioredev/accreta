@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { relative, resolve, sep } from "node:path";
 import {
   formatCitation,
   parseLineLocator,
@@ -31,6 +32,8 @@ export interface GitSourceOptions {
 async function git(root: string, args: string[]): Promise<string> {
   const proc = Bun.spawn(["git", ...args], {
     cwd: root,
+    // accreta only reads; without this `status` rewrites .git/index and a user's commit can hit index.lock.
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -198,6 +201,10 @@ export class GitSource implements SourceAdapter {
       };
     }
 
+    // Joined before the first await, so every locate issued together shares one `git status`.
+    const state = this.workingState(relative(resolve(this.root), full).split(sep).join("/"));
+    state.catch(() => {});
+
     let text: string;
     try {
       text = await readFile(full, "utf-8");
@@ -211,19 +218,23 @@ export class GitSource implements SourceAdapter {
 
     // `revision()` names a commit, so a place checked on a dirty tree would be vouched for by one
     // that never held it.
-    const status = await git(this.root, [
-      "--literal-pathspecs",
-      "status",
-      "--porcelain",
-      "--ignored",
-      "--untracked-files=all",
-      "--",
-      path,
-    ]);
-    if (status.trim()) {
+    let working: WorkingState;
+    try {
+      working = await state;
+    } catch (error) {
+      const reason = error instanceof GitCommandError ? error.stderr : String(error);
+      return { verdict: "unknown", detail: `git refused the repository: ${reason}` };
+    }
+    if (working === "changed") {
       return {
         verdict: "unknown",
         detail: `${path} has uncommitted changes; no commit holds what is on disk`,
+      };
+    }
+    if (working === "untracked") {
+      return {
+        verdict: "unknown",
+        detail: `${path} is not tracked here (untracked, ignored or in a submodule); no commit of this repository holds it`,
       };
     }
 
@@ -249,6 +260,67 @@ export class GitSource implements SourceAdapter {
     return { verdict: "found" };
   }
 
+  private batch: { paths: Set<string>; states: Promise<Map<string, WorkingState>> } | undefined;
+  private prefix: Promise<string> | undefined;
+
+  /** The batch closes when it runs, so each caller's status is taken after it asked. */
+  private workingState(path: string): Promise<WorkingState> {
+    // The root itself is no file, and an empty pathspec would fail the whole batch.
+    if (path === "") return Promise.resolve("committed");
+    let batch = this.batch;
+    if (!batch) {
+      const paths = new Set<string>();
+      const states = Promise.resolve().then(() => {
+        this.batch = undefined;
+        return this.statesOf([...paths]);
+      });
+      batch = this.batch = { paths, states };
+    }
+    batch.paths.add(path);
+    return batch.states.then((states) => states.get(path) ?? "committed");
+  }
+
+  private async statesOf(paths: string[]): Promise<Map<string, WorkingState>> {
+    this.prefix ??= git(this.root, ["rev-parse", "--show-prefix"]).then(
+      (out) => out.trim(),
+      (error) => {
+        this.prefix = undefined;
+        throw error;
+      },
+    );
+    const prefix = await this.prefix;
+
+    const tracked = new Set<string>();
+    const changed = new Set<string>();
+    for (let i = 0; i < paths.length; i += 256) {
+      const chunk = ["--", ...paths.slice(i, i + 256)];
+      const [files, status] = await Promise.all([
+        git(this.root, ["--literal-pathspecs", "ls-files", "-z", "--full-name", ...chunk]),
+        git(this.root, [
+          "--literal-pathspecs",
+          "status",
+          "--porcelain",
+          "-z",
+          "--no-renames",
+          "--untracked-files=no",
+          ...chunk,
+        ]),
+      ]);
+      for (const file of files.split("\0")) if (file) tracked.add(file);
+      // Case-blind, so a spelling git reports differently errs to `changed`, never to `committed`.
+      for (const record of status.split("\0"))
+        if (record) changed.add(record.slice(3).toLowerCase());
+    }
+
+    const states = new Map<string, WorkingState>();
+    for (const path of paths) {
+      const full = prefix + path;
+      if (!tracked.has(full)) states.set(path, "untracked");
+      else if (changed.has(full.toLowerCase())) states.set(path, "changed");
+    }
+    return states;
+  }
+
   citation(path: string, locator?: string): string {
     return formatCitation(this.citationFormat, {
       source: this.id,
@@ -271,6 +343,8 @@ export class GitSource implements SourceAdapter {
     this.pinnedRevision = revision;
   }
 }
+
+type WorkingState = "committed" | "changed" | "untracked";
 
 interface Hunk {
   oldStart: number;
