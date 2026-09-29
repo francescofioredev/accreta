@@ -126,7 +126,7 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
     case "drift":
       return drift(ctx, { strict });
     case "doctor":
-      return doctor(ctx);
+      return doctor(ctx, VERSION);
     case "source":
       if (positional[0] !== "add") {
         ctx.err("Usage: accreta source add <type> <id> [--set key=value]");

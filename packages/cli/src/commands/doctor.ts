@@ -4,12 +4,13 @@ import { checkConfig, compileCitationTemplate, DEFAULT_CONFIG } from "@accreta/c
 import { KNOWN_TYPES, kindFor, readDeclarations } from "@accreta/adapters";
 import { CONFIG_FILENAME, findWorkspace } from "../workspace.ts";
 import { reportPreflight, type CommandContext } from "./shared.ts";
+import { compareVersions, findInstalledSkills, SKILL_NAME } from "./skill-floor.ts";
 
 /**
  * Say what is wired up and what is not, read-only, and never guess at the difference. Whether
  * the agent can reach a delegated source is recorded in no file here, so it stays unverified.
  */
-export async function doctor(ctx: CommandContext): Promise<number> {
+export async function doctor(ctx: CommandContext, version: string): Promise<number> {
   const workspace = findWorkspace(ctx.cwd);
   let exitCode = 0;
   ctx.out(`accreta doctor — ${workspace.root}`);
@@ -73,7 +74,45 @@ export async function doctor(ctx: CommandContext): Promise<number> {
       : "  unknown: no .mcp.json here names accreta's server — the agent may be configured elsewhere",
   );
 
+  reportSkill(ctx, version);
+
   return exitCode;
+}
+
+/** Never a failure: the copy found may not be the one the agent loads, and none found proves nothing. */
+function reportSkill(ctx: CommandContext, version: string): void {
+  ctx.out("\nskill");
+  const pinned = `npx skills add "https://github.com/francescofioredev/accreta/tree/v${version}/skills/${SKILL_NAME}"`;
+  const search = findInstalledSkills(ctx.cwd);
+  for (const dir of search.unsearchable) {
+    ctx.out(`  unknown: could not look in ${dir.label} — ${dir.code}`);
+  }
+  if (search.installed.length === 0) {
+    const top = search.levels.at(-1);
+    const project =
+      top === undefined
+        ? ""
+        : `.agents/skills or .claude/skills ${top === "." ? "here" : `here and above, up to ${top}`}, nor in `;
+    ctx.out(
+      `  unknown: no ${SKILL_NAME} in ${project}${search.globals.join(" or ")} — the agent may load it from elsewhere`,
+    );
+  }
+  for (const skill of search.installed) {
+    const order = skill.floor.ok ? compareVersions(skill.floor.requires, version) : null;
+    if (!skill.floor.ok) {
+      ctx.out(`  unknown: ${skill.where} found, but ${skill.floor.reason}`);
+      ctx.out(`    → reinstall it pinned to this release: ${pinned}`);
+    } else if (order === null) {
+      ctx.out(
+        `  unknown: ${skill.where} requires ${skill.floor.requires}, and ${version} is not a version to compare`,
+      );
+    } else if (order > 0) {
+      ctx.out(`  stale: ${skill.where} requires ${skill.floor.requires}, this is ${version}`);
+      ctx.out(`    → upgrade accreta, or pin the skill to this release: ${pinned}`);
+    } else {
+      ctx.out(`  ok: ${skill.where} found, requires ${skill.floor.requires}`);
+    }
+  }
 }
 
 /** Only this workspace's file. An agent configured elsewhere is invisible, and saying so is the point. */
