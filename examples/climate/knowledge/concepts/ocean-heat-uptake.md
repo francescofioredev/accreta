@@ -3,7 +3,7 @@ type: concept
 source: ipcc-ar6-wg1
 aliases: ["ocean heat content", "thermal inertia"]
 canonical_source: "ipcc-ar6-wg1:examples/climate/sources/ipcc-ar6-wg1/chapter-09.md#L7"
-last_verified_revision: a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d
+last_verified_revision: 553a13edf7d1b9753b60eecf69f7e0b3bc45d0cb
 discussed_in: [[synthesis/energy-balance]]
 ---
 
@@ -16,5 +16,5 @@ This is why surface warming lags emissions. The atmosphere adjusts within years 
 deep ocean equilibrates over centuries, so the surface temperature at any moment reflects
 less than the full response to forcing already applied.[^lag]
 
-[^share]: ipcc-ar6-wg1 @ a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d · examples/climate/sources/ipcc-ar6-wg1/chapter-09.md#L7-L10
-[^lag]: ipcc-ar6-wg1 @ a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d · examples/climate/sources/ipcc-ar6-wg1/chapter-09.md#L12-L14
+[^share]: ipcc-ar6-wg1 @ 553a13edf7d1b9753b60eecf69f7e0b3bc45d0cb · examples/climate/sources/ipcc-ar6-wg1/chapter-09.md#L7-L8
+[^lag]: ipcc-ar6-wg1 @ 553a13edf7d1b9753b60eecf69f7e0b3bc45d0cb · examples/climate/sources/ipcc-ar6-wg1/chapter-09.md#L11-L12

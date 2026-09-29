@@ -2,7 +2,7 @@
 type: contradiction
 source: ipcc-ar6-wg1
 canonical_source: "ipcc-ar6-wg1:examples/climate/sources/ipcc-ar6-wg1/chapter-05.md#L7"
-last_verified_revision: a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d
+last_verified_revision: 553a13edf7d1b9753b60eecf69f7e0b3bc45d0cb
 related: [[findings/permafrost-feedback-gradual]], [[findings/permafrost-feedback-abrupt]]
 ---
 
@@ -28,6 +28,6 @@ evidence, and it is the thing a reader needs to know.
 This page exists because [[findings/carbon-budget]] depends on the permafrost response, so
 anyone using that budget needs to know the input is contested.
 
-[^a]: ipcc-ar6-wg1 @ a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d · examples/climate/sources/ipcc-ar6-wg1/chapter-05.md#L11-L12
-[^b]: noaa-gml @ a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d · examples/climate/sources/noaa-gml/permafrost-note.md#L5-L8
-[^why]: noaa-gml @ a80a1b6d7c39bab27fb2627c5a0bd0578d0d4b1d · examples/climate/sources/noaa-gml/permafrost-note.md#L10-L12
+[^a]: ipcc-ar6-wg1 @ 553a13edf7d1b9753b60eecf69f7e0b3bc45d0cb · examples/climate/sources/ipcc-ar6-wg1/chapter-05.md#L11-L12
+[^b]: noaa-gml @ 553a13edf7d1b9753b60eecf69f7e0b3bc45d0cb · examples/climate/sources/noaa-gml/permafrost-note.md#L5-L7
+[^why]: noaa-gml @ 553a13edf7d1b9753b60eecf69f7e0b3bc45d0cb · examples/climate/sources/noaa-gml/permafrost-note.md#L9-L10
