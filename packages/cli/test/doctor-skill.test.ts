@@ -1,8 +1,18 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "../src/main.ts";
+
+const MAIN = join(import.meta.dir, "..", "src", "main.ts");
 import { compareVersions } from "../src/commands/skill-floor.ts";
 
 let base = "";
@@ -182,9 +192,21 @@ describe("accreta doctor: a skill directory in a state nobody planned", () => {
     mkdirSync(dir, { recursive: true });
     expect(Bun.spawnSync(["mkfifo", join(dir, "SKILL.md")]).exitCode).toBe(0);
 
-    expect(await doctor()).toBe(0);
-    expect(skillSection()).toContain("SKILL.md is not a file");
-  });
+    // A blocking open cannot be interrupted in-process, so the regression must fail by timeout here.
+    const child = Bun.spawn([process.execPath, MAIN, "doctor"], {
+      cwd: repo,
+      env: { ...process.env, HOME: home },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const timer = setTimeout(() => child.kill(), 5000);
+    const exitCode = await child.exited;
+    clearTimeout(timer);
+
+    expect(child.signalCode).toBeNull();
+    expect(exitCode).toBe(0);
+    expect(await new Response(child.stdout).text()).toContain("SKILL.md is not a file");
+  }, 15_000);
 
   test("a symlink left behind by a deleted canonical copy is reported as broken, not absent", async () => {
     mkdirSync(join(repo, ".claude", "skills"), { recursive: true });
@@ -212,6 +234,54 @@ describe("accreta doctor: a skill directory in a state nobody planned", () => {
     expect(skillSection()).toContain(
       "unknown: .agents/skills/accreta-setup found, but it could not be read — EACCES",
     );
+  });
+});
+
+describe("accreta doctor: a directory it cannot look into", () => {
+  test("a locked parent directory is not a found skill", async () => {
+    mkdirSync(join(home, ".claude", "skills"), { recursive: true });
+    chmodSync(join(home, ".claude"), 0o000);
+    try {
+      expect(await doctor()).toBe(0);
+    } finally {
+      chmodSync(join(home, ".claude"), 0o755);
+    }
+    expect(skillSection()).not.toContain("found");
+    expect(skillSection()).toContain("unknown: could not look in ~/.claude/skills — EACCES");
+    expect(skillSection()).toContain("unknown: no accreta-setup in");
+  });
+});
+
+describe("accreta doctor: a knowledge base under the home directory", () => {
+  test("the upward search stops below home, so a home copy keeps its ~ label", async () => {
+    const kb = join(home, "kb");
+    await init(kb);
+    installSkill(join(home, ".agents", "skills"), requiring(version));
+
+    await doctor(kb);
+    expect(skillSection()).toContain("ok: ~/.agents/skills/accreta-setup found");
+    expect(skillSection()).not.toContain("../.agents");
+  });
+
+  test("with nothing installed, only the workspace itself is searched below home", async () => {
+    const kb = join(home, "kb");
+    await init(kb);
+
+    await doctor(kb);
+    expect(skillSection()).toContain(".claude/skills here, nor in ~/.agents/skills");
+  });
+
+  test("a HOME reached through a symlink stops the search all the same", async () => {
+    const link = join(base, "home-link");
+    symlinkSync(home, link);
+    process.env.HOME = link;
+    const kb = join(realpathSync(home), "kb");
+    await init(kb);
+    installSkill(join(home, ".agents", "skills"), requiring(version));
+
+    await doctor(kb);
+    expect(skillSection()).toContain("ok: ~/.agents/skills/accreta-setup found");
+    expect(skillSection()).not.toContain("../.agents");
   });
 });
 

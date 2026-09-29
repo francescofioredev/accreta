@@ -1,4 +1,12 @@
-import { closeSync, existsSync, lstatSync, openSync, readSync, statSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  lstatSync,
+  openSync,
+  readSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { parsePage } from "@accreta/core";
@@ -19,6 +27,8 @@ export interface SkillSearch {
   /** The project directories searched, relative to the current one, nearest first. */
   levels: string[];
   globals: string[];
+  /** Directories whose contents could not be listed, so absence there is not known. */
+  unsearchable: { label: string; code: string }[];
 }
 
 interface SkillDirectory {
@@ -31,9 +41,9 @@ interface SkillDirectory {
  * runs; Claude Code and Codex load both from every directory up to the repository root.
  */
 export function findInstalledSkills(from: string): SkillSearch {
-  const cwd = resolve(from);
+  const cwd = physical(from);
   // Bun caches homedir() at startup; Node, and so the skills CLI, re-reads HOME.
-  const home = resolve(process.env.HOME || homedir());
+  const home = physical(process.env.HOME || homedir());
   const levels = projectLevels(cwd, home);
   const claudeConfig = process.env.CLAUDE_CONFIG_DIR?.trim();
   const globals: SkillDirectory[] = [
@@ -51,8 +61,13 @@ export function findInstalledSkills(from: string): SkillSearch {
 
   const seen = new Set<string>();
   const installed: InstalledSkill[] = [];
+  const unsearchable: SkillSearch["unsearchable"] = [];
   for (const dir of [...directories, ...globals]) {
     const probe = probeSkill(dir);
+    if (probe && "code" in probe) {
+      unsearchable.push({ label: dir.label, code: probe.code });
+      continue;
+    }
     if (!probe || seen.has(probe.key)) continue;
     seen.add(probe.key);
     installed.push(probe.skill);
@@ -61,7 +76,17 @@ export function findInstalledSkills(from: string): SkillSearch {
     installed,
     levels: levels.map((dir) => (dirname(dir) === dir ? dir : relative(cwd, dir) || ".")),
     globals: globals.map((dir) => dir.label),
+    unsearchable,
   };
+}
+
+/** Symlinks resolved, so a HOME reached through one still matches the directories walked. */
+function physical(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return resolve(path);
+  }
 }
 
 /** From here up to the repository root. Home is left to the global labels, which name it plainly. */
@@ -74,8 +99,10 @@ function projectLevels(cwd: string, home: string): string[] {
   return levels;
 }
 
-/** Null only when nothing is there. Anything that is there but cannot be read is reported as such. */
-function probeSkill(dir: SkillDirectory): { key: string; skill: InstalledSkill } | null {
+/** Null only when nothing is there; `code` when a parent kept us from knowing. */
+function probeSkill(
+  dir: SkillDirectory,
+): { key: string; skill: InstalledSkill } | { code: string } | null {
   const entry = join(dir.path, SKILL_NAME);
   const where = `${dir.label}/${SKILL_NAME}`;
   const broken = (key: string, reason: string) => ({
@@ -89,7 +116,8 @@ function probeSkill(dir: SkillDirectory): { key: string; skill: InstalledSkill }
   } catch (error) {
     const code = errorCode(error);
     if (code === "ENOENT" || code === "ENOTDIR") return null;
-    return broken(entry, `it could not be read — ${code}`);
+    // lstat fails otherwise only on the path leading here, which says nothing about the skill.
+    return { code };
   }
   const linkKey = `${link.dev}:${link.ino}`;
 

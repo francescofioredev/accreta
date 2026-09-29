@@ -84,6 +84,9 @@ function reportSkill(ctx: CommandContext, version: string): void {
   ctx.out("\nskill");
   const pinned = `npx skills add "https://github.com/francescofioredev/accreta/tree/v${version}/skills/${SKILL_NAME}"`;
   const search = findInstalledSkills(ctx.cwd);
+  for (const dir of search.unsearchable) {
+    ctx.out(`  unknown: could not look in ${dir.label} — ${dir.code}`);
+  }
   if (search.installed.length === 0) {
     const top = search.levels.at(-1);
     const project =
