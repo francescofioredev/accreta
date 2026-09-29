@@ -69,6 +69,7 @@
       "dependencies": {
         "@accreta/adapters": "0.1.4",
         "@accreta/core": "0.1.4",
+        "@accreta/mcp-server": "0.1.4",
       },
     },
     "packages/core": {

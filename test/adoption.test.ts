@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test";
 import {
+  analyse,
+  graphOn,
   internalEdges,
   publishDayShare,
+  renderCounts,
   reaches,
   roots,
   shortfalls,
@@ -9,6 +12,7 @@ import {
   unfetchedDays,
   type Day,
   type Edge,
+  type Packument,
 } from "../scripts/adoption.ts";
 
 /**
@@ -72,6 +76,7 @@ const CURRENT_EDGES: Edge[] = [
   { dependent: "@accreta/adapters", dependency: "@accreta/adapter-git" },
   { dependent: "accreta", dependency: "@accreta/core" },
   { dependent: "accreta", dependency: "@accreta/adapters" },
+  { dependent: "accreta", dependency: "@accreta/mcp-server" },
   { dependent: "@accreta/mcp-server", dependency: "@accreta/core" },
   { dependent: "@accreta/mcp-server", dependency: "@accreta/adapters" },
 ];
@@ -157,4 +162,171 @@ test("the dependency graph is read from the manifests, not remembered here", () 
       (a, b) => a.dependent.localeCompare(b.dependent) || a.dependency.localeCompare(b.dependency),
     ),
   );
+});
+
+/** Registry records where each listed package ships `version` declaring the edges given for it. */
+function registry(
+  releases: { version: string; at: string; names: string[]; edges: Edge[] }[],
+): Map<string, Packument> {
+  const packuments = new Map<string, Packument>();
+  for (const { version, at, names, edges } of releases) {
+    for (const name of names) {
+      const packument = packuments.get(name) ?? { time: {}, versions: {} };
+      packument.time[version] = at;
+      packument.versions[version] = {
+        dependencies: {
+          // Not a publishable package, so it must never become an edge.
+          yaml: "^2.8.0",
+          ...Object.fromEntries(
+            edges.filter((e) => e.dependent === name).map((e) => [e.dependency, version]),
+          ),
+        },
+      };
+      packuments.set(name, packument);
+    }
+  }
+  return packuments;
+}
+
+const AUGUST_NAMES = Object.keys(SERIES);
+const releases = registry([
+  { version: "0.1.1", at: "2026-08-08T10:00:00Z", names: AUGUST_NAMES, edges: AUGUST_EDGES },
+  { version: "0.1.2", at: "2026-08-09T10:00:00Z", names: AUGUST_NAMES, edges: AUGUST_EDGES },
+  {
+    version: "0.2.0",
+    at: "2026-09-02T10:00:00Z",
+    names: [...AUGUST_NAMES, "@accreta/adapters"],
+    edges: CURRENT_EDGES,
+  },
+]);
+const withSeptember = new Map<string, Day[]>([
+  ...[...august].map(([name, series]): [string, Day[]] => [
+    name,
+    [...series, { day: "2026-09-02", downloads: 10 }],
+  ]),
+  ["@accreta/adapters", [{ day: "2026-09-02", downloads: 10 }]],
+]);
+
+test("an edge counts only from the release that added it, so August keeps its shortfall", () => {
+  // Today's graph makes the server a dependency of the CLI; read back over August it hides core's gap.
+  const flat = new Map(
+    [...withSeptember].map(([name, s]) => [name, s.reduce((sum, d) => sum + d.downloads, 0)]),
+  );
+  expect(shortfalls(flat, CURRENT_EDGES).find((s) => s.dependency === "@accreta/core")!.slack).toBe(
+    97,
+  );
+
+  const core = analyse(withSeptember, releases).shortfalls.find(
+    (s) => s.dependency === "@accreta/core",
+  )!;
+  expect(core.slack).toBe(-225);
+  expect(core.requiredBy.sort()).toEqual(["@accreta/mcp-server", "accreta"]);
+});
+
+test("a dependency added later does not flag August days as unfetched", () => {
+  const anachronistic = unfetchedDays(withSeptember, CURRENT_EDGES).filter(
+    (u) => u.dependency === "@accreta/adapters",
+  );
+  expect(anachronistic.length).toBeGreaterThan(0);
+
+  const unfetched = analyse(withSeptember, releases).unfetched;
+  expect(unfetched.filter((u) => u.dependency === "@accreta/adapters")).toEqual([]);
+  expect(unfetched.filter((u) => u.day <= COUNTED_TO)).toEqual(
+    unfetchedDays(august, AUGUST_EDGES).filter((u) => u.day <= COUNTED_TO),
+  );
+});
+
+test("a release that stopped after core leaves the day on the previous graph", () => {
+  const partial = registry([
+    {
+      version: "0.2.0",
+      at: "2026-09-01T10:00:00Z",
+      names: ["accreta", "@accreta/core"],
+      edges: [{ dependent: "accreta", dependency: "@accreta/core" }],
+    },
+    { version: "0.2.1", at: "2026-09-02T10:00:00Z", names: ["@accreta/core"], edges: [] },
+  ]);
+  expect(graphOn("2026-09-02", partial)).toEqual([
+    { dependent: "accreta", dependency: "@accreta/core" },
+  ]);
+
+  const series = new Map<string, Day[]>([
+    [
+      "accreta",
+      [
+        { day: "2026-09-01", downloads: 10 },
+        { day: "2026-09-02", downloads: 10 },
+      ],
+    ],
+    [
+      "@accreta/core",
+      [
+        { day: "2026-09-01", downloads: 10 },
+        { day: "2026-09-02", downloads: 0 },
+      ],
+    ],
+  ]);
+  const core = analyse(series, partial).shortfalls.find((s) => s.dependency === "@accreta/core")!;
+  expect(core.required).toBe(20);
+  expect(core.slack).toBe(-10);
+});
+
+test("downloads on a day with no release are refused rather than dropped", () => {
+  const series = new Map([["accreta", [{ day: "2026-08-01", downloads: 3 }]]]);
+  expect(() => analyse(series, releases)).toThrow("before any release");
+});
+
+const CLI_ON_CORE: Edge = { dependent: "accreta", dependency: "@accreta/core" };
+const CLI_ON_SERVER: Edge = { dependent: "accreta", dependency: "@accreta/mcp-server" };
+const SERVER_ON_CORE: Edge = { dependent: "@accreta/mcp-server", dependency: "@accreta/core" };
+const TRIO = ["accreta", "@accreta/core", "@accreta/mcp-server"];
+
+test("the graph follows the highest stable version, not the last one published", () => {
+  // npm keeps `latest` on 0.10.0 when a 0.9.1 backport or a tagged prerelease lands after it.
+  const out = registry([
+    { version: "0.9.0", at: "2026-09-01T10:00:00Z", names: TRIO, edges: [CLI_ON_CORE] },
+    {
+      version: "0.10.0",
+      at: "2026-09-02T10:00:00Z",
+      names: TRIO,
+      edges: [CLI_ON_CORE, CLI_ON_SERVER],
+    },
+    { version: "0.9.1", at: "2026-09-03T10:00:00Z", names: TRIO, edges: [CLI_ON_CORE] },
+    { version: "0.11.0-beta.1", at: "2026-09-04T10:00:00Z", names: TRIO, edges: [CLI_ON_CORE] },
+  ]);
+  for (const day of ["2026-09-03", "2026-09-04"]) {
+    expect(graphOn(day, out)).toEqual([CLI_ON_CORE, CLI_ON_SERVER]);
+  }
+});
+
+test("a publish day never invents a shortfall from the release it adds", () => {
+  // Downloads before the 0.2.0 publish could not have needed the server it adds.
+  const releases = registry([
+    { version: "0.1.0", at: "2026-09-01T10:00:00Z", names: TRIO, edges: [CLI_ON_CORE] },
+    {
+      version: "0.2.0",
+      at: "2026-09-02T15:00:00Z",
+      names: TRIO,
+      edges: [CLI_ON_CORE, CLI_ON_SERVER, SERVER_ON_CORE],
+    },
+  ]);
+  const on = (counts: number[]) =>
+    counts.map((downloads, i) => ({ day: `2026-09-0${i + 2}`, downloads }));
+  const series = new Map<string, Day[]>([
+    ["accreta", on([10, 10])],
+    ["@accreta/core", on([10, 10])],
+    ["@accreta/mcp-server", on([0, 10])],
+  ]);
+
+  const { shortfalls: found, unfetched } = analyse(series, releases);
+  const server = found.find((s) => s.dependency === "@accreta/mcp-server")!;
+  expect(server.required).toBe(10);
+  expect(server.slack).toBe(0);
+  expect(unfetched).toEqual([]);
+});
+
+test("the report prints the per-release graph, not today's", () => {
+  const lines = renderCounts(withSeptember, releases, COUNTED_TO);
+  expect(lines).toContainEqual(expect.stringMatching(/^ {2}@core .*recorded +465 +-225$/));
+  expect(lines).toContain("\nDAYS A DEPENDENCY WENT UNFETCHED  (6; a warm cache explains one)");
 });
