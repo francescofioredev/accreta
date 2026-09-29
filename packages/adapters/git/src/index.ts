@@ -209,6 +209,24 @@ export class GitSource implements SourceAdapter {
       };
     }
 
+    // `revision()` names a commit, so a place checked on a dirty tree would be vouched for by one
+    // that never held it.
+    const status = await git(this.root, [
+      "--literal-pathspecs",
+      "status",
+      "--porcelain",
+      "--ignored",
+      "--untracked-files=all",
+      "--",
+      path,
+    ]);
+    if (status.trim()) {
+      return {
+        verdict: "unknown",
+        detail: `${path} has uncommitted changes; no commit holds what is on disk`,
+      };
+    }
+
     if (locator === undefined) return { verdict: "found" };
 
     const range = parseLineLocator(locator);

@@ -131,3 +131,10 @@ format reads only the prose that knowledge base chose to render. A format that c
 back unambiguously, because two placeholders touch or `{source}` or `{path}` is missing, is
 reported once against the config, and its footnotes go unchecked rather than guessed at. The
 retired `L{start}-L{end}` reads as `{locator}`, which renders the same text.
+
+## Amendment, 2026-09-29: `formatCitation` has a production caller
+
+The first consequence above says `formatCitation` has no production callers. It now has one:
+`cite()` (#124) renders the footnote it hands the agent, and `formatCanonicalSource` renders the
+matching `canonical_source`. `cite()` never pins the adapter, and it refuses a citation that
+`parseCitation` or `compileCitationTemplate` cannot read back.

@@ -143,6 +143,12 @@ still passed its adapter tests, because the shared suite checked only the path a
 tail. Both are the same mistake — a citation that satisfies the shape without keeping the
 promise.
 
+The citation the agent pastes does not come from `citation()`. The core's `cite()` builds it
+from your `revision()` and `locate()` and renders it with `formatCitation()`, without pinning
+you: one adapter serves every caller, so a pin set for one lookup would leak into the next. So
+`locate()` must not say `found` for content your `revision()` does not hold. `git` answers
+`unknown` for a file with uncommitted changes, and `cite()` then names no revision.
+
 ## Registration
 
 Adapters register by type name, in `@accreta/adapters` rather than in the core. A kind is four

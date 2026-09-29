@@ -73,7 +73,9 @@ export interface SourceAdapter {
    *
    * This is the interface's one mutator, and it is here rather than as a
    * parameter on `citation` because pinning happens once per ingest while
-   * citations are rendered many times inside it.
+   * citations are rendered many times inside it. The citation handed to the
+   * agent comes from `cite()`, which never pins: adapters are shared across
+   * callers, so a pin set for one lookup would leak into the next.
    *
    * An adapter that has not been pinned must render `UNPINNED_REVISION` rather
    * than inventing a plausible-looking revision: a citation that reads as true
@@ -251,6 +253,12 @@ export function parseCitation(value: string): ParsedCitation | null {
   // A locator this parser cannot judge is still a well-formed pointer. Whether
   // it addresses anything is the adapter's answer, not the grammar's.
   return locator === undefined ? { sourceId, path } : { sourceId, path, locator };
+}
+
+/** Render a `canonical_source` value; the inverse of `parseCitation` for parts it can read. */
+export function formatCanonicalSource(parts: ParsedCitation): string {
+  const { sourceId, path, locator } = parts;
+  return locator ? `${sourceId}:${path}#${locator}` : `${sourceId}:${path}`;
 }
 
 /**

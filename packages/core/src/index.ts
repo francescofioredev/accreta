@@ -26,6 +26,7 @@ export {
   UNPINNED_REVISION,
   DelegatedSourceError,
   UnknownRevisionError,
+  formatCanonicalSource,
   formatCitation,
   parseCitation,
   parseLineLocator,

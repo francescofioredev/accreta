@@ -123,6 +123,27 @@ describe("GitSource", () => {
     });
   });
 
+  test("locate cannot vouch for a file with uncommitted lines", async () => {
+    write("a.md", "one\ntwo\nthree");
+    await commit("first");
+    write("a.md", "one\ntwo\nthree\nfour\nfive\nsix");
+
+    // HEAD has no line 5, so `found` here would pin a revision that never held it.
+    expect(await source().locate("a.md", "L5-L6")).toEqual({
+      verdict: "unknown",
+      detail: "a.md has uncommitted changes; no commit holds what is on disk",
+    });
+  });
+
+  test("locate cannot vouch for an untracked file either", async () => {
+    write("a.md", "one");
+    await commit("first");
+    write("new.md", "fresh");
+
+    expect(await source().locate("new.md", "L1")).toMatchObject({ verdict: "unknown" });
+    expect(await source().locate("a.md", "L1")).toEqual({ verdict: "found" });
+  });
+
   test("a citation pins the revision it was verified against", async () => {
     write("a.md", "one");
     await commit("first");
