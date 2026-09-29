@@ -36,7 +36,7 @@ jobs:
 
 `fetch-depth: 0` matters. A citation names the commit its lines belong to, and a shallow clone
 cannot place it: every page would come back as "a revision this source cannot place". The
-comparison with the base branch below needs the history too.
+action refuses a shallow checkout with an error that says so.
 
 The only token is the workflow's own `GITHUB_TOKEN`, with `pull-requests: write` to comment and
 `contents: read` to check out. Nothing else is needed.
@@ -46,8 +46,8 @@ The only token is the workflow's own `GITHUB_TOKEN`, with `pull-requests: write`
 | Input | Default | |
 |---|---|---|
 | `working-directory` | `.` | The knowledge base to check. Each one gets its own comment. |
-| `comment-when-clean` | `false` | Also post when no page is newly in doubt. |
-| `fail-on-drift` | `false` | Fail the job when a page is newly in doubt. |
+| `comment-when-clean` | `false` | Also post when nothing is new. |
+| `fail-on-drift` | `false` | Fail the job when a page is newly in doubt or newly unplaceable. |
 | `github-token` | the workflow's | Token that posts the comment. |
 | `comment-author` | `github-actions[bot]` | Login of that token, used to find the comment again. Change it with `github-token`. |
 
@@ -56,18 +56,26 @@ The only token is the workflow's own `GITHUB_TOKEN`, with `pull-requests: write`
 | `pages-newly-in-doubt` | Pages with a cited line in doubt that the base branch did not have in doubt. |
 | `pages-in-doubt` | All pages whose cited lines changed, including those. |
 | `pages-unplaceable` | Pages verified at a revision the source cannot place. |
+| `pages-newly-unplaceable` | Those the base branch did not have at the same revision. |
+
+With a token other than the workflow's, set `comment-author` to the login it posts as. The action
+warns when the two differ, because the comment would not be found again on the next push.
 
 ## What the comment says
 
-A `pull_request` checkout is a merge commit. The action also runs drift on its first parent, the
-base branch, and compares the two by page, footnote, path and line range.
+The action also runs drift on the base branch and compares the two reports by page, footnote,
+path, line range and the revision the citation names. On GitHub's default checkout, the test
+merge, the base is its first parent. On a checkout of the pull request's head (`ref:
+head.sha`), it is the merge base with the base branch, because the head's own first parent is its
+previous commit when the branch has merged main.
 
 - **Newly in doubt**: citations whose lines changed at the merge commit but not on the base
   branch. Each row names the page, the cited path and lines, the footnote, and the commit those
   line numbers belong to. The heading names the commit the source is at; re-pin after merge,
   because a merge or squash commit gets a new SHA.
 - **Already in doubt on the base branch**, folded: citations the base branch already had in
-  doubt. They stay listed, because this change may have touched the same lines again.
+  doubt at the same revision. They stay listed, because this change may have touched the same
+  lines again. A citation re-pinned since then names a new revision, so it counts as new.
 - **Re-pin only**, folded: cited lines that moved but did not change, with the new range.
 - **Revisions nobody can place**, folded: the pages verified at them, by name.
 - **Other pages** on the old revision are counted, not named. Their cited lines are untouched.
@@ -84,9 +92,10 @@ Run the same comparison locally with `accreta drift --format github --base base.
 
 - One comment per knowledge base, found again by a hidden marker and its author's login, and
   edited in place on every push. It never posts a second one.
-- A new comment appears only when a page is newly in doubt, unless `comment-when-clean` is set.
-  An existing comment is always updated, so it turns clean when the pages are re-verified.
-- `fail-on-drift` also keys on pages newly in doubt, not on drift's exit code, so drift the base
+- A new comment appears only when a page is newly in doubt or newly at a revision nobody can
+  place, unless `comment-when-clean` is set. An existing comment is always updated, so it turns
+  clean when the pages are re-verified.
+- `fail-on-drift` keys on the same two counts, not on drift's exit code, so drift the base
   branch already had does not fail every pull request.
 
 ## Pull requests from forks
@@ -100,9 +109,10 @@ Do not switch to `pull_request_target` to get a write token. It would run the fo
 
 ## Limits
 
-- Without a merge commit (a `push` run, or a shallow checkout) there is no base to compare with,
-  and every page in doubt counts as new.
-- A citation the base branch already had in doubt goes in the folded section even when this
-  change touched its lines again. Two drift reports cannot tell those apart.
+- Outside a pull request, or on a checkout that is neither its head nor GitHub's test merge,
+  there is no base to compare with, and every page counts as new.
+- A citation the base branch already had in doubt, still pinned to the same revision, goes in
+  the folded section even when this change touched its lines again. Two drift reports cannot
+  tell that case apart; they can when the citation was re-pinned in between.
 - A source that cannot diff contents (the `fs` adapter) can only say which files changed. Its
   pages are listed with "file changed" rather than a line range.

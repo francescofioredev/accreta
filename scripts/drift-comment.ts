@@ -11,7 +11,7 @@ export interface IssueComment {
 
 export interface CommentClient {
   list(): Promise<IssueComment[]>;
-  create(body: string): Promise<void>;
+  create(body: string): Promise<IssueComment>;
   update(id: number, body: string): Promise<void>;
 }
 
@@ -45,19 +45,28 @@ export async function upsertComment(
   client: CommentClient,
   marker: string,
   report: string,
-  options: { createIfMissing: boolean; author: string },
+  options: { createIfMissing: boolean; author: string; warn?: (message: string) => void },
 ): Promise<Outcome> {
+  const author = options.author.toLowerCase();
   const mine = (await client.list()).find(
-    (comment) => comment.user?.login === options.author && (comment.body ?? "").startsWith(marker),
+    (comment) =>
+      comment.user?.login?.toLowerCase() === author && (comment.body ?? "").startsWith(marker),
   );
   if (!mine && !options.createIfMissing) return "skipped";
 
   const write = async (text: string): Promise<Outcome> => {
     const body = `${marker}\n${text.trim()}\n`;
     if (mine?.body === body) return "unchanged";
-    if (mine) await client.update(mine.id, body);
-    else await client.create(body);
-    return mine ? "updated" : "created";
+    if (mine) {
+      await client.update(mine.id, body);
+      return "updated";
+    }
+    const posted = (await client.create(body)).user?.login;
+    // Otherwise the next push would not find this comment and post another.
+    if (posted && posted.toLowerCase() !== author) {
+      options.warn?.(`set comment-author to ${posted}: this token posts as ${posted}.`);
+    }
+    return "created";
   };
   try {
     return await write(report);
@@ -121,7 +130,8 @@ export function githubClient(options: {
       }
     },
     async create(body) {
-      await request(`${base}/${options.pr}/comments`, "POST", body);
+      const response = await request(`${base}/${options.pr}/comments`, "POST", body);
+      return (await response.json()) as IssueComment;
     },
     async update(id, body) {
       await request(`${base}/comments/${id}`, "PATCH", body);
@@ -178,6 +188,7 @@ async function main(): Promise<number> {
     const outcome = await upsertComment(client, markerFor(env("DRIFT_KEY")), report, {
       createIfMissing: process.env.DRIFT_CREATE === "true",
       author: process.env.DRIFT_AUTHOR || DEFAULT_AUTHOR,
+      warn: (message) => console.log(`::warning::${message}`),
     });
     console.log(`Drift comment: ${outcome}.`);
   } catch (error) {

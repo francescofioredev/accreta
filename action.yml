@@ -16,10 +16,10 @@ inputs:
     description: Login that posts the comment, used to find it again. Change it with github-token.
     default: github-actions[bot]
   comment-when-clean:
-    description: Post a comment even when no page is newly in doubt. An existing comment is always updated.
+    description: Post a comment even when nothing is new. An existing comment is always updated.
     default: "false"
   fail-on-drift:
-    description: Fail the step when the pull request puts a page newly in doubt.
+    description: Fail the step when a page is newly in doubt, or newly at a revision nobody can place.
     default: "false"
 
 outputs:
@@ -32,6 +32,9 @@ outputs:
   pages-unplaceable:
     description: Pages verified at a revision the source cannot place.
     value: ${{ steps.drift.outputs.pages-unplaceable }}
+  pages-newly-unplaceable:
+    description: Unplaceable pages the base branch did not have at the same revision.
+    value: ${{ steps.drift.outputs.pages-newly-unplaceable }}
 
 runs:
   using: composite
@@ -53,31 +56,38 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       env:
         ACCRETA_INDEX_PATH: ${{ runner.temp }}/accreta-drift.sqlite
-        KB: ${{ inputs.working-directory }}
+        PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        PR_BASE: ${{ github.event.pull_request.base.sha }}
       run: |
         cli="$GITHUB_ACTION_PATH/packages/cli/src/main.ts"
         bun "$cli" reindex
 
-        # A pull_request checkout is a merge commit whose first parent is the base branch. Drift
-        # there is what was already in doubt before this change.
+        # Drift on the base branch is what was already in doubt before this change.
         compare=()
-        if git rev-parse -q --verify 'HEAD^2' >/dev/null; then
+        rev="$RUNNER_TEMP/accreta-base-revision"
+        rm -f "$rev"
+        bun "$GITHUB_ACTION_PATH/scripts/drift-base.ts" "$rev"
+        if [ -s "$rev" ]; then
           base="$RUNNER_TEMP/accreta-base"
-          git worktree add --quiet --detach "$base" 'HEAD^1'
-          trap 'git worktree remove --force "$base"' EXIT
+          # A registration left by an earlier run on this runner would make `add` fail.
+          git worktree prune
+          rm -rf "$base"
+          git worktree add --quiet --force --detach "$base" "$(cat "$rev")"
+          trap 'git worktree remove --force "$base" || true' EXIT
+          kb="$base/$(git rev-parse --show-prefix)"
           report="$RUNNER_TEMP/accreta-base.json"
-          if [ -f "$base/$KB/accreta.config.yaml" ] && (
-            cd "$base/$KB" &&
+          if [ ! -f "$kb/accreta.config.yaml" ]; then
+            echo "::notice::The base branch has no knowledge base here: every page counts as new."
+          elif (
+            cd "$kb" &&
               export ACCRETA_INDEX_PATH="$RUNNER_TEMP/accreta-base.sqlite" &&
               bun "$cli" reindex >/dev/null &&
               { bun "$cli" drift --json >"$report" || [ -s "$report" ]; }
           ); then
             compare=(--base "$report")
           else
-            echo "::notice::No knowledge base to compare with on the base branch: every page in doubt counts as new."
+            echo "::warning::accreta failed on the base branch, so nothing is compared: every page counts as new."
           fi
-        else
-          echo "::notice::HEAD is not a merge commit, so there is no base branch to compare with."
         fi
 
         # Exit 1 means drift found something; any other failure leaves the report empty.
@@ -92,6 +102,8 @@ runs:
           console.log(`pages-in-doubt=${r.pages_in_doubt}`);
           console.log(`pages-newly-in-doubt=${r.pages_newly_in_doubt}`);
           console.log(`pages-unplaceable=${r.pages_unplaceable}`);
+          console.log(`pages-newly-unplaceable=${r.pages_newly_unplaceable}`);
+          console.log(`attention=${r.pages_newly_in_doubt + r.pages_newly_unplaceable}`);
         ' "$RUNNER_TEMP/accreta-drift.json" >>"$GITHUB_OUTPUT"
 
     - name: Comment on the pull request
@@ -101,12 +113,12 @@ runs:
         DRIFT_REPORT: ${{ runner.temp }}/accreta-drift.md
         DRIFT_KEY: ${{ inputs.working-directory }}
         DRIFT_AUTHOR: ${{ inputs.comment-author }}
-        DRIFT_CREATE: ${{ inputs.comment-when-clean == 'true' || steps.drift.outputs.pages-newly-in-doubt != '0' }}
+        DRIFT_CREATE: ${{ inputs.comment-when-clean == 'true' || steps.drift.outputs.attention != '0' }}
       run: bun "$GITHUB_ACTION_PATH/scripts/drift-comment.ts"
 
     - name: Fail on drift
-      if: ${{ inputs.fail-on-drift == 'true' && steps.drift.outputs.pages-newly-in-doubt != '0' }}
+      if: ${{ inputs.fail-on-drift == 'true' && steps.drift.outputs.attention != '0' }}
       shell: bash
       run: |
-        echo "::error::This pull request puts knowledge base pages in doubt."
+        echo "::error::This pull request puts pages in doubt, or at a revision nobody can place."
         exit 1

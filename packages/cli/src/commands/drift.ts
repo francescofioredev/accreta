@@ -219,15 +219,21 @@ interface DriftJson {
   /** Pages with a citation in doubt that the base report did not have; all of them without one. */
   pages_newly_in_doubt: number;
   pages_unplaceable: number;
+  /** Unplaceable pages the base report did not have at the same revision; all of them without one. */
+  pages_newly_unplaceable: number;
   sources: SourceVerdict[];
 }
 
-/** Keys of what a base report already had in doubt. */
+/** Keys of what a base report already had in doubt or could not place. */
 type BaseKeys = Set<string>;
 
+// The revision is part of each key, so a citation re-pinned since the base and broken again is new.
 const citationKey = (source: string, page: string, c: DoubtedCitation) =>
-  JSON.stringify([source, page, c.footnote, c.path, c.locator]);
-const fileKey = (source: string, page: string) => JSON.stringify([source, page, "*"]);
+  JSON.stringify(["cited", source, page, c.footnote, c.path, c.locator, c.cited_at]);
+const fileKey = (source: string, page: string, verifiedAt: string) =>
+  JSON.stringify(["file", source, page, verifiedAt]);
+const unplacedKey = (source: string, page: string, revision: string) =>
+  JSON.stringify(["unplaced", source, page, revision]);
 
 function readBase(path: string): BaseKeys {
   let json: DriftJson;
@@ -244,8 +250,14 @@ function readBase(path: string): BaseKeys {
   const keys: BaseKeys = new Set();
   for (const source of json.sources) {
     for (const page of source.in_doubt ?? []) {
-      if (page.citations === null) keys.add(fileKey(source.source_id, page.page));
-      else for (const c of page.citations) keys.add(citationKey(source.source_id, page.page, c));
+      if (page.citations === null) {
+        keys.add(fileKey(source.source_id, page.page, page.verified_at));
+      } else {
+        for (const c of page.citations) keys.add(citationKey(source.source_id, page.page, c));
+      }
+    }
+    for (const entry of source.unresolvable ?? []) {
+      for (const page of entry.pages) keys.add(unplacedKey(source.source_id, page, entry.revision));
     }
   }
   return keys;
@@ -258,13 +270,16 @@ const isNew = (page: DoubtedPage) =>
 function toJson(reports: DriftReport[], base?: BaseKeys): DriftJson {
   const sources = reports.map((report) => verdict(report, base));
   const doubted = sources.flatMap((source) => source.in_doubt);
+  const unplaced = sources.flatMap((source) =>
+    source.unresolvable.flatMap((e) =>
+      e.pages.map((page) => unplacedKey(source.source_id, page, e.revision)),
+    ),
+  );
   return {
     pages_in_doubt: doubted.length,
     pages_newly_in_doubt: doubted.filter(isNew).length,
-    pages_unplaceable: sources.reduce(
-      (total, source) => total + source.unresolvable.reduce((n, e) => n + e.pages.length, 0),
-      0,
-    ),
+    pages_unplaceable: unplaced.length,
+    pages_newly_unplaceable: unplaced.filter((key) => !base?.has(key)).length,
     sources,
   };
 }
@@ -286,7 +301,7 @@ function verdict(report: DriftReport, base?: BaseKeys): SourceVerdict {
           verified_at: entry.revision,
           citations: null,
           changed_paths: entry.changedPaths,
-          ...(base ? { on_base: base.has(fileKey(id, page)) } : {}),
+          ...(base ? { on_base: base.has(fileKey(id, page, entry.revision)) } : {}),
         });
       } else if (level === "changed") {
         inDoubt.push({
@@ -354,8 +369,10 @@ export const GITHUB_BODY_LIMIT = 60_000;
 /** A line of the comment. Rows are what the budget drops, lowest priority first; the rest stays. */
 interface Line {
   text: string;
-  /** 0 for rows newly in doubt, 1 for the rest. */
+  /** 0 for rows new with this change, 1 for the rest. */
   row?: 0 | 1;
+  /** A table: its header goes when every one of its rows was dropped. */
+  group?: number;
 }
 
 /** Markdown for a pull request comment. Names only the pages whose cited lines changed. */
@@ -367,8 +384,13 @@ export function toGithub(
   const json = toJson(reports, base);
   const lines: Line[] = [{ text: "### accreta drift" }, { text: "" }];
   const text = (...values: string[]) => lines.push(...values.map((value) => ({ text: value })));
-  const rows = (values: string[], row: 0 | 1 = 1) =>
-    lines.push(...values.map((value) => ({ text: value, row })));
+  let groups = 0;
+  const table = (header: string[], values: string[], row: (index: number) => 0 | 1 = () => 1) => {
+    const group = groups++;
+    lines.push(...header.map((value) => ({ text: value, group })));
+    lines.push(...values.map((value, i) => ({ text: value, row: row(i), group })));
+  };
+  const HEADER = ["", "| Page | Cited lines | Lines as of | Change |", "|---|---|---|---|"];
 
   if (json.sources.length === 0) {
     text("No sources declared in `sources/`. Nothing to check.");
@@ -402,21 +424,15 @@ export function toGithub(
 
     const fresh = source.in_doubt.flatMap((page) => doubtRows(page, false));
     const known = source.in_doubt.flatMap((page) => doubtRows(page, true));
-    if (fresh.length > 0) {
-      text("", "| Page | Cited lines | Lines as of | Change |", "|---|---|---|---|");
-      rows(fresh, 0);
-    }
+    if (fresh.length > 0) table(HEADER, fresh, () => 0);
     if (known.length > 0) {
       const count = source.in_doubt.filter((page) => doubtRows(page, true).length > 0).length;
       text(
         "",
         "<details>",
         `<summary>${count} page(s) were already in doubt on the base branch.</summary>`,
-        "",
-        "| Page | Cited lines | Lines as of | Change |",
-        "|---|---|---|---|",
       );
-      rows(known);
+      table(HEADER, known);
       text("", "</details>");
     }
 
@@ -425,11 +441,9 @@ export function toGithub(
         "",
         "<details>",
         `<summary>${source.repin.length} page(s) only need re-pinning: the cited lines moved, unchanged.</summary>`,
-        "",
-        "| Page | Cited lines | Lines as of | Now at |",
-        "|---|---|---|---|",
       );
-      rows(
+      table(
+        ["", "| Page | Cited lines | Lines as of | Now at |", "|---|---|---|---|"],
         source.repin.flatMap((page) =>
           page.citations.map(
             (c) =>
@@ -456,12 +470,17 @@ export function toGithub(
         `<summary>${count} page(s) were verified at a revision this source cannot place.</summary>`,
         "",
         "A shallow clone does this: check out with `fetch-depth: 0`.",
-        "",
       );
-      rows(
-        source.unresolvable.flatMap((e) =>
-          e.pages.map((page) => `- ${code(page)}, verified at ${code(e.revision)}`),
-        ),
+      const unplaced = source.unresolvable.flatMap((e) =>
+        e.pages.map((page) => ({ page, revision: e.revision })),
+      );
+      table(
+        [""],
+        unplaced.map((u) => `- ${code(u.page)}, verified at ${code(u.revision)}`),
+        (i) =>
+          base?.has(unplacedKey(source.source_id, unplaced[i]!.page, unplaced[i]!.revision))
+            ? 1
+            : 0,
       );
       text("", "</details>");
     }
@@ -528,7 +547,14 @@ function fit(lines: Line[], limit: number): string {
       room -= line.text.length + 1;
     }
   }
-  const out = lines.filter((line) => line.row === undefined || kept.has(line)).map((l) => l.text);
+  const shownGroups = new Set([...kept].map((line) => line.group));
+  const out = lines
+    .filter((line) =>
+      line.row === undefined
+        ? line.group === undefined || shownGroups.has(line.group)
+        : kept.has(line),
+    )
+    .map((line) => line.text);
   const omitted = lines.filter((line) => line.row !== undefined).length - kept.size;
   if (omitted > 0) out.push("", moreRows(omitted));
   return out.join("\n");

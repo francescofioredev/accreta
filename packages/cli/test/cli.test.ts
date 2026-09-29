@@ -640,7 +640,17 @@ describe("accreta drift --base", () => {
       writeFileSync(join(root, "base.json"), stdout(), "utf-8");
       output = [];
     };
-    return { from, edit, baseReport };
+    const repin = async (name: string, citation: string) => {
+      const now = headOf(docs);
+      writePage(
+        `${name}.md`,
+        `---\ntype: note\nsource: docs\nlast_verified_revision: ${now}\n---\n\n# ${name}\n\n` +
+          `A claim.[^c]\n\n[^c]: docs @ ${now.slice(0, 7)} · ${citation}\n`,
+      );
+      await cli("reindex");
+      output = [];
+    };
+    return { from, edit, baseReport, repin };
   }
 
   test("a line the base branch already touched stays listed, apart from the new ones", async () => {
@@ -686,6 +696,60 @@ describe("accreta drift --base", () => {
     output = [];
     await cli("drift", "--format", "github", "--base", "base.json");
     expect(stdout()).toContain("**No page newly in doubt.** No line any page cites has changed.");
+  });
+
+  test("a citation re-pinned since the base and broken again is new", async () => {
+    const { edit, baseReport, repin } = await repo();
+    await edit("a.md", { 4: "changed on the base branch" });
+    await baseReport();
+    await repin("first", "a.md#L3-L5");
+    await edit("a.md", { 4: "changed on the base branch", 5: "broken again" });
+
+    expect(await cli("drift", "--json", "--base", "base.json")).toBe(1);
+    const report = JSON.parse(stdout());
+    expect(report.pages_newly_in_doubt).toBe(1);
+    expect(report.sources[0].in_doubt[0].citations[0].on_base).toBe(false);
+  });
+
+  test("a page newly at a revision nobody can place counts; one the base had does not", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    mkdirSync(join(root, "sources", "docs"), { recursive: true });
+    writeFileSync(join(root, "sources", "docs", "a.md"), "text", "utf-8");
+    writeFileSync(
+      join(root, "sources", "docs.yaml"),
+      'id: docs\ntype: fs\nroot: sources/docs\nextensions: [".md"]\n',
+      "utf-8",
+    );
+    const pin = (revision: string) =>
+      writePage(
+        "a.md",
+        `---\ntype: note\nsource: docs\nlast_verified_revision: ${revision}\n---\n\n# A\n`,
+      );
+    pin("gone");
+    await cli("reindex");
+    output = [];
+    await cli("drift", "--json");
+    writeFileSync(join(root, "base.json"), stdout(), "utf-8");
+
+    output = [];
+    await cli("drift", "--json", "--base", "base.json");
+    expect(JSON.parse(stdout())).toMatchObject({
+      pages_unplaceable: 1,
+      pages_newly_unplaceable: 0,
+    });
+
+    pin("also-gone");
+    await cli("reindex");
+    output = [];
+    await cli("drift", "--json", "--base", "base.json");
+    expect(JSON.parse(stdout())).toMatchObject({
+      pages_unplaceable: 1,
+      pages_newly_unplaceable: 1,
+    });
+    output = [];
+    await cli("drift", "--json");
+    expect(JSON.parse(stdout()).pages_newly_unplaceable).toBe(1);
   });
 
   test("a base that is not a drift report is refused", async () => {
@@ -736,6 +800,11 @@ describe("drift --format github, rendered", () => {
     const more = Number(/…and (\d+) more rows\./.exec(out)?.[1]);
     expect(shown).toBeGreaterThan(0);
     expect(shown + more).toBe(600);
+    // A table whose rows were all cut loses its header too.
+    const lines = out.split("\n");
+    lines.forEach((line, i) => {
+      if (line === "|---|---|---|---|") expect(lines[i + 1]).toStartWith("| `");
+    });
   });
 
   test("a value from the repository cannot inject Markdown or HTML", () => {

@@ -15,6 +15,7 @@ import {
 function fakeClient(
   existing: IssueComment[],
   refuse: (body: string) => boolean = () => false,
+  poster = DEFAULT_AUTHOR,
 ): CommentClient & { calls: string[] } {
   const calls: string[] = [];
   const write = (call: string, body: string) => {
@@ -24,7 +25,10 @@ function fakeClient(
   return {
     calls,
     list: async () => existing,
-    create: async (body) => write(`create ${body}`, body),
+    create: async (body) => {
+      write(`create ${body}`, body);
+      return { id: 99, body, user: { login: poster } };
+    },
     update: async (id, body) => write(`update ${id} ${body}`, body),
   };
 }
@@ -85,6 +89,21 @@ describe("upsertComment", () => {
     const options = { createIfMissing: true, author: "octocat" };
     expect(await upsertComment(client, marker, "new", options)).toBe("updated");
     expect(client.calls).toEqual([`update 6 ${marker}\nnew\n`]);
+  });
+
+  test("logins match whatever their case", async () => {
+    const client = fakeClient([{ id: 9, body: `${marker}\nold\n`, user: { login: "OctoCat" } }]);
+    const options = { createIfMissing: true, author: "octocat" };
+    expect(await upsertComment(client, marker, "new", options)).toBe("updated");
+  });
+
+  test("a token that posts as someone other than comment-author is flagged", async () => {
+    const warnings: string[] = [];
+    const client = fakeClient([], () => false, "deploy-bot[bot]");
+    await upsertComment(client, marker, "report", { ...create, warn: (m) => warnings.push(m) });
+    expect(warnings).toEqual([
+      "set comment-author to deploy-bot[bot]: this token posts as deploy-bot[bot].",
+    ]);
   });
 
   test("another knowledge base's comment is not this one", async () => {
