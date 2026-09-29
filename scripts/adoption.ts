@@ -93,13 +93,21 @@ export interface Shortfall {
  * because an install of the CLI already accounts for the adapter's own need of core.
  */
 export function shortfalls(totals: Map<string, number>, edges: Edge[]): Shortfall[] {
+  return shortfallsAcross(totals, [edges]);
+}
+
+/** Held under every graph given, so a day that mixes two graphs can understate but never invent. */
+export function shortfallsAcross(totals: Map<string, number>, graphs: Edge[][]): Shortfall[] {
   const names = [...totals.keys()];
-  const entryPoints = roots(names, edges);
+  const rootSets = graphs.map((edges) => roots(names, edges));
+  const entryPoints = names.filter((name) => rootSets.every((set) => set.includes(name)));
 
   return names
-    .filter((name) => !entryPoints.includes(name))
+    .filter((name) => rootSets.every((set) => !set.includes(name)))
     .map((dependency) => {
-      const requiredBy = entryPoints.filter((root) => reaches(root, edges).has(dependency));
+      const requiredBy = entryPoints.filter((root) =>
+        graphs.every((edges) => reaches(root, edges).has(dependency)),
+      );
       const required = requiredBy.reduce((sum, root) => sum + (totals.get(root) ?? 0), 0);
       const recorded = totals.get(dependency) ?? 0;
       return { dependency, requiredBy, required, recorded, slack: recorded - required };
@@ -140,19 +148,41 @@ export interface Packument {
   versions: Record<string, { dependencies?: Record<string, string> }>;
 }
 
-/** The latest release of one package on `day`, by publish time. */
-function releaseOn(day: string, packument: Packument): string | undefined {
+const STABLE = /^(\d+)\.(\d+)\.(\d+)$/;
+
+function compareStable(a: string, b: string): number {
+  const [x, y] = [a, b].map((v) => STABLE.exec(v)!.slice(1).map(Number)) as [number[], number[]];
+  for (let i = 0; i < 3; i++) {
+    if (x[i] !== y[i]) return x[i]! - y[i]!;
+  }
+  return 0;
+}
+
+/** What `npm install` resolves at the start or end of `day`: the highest stable version by then. */
+function releaseOn(
+  day: string,
+  packument: Packument,
+  at: "start" | "end" = "end",
+): string | undefined {
   return Object.keys(packument.versions)
-    .filter((v) => (packument.time[v] ?? "9999").slice(0, 10) <= day)
-    .sort((a, b) => packument.time[a]!.localeCompare(packument.time[b]!))
+    .filter((v) => {
+      const published = packument.time[v]?.slice(0, 10);
+      if (!STABLE.test(v) || published === undefined) return false;
+      return at === "end" ? published <= day : published < day;
+    })
+    .sort(compareStable)
     .at(-1);
 }
 
 /** Per package, so a release that stopped partway leaves the rest on their previous graph. */
-export function graphOn(day: string, packuments: Map<string, Packument>): Edge[] {
+export function graphOn(
+  day: string,
+  packuments: Map<string, Packument>,
+  at: "start" | "end" = "end",
+): Edge[] {
   const edges: Edge[] = [];
   for (const [dependent, packument] of packuments) {
-    const release = releaseOn(day, packument);
+    const release = releaseOn(day, packument, at);
     if (release === undefined) continue;
     for (const dependency of Object.keys(packument.versions[release]!.dependencies ?? {})) {
       if (packuments.has(dependency)) edges.push({ dependent, dependency });
@@ -161,6 +191,19 @@ export function graphOn(day: string, packuments: Map<string, Packument>): Edge[]
   return edges;
 }
 
+/** The graphs at the start and end of `day`; they differ only on a publish day. */
+function graphsOfDay(day: string, packuments: Map<string, Packument>): [Edge[], Edge[]] {
+  const end = graphOn(day, packuments);
+  const start = [
+    ...graphOn(day, packuments, "start"),
+    // Before its first release a package has no downloads, so its end-of-day edges held for all of them.
+    ...end.filter((e) => releaseOn(day, packuments.get(e.dependent)!, "start") === undefined),
+  ];
+  return [start, end];
+}
+
+const edgeKey = (e: Edge) => `${e.dependent}>${e.dependency}`;
+
 export interface Analysis {
   shortfalls: Shortfall[];
   unfetched: UnfetchedDay[];
@@ -168,7 +211,7 @@ export interface Analysis {
 
 /** Shortfalls and unfetched days, with each day read through the graph live that day. */
 export function analyse(series: Map<string, Day[]>, packuments: Map<string, Packument>): Analysis {
-  const groups = new Map<string, { edges: Edge[]; part: Map<string, Day[]> }>();
+  const groups = new Map<string, { graphs: [Edge[], Edge[]]; part: Map<string, Day[]> }>();
   for (const [name, days] of series) {
     for (const d of days) {
       const packument = packuments.get(name);
@@ -176,20 +219,20 @@ export function analyse(series: Map<string, Day[]>, packuments: Map<string, Pack
       if (d.downloads > 0 && (!packument || releaseOn(d.day, packument) === undefined)) {
         throw new Error(`${name} has ${d.downloads} downloads on ${d.day}, before any release.`);
       }
-      const edges = graphOn(d.day, packuments);
-      const key = JSON.stringify(edges);
-      const group = groups.get(key) ?? { edges, part: new Map<string, Day[]>() };
+      const graphs = graphsOfDay(d.day, packuments);
+      const key = JSON.stringify(graphs);
+      const group = groups.get(key) ?? { graphs, part: new Map<string, Day[]>() };
       group.part.set(name, [...(group.part.get(name) ?? []), d]);
       groups.set(key, group);
     }
   }
 
   const merged = new Map<string, Shortfall>();
-  for (const { edges, part } of groups.values()) {
+  for (const { graphs, part } of groups.values()) {
     const totals = new Map(
       [...part].map(([name, days]) => [name, days.reduce((sum, d) => sum + d.downloads, 0)]),
     );
-    for (const s of shortfalls(totals, edges)) {
+    for (const s of shortfallsAcross(totals, graphs)) {
       const before = merged.get(s.dependency);
       if (!before) {
         merged.set(s.dependency, s);
@@ -208,7 +251,13 @@ export function analyse(series: Map<string, Day[]>, packuments: Map<string, Pack
   }
 
   const unfetched = [...groups.values()]
-    .flatMap(({ edges, part }) => unfetchedDays(part, edges))
+    .flatMap(({ graphs: [start, end], part }) => {
+      const held = new Set(start.map(edgeKey));
+      return unfetchedDays(
+        part,
+        end.filter((e) => held.has(edgeKey(e))),
+      );
+    })
     .sort((a, b) => a.day.localeCompare(b.day));
   return { shortfalls: [...merged.values()], unfetched };
 }
@@ -349,6 +398,84 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** Everything the report prints that needs no network; publish days come from the first package in `series`. */
+export function renderCounts(
+  series: Map<string, Day[]>,
+  packuments: Map<string, Packument>,
+  counted: string,
+): string[] {
+  const lines: string[] = [];
+  const names = [...series.keys()];
+  const versionDays = publishDaysOf(packuments.get(names[0]!)!);
+  const publishDays = new Set(versionDays.values());
+
+  const totals = new Map(
+    names.map((name) => [name, series.get(name)!.reduce((sum, d) => sum + d.downloads, 0)]),
+  );
+  const grandTotal = [...totals.values()].reduce((a, b) => a + b, 0);
+  const analysis = analyse(series, packuments);
+
+  lines.push("WINDOW");
+  lines.push(`  versions      ${[...versionDays.keys()].join(", ")}`);
+  lines.push(`  published     ${[...publishDays].sort().join(", ")}`);
+  lines.push(`  counted to    ${counted}  (npm's reporting lag, probed with ${BELLWETHER})`);
+
+  lines.push("\nDAILY DOWNLOADS");
+  lines.push(`  ${"day".padEnd(10)}${names.map((n) => short(n).padStart(13)).join("")}`);
+  for (const { day } of series.get(names[0]!)!) {
+    const cells = names.map((n) => {
+      const value = series.get(n)!.find((d) => d.day === day)?.downloads ?? 0;
+      return (day > counted ? "·" : num(value)).padStart(13);
+    });
+    lines.push(`  ${day}${cells.join("")}`);
+  }
+  lines.push(
+    `  ${"total".padEnd(10)}${names.map((n) => num(totals.get(n)!).padStart(13)).join("")}`,
+  );
+  lines.push(`  ${num(grandTotal)} across ${names.length} packages`);
+
+  lines.push("\nWHAT THE PUBLISHES EXPLAIN");
+  const share = publishDayShare(
+    names.flatMap((n) => series.get(n)!),
+    publishDays,
+  );
+  const baseline = {
+    low: AUTOMATED_PER_VERSION.low * versionDays.size * names.length,
+    high: AUTOMATED_PER_VERSION.high * versionDays.size * names.length,
+  };
+  lines.push(
+    `  on publish days     ${num(share.onPublishDays)} of ${num(share.total)}  (${pct(share.onPublishDays, share.total)})`,
+  );
+  lines.push(
+    `  automated baseline  ${num(baseline.low)}–${num(baseline.high)} for ${versionDays.size} versions x ${names.length} packages   [Tenable]`,
+  );
+  for (const name of names) {
+    const rate = sustainedRate(series.get(name)!, publishDays, counted);
+    lines.push(
+      `  ${short(name).padEnd(18)}${rate.perDay.toFixed(1)}/day over ${rate.days} days away from a publish   (floor ${NOISE_FLOOR_PER_DAY}/day)  [npm]`,
+    );
+  }
+
+  lines.push("\nWHAT INSTALLS WOULD REQUIRE");
+  for (const s of analysis.shortfalls) {
+    lines.push(
+      `  ${short(s.dependency).padEnd(14)} >= ${num(s.required).padStart(6)} (${s.requiredBy.map(short).join(" + ")}), recorded ${num(s.recorded).padStart(6)}   ${s.slack >= 0 ? "ok" : num(s.slack)}`,
+    );
+  }
+  lines.push("  A negative figure is traffic that did not come from `npm install`.");
+
+  const unfetched = analysis.unfetched.filter((u) => u.day <= counted);
+  lines.push(
+    `\nDAYS A DEPENDENCY WENT UNFETCHED  (${unfetched.length}; a warm cache explains one)`,
+  );
+  for (const u of unfetched.slice(0, 10)) {
+    lines.push(
+      `  ${u.day}  ${short(u.dependent)} ${num(u.dependentDownloads)}, ${short(u.dependency)} 0`,
+    );
+  }
+  return lines;
+}
+
 async function main() {
   const names = PUBLISHABLE.map((dir) => manifestOf(dir).name);
   const packuments = new Map(
@@ -364,72 +491,9 @@ async function main() {
     await Promise.all(names.map(async (name) => [name, await fetchRange(name, from, to)] as const)),
   );
 
-  const totals = new Map(
-    names.map((name) => [name, series.get(name)!.reduce((sum, d) => sum + d.downloads, 0)]),
-  );
-  const grandTotal = [...totals.values()].reduce((a, b) => a + b, 0);
-  const analysis = analyse(series, packuments);
-
   console.log(`accreta adoption — measured ${to}\n`);
 
-  console.log("WINDOW");
-  console.log(`  versions      ${[...versionDays.keys()].join(", ")}`);
-  console.log(`  published     ${[...publishDays].sort().join(", ")}`);
-  console.log(`  counted to    ${counted}  (npm's reporting lag, probed with ${BELLWETHER})`);
-
-  console.log("\nDAILY DOWNLOADS");
-  console.log(`  ${"day".padEnd(10)}${names.map((n) => short(n).padStart(13)).join("")}`);
-  for (const { day } of series.get(names[0]!)!) {
-    const cells = names.map((n) => {
-      const value = series.get(n)!.find((d) => d.day === day)?.downloads ?? 0;
-      return (day > counted ? "·" : num(value)).padStart(13);
-    });
-    console.log(`  ${day}${cells.join("")}`);
-  }
-  console.log(
-    `  ${"total".padEnd(10)}${names.map((n) => num(totals.get(n)!).padStart(13)).join("")}`,
-  );
-  console.log(`  ${num(grandTotal)} across ${names.length} packages`);
-
-  console.log("\nWHAT THE PUBLISHES EXPLAIN");
-  const share = publishDayShare(
-    names.flatMap((n) => series.get(n)!),
-    publishDays,
-  );
-  const baseline = {
-    low: AUTOMATED_PER_VERSION.low * versionDays.size * names.length,
-    high: AUTOMATED_PER_VERSION.high * versionDays.size * names.length,
-  };
-  console.log(
-    `  on publish days     ${num(share.onPublishDays)} of ${num(share.total)}  (${pct(share.onPublishDays, share.total)})`,
-  );
-  console.log(
-    `  automated baseline  ${num(baseline.low)}–${num(baseline.high)} for ${versionDays.size} versions x ${names.length} packages   [Tenable]`,
-  );
-  for (const name of names) {
-    const rate = sustainedRate(series.get(name)!, publishDays, counted);
-    console.log(
-      `  ${short(name).padEnd(18)}${rate.perDay.toFixed(1)}/day over ${rate.days} days away from a publish   (floor ${NOISE_FLOOR_PER_DAY}/day)  [npm]`,
-    );
-  }
-
-  console.log("\nWHAT INSTALLS WOULD REQUIRE");
-  for (const s of analysis.shortfalls) {
-    console.log(
-      `  ${short(s.dependency).padEnd(14)} >= ${num(s.required).padStart(6)} (${s.requiredBy.map(short).join(" + ")}), recorded ${num(s.recorded).padStart(6)}   ${s.slack >= 0 ? "ok" : num(s.slack)}`,
-    );
-  }
-  console.log("  A negative figure is traffic that did not come from `npm install`.");
-
-  const unfetched = analysis.unfetched.filter((u) => u.day <= counted);
-  console.log(
-    `\nDAYS A DEPENDENCY WENT UNFETCHED  (${unfetched.length}; a warm cache explains one)`,
-  );
-  for (const u of unfetched.slice(0, 10)) {
-    console.log(
-      `  ${u.day}  ${short(u.dependent)} ${num(u.dependentDownloads)}, ${short(u.dependency)} 0`,
-    );
-  }
+  for (const line of renderCounts(series, packuments, counted)) console.log(line);
 
   console.log("\nDEPENDENTS");
   const dependents = await Promise.all(names.map((name) => fetchDependents(name)));
