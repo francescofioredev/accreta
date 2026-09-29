@@ -208,6 +208,7 @@ an interruption to work around.
 - **citations that name no revision, or one the source never had** — `unknown` where a
   revision belongs, or a commit that is not in the history
 - **footnotes that do not read as the configured format**, and footnote ids defined twice
+- **inconsistent supersession** — pages that supersede one another in a loop, or a replacement only one of its two pages records
 
 It also prints how many citations it could not check, grouped by why. That is not a finding:
 nobody looked. The reason may be a source accreta cannot reach, a git file with uncommitted

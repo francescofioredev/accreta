@@ -18,6 +18,14 @@ export interface AccretaConfig {
   linkFields: string[];
   /** Template used to render a provenance citation. */
   provenanceFormat: string;
+  /** The link fields lint reads as supersession: undefined when not set, null when turned off. */
+  supersessionFields?: SupersessionFields | null;
+}
+
+/** The two link fields that say one page replaced another, one from each side. */
+export interface SupersessionFields {
+  supersedes: string;
+  supersededBy: string;
 }
 
 export const DEFAULT_CONFIG: AccretaConfig = {
@@ -25,6 +33,11 @@ export const DEFAULT_CONFIG: AccretaConfig = {
   pageTypes: ["note", "source", "concept", "decision", "synthesis"],
   linkFields: ["related", "supersedes", "superseded_by", "discussed_in"],
   provenanceFormat: "{source} @ {rev} · {path}#{locator}",
+};
+
+export const DEFAULT_SUPERSESSION_FIELDS: SupersessionFields = {
+  supersedes: "supersedes",
+  supersededBy: "superseded_by",
 };
 
 function asStringArray(value: unknown, fallback: string[]): string[] {
@@ -35,6 +48,17 @@ function asStringArray(value: unknown, fallback: string[]): string[] {
 
 function asString(value: unknown, fallback: string): string {
   return typeof value === "string" && value.length > 0 ? value : fallback;
+}
+
+// A malformed pair falls back to the default like every other key; only `false` turns the check off.
+function asSupersessionFields(value: unknown): SupersessionFields | null | undefined {
+  if (value === false) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  const supersedes = asString(raw.supersedes, "");
+  const supersededBy = asString(raw.superseded_by, "");
+  if (!supersedes || !supersededBy || supersedes === supersededBy) return undefined;
+  return { supersedes, supersededBy };
 }
 
 /**
@@ -52,11 +76,14 @@ export function configFromObject(data: unknown): AccretaConfig {
       ? (raw.provenance as Record<string, unknown>)
       : {};
 
+  const supersessionFields = asSupersessionFields(raw.supersession_fields);
+
   return {
     knowledgeBase: asString(raw.knowledge_base, DEFAULT_CONFIG.knowledgeBase),
     pageTypes: asStringArray(raw.page_types, DEFAULT_CONFIG.pageTypes),
     linkFields: asStringArray(raw.link_fields, DEFAULT_CONFIG.linkFields),
     provenanceFormat: asString(provenance.format, DEFAULT_CONFIG.provenanceFormat),
+    ...(supersessionFields !== undefined && { supersessionFields }),
   };
 }
 

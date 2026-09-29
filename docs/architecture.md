@@ -83,6 +83,18 @@ provenance:
   format: "{source} @ {rev} · {path}#{locator}"
 ```
 
+`supersession_fields` names the two link fields `lint` reads as "this page replaced that one".
+Unset, it is `supersedes` and `superseded_by`:
+
+```yaml
+supersession_fields: { supersedes: supersedes, superseded_by: superseded_by }
+```
+
+`lint` reports an `inconsistent-supersession` finding for a loop of such claims, including two
+pages that each supersede the other, and for a claim only one of its two pages records. If
+either field is missing from `link_fields`, it reports once, against the config, that it did not
+check. `supersession_fields: false` turns the check off.
+
 Code-oriented types (`repository`, `module`, `api`, `usecase`, `integration`) ship as the
 `codebase` preset.
 They are a preset precisely because they are not universal.

@@ -10,6 +10,7 @@ import {
   type SourceAdapter,
 } from "../source/adapter.ts";
 import { paginate, type PageInfo, type PageRequest } from "./paging.ts";
+import { supersessionFindings } from "./supersession.ts";
 
 export const LINT_FINDING_KINDS = [
   "broken-link",
@@ -26,6 +27,7 @@ export const LINT_FINDING_KINDS = [
   "duplicate-footnote",
   "unreadable-provenance-format",
   "unloaded-source",
+  "inconsistent-supersession",
 ] as const;
 
 export type LintFindingKind = (typeof LINT_FINDING_KINDS)[number];
@@ -176,6 +178,8 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
       });
     }
   }
+
+  findings.push(...supersessionFindings(db, config));
 
   return {
     findings,

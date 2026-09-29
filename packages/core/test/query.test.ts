@@ -24,6 +24,7 @@ const config: AccretaConfig = {
   knowledgeBase: "knowledge",
   pageTypes: ["concept", "note", "synthesis"],
   linkFields: ["related", "discussed_in"],
+  supersessionFields: null,
 };
 
 function writePage(relativePath: string, contents: string): void {

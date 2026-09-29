@@ -26,3 +26,38 @@ link_fields: [cites, contradicts]
     expect(parseConfig("page_types: [unclosed")).toEqual(DEFAULT_CONFIG);
   });
 });
+
+describe("supersession_fields", () => {
+  test("names the pair lint reads as supersession", () => {
+    const config = parseConfig(`
+link_fields: [replaces, replaced_by]
+supersession_fields:
+  supersedes: replaces
+  superseded_by: replaced_by
+`);
+    expect(config.supersessionFields).toEqual({
+      supersedes: "replaces",
+      supersededBy: "replaced_by",
+    });
+  });
+
+  test("absent, it stays unset so lint can tell the default from a choice", () => {
+    expect(parseConfig("page_types: [note]")).not.toHaveProperty("supersessionFields");
+  });
+
+  test("false turns the check off", () => {
+    expect(parseConfig("supersession_fields: false").supersessionFields).toBeNull();
+  });
+
+  test("a malformed pair falls back to the default, like every other key", () => {
+    for (const value of [
+      "supersession_fields: yes please",
+      "supersession_fields: [supersedes, superseded_by]",
+      "supersession_fields: { supersedes: replaces }",
+      "supersession_fields: { supersedes: same, superseded_by: same }",
+      "supersession_fields:",
+    ]) {
+      expect(parseConfig(value)).not.toHaveProperty("supersessionFields");
+    }
+  });
+});

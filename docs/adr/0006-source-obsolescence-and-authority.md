@@ -4,6 +4,9 @@ Status: accepted in part. Obsolescence is declarative and lint checks the supers
 accepted. The `contested` field: still proposed, see
 [Why `contested` is not decided](#why-contested-is-not-decided).
 Date: 2026-08-10
+Implemented 2026-09-29: the supersession lint, as `inconsistent-supersession` driven by
+`supersession_fields` ([#81](https://github.com/francescofioredev/accreta/issues/81)). It also
+reports loops longer than two pages.
 
 ## Context
 
