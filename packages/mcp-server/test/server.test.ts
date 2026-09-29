@@ -80,7 +80,7 @@ test("the provenance block survives a real tool call", async () => {
   }
 });
 
-// Only the first sentence counts: the provenance notice below it mentions aliases for another reason.
+// Only the parenthesised field list counts: "type", "source" and "aliases" appear elsewhere for other reasons.
 test("search_pages names every column the FTS index searches", async () => {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "description-probe", version: "0.0.0" });
@@ -100,8 +100,9 @@ test("search_pages names every column the FTS index searches", async () => {
 
     const { tools } = await client.listTools();
     const description = tools.find((tool) => tool.name === "search_pages")?.description ?? "";
-    const firstSentence = description.split(". ")[0] ?? "";
-    for (const column of searched) expect(firstSentence).toContain(column);
+    const fields = description.match(/\(([^)]*)\)/)?.[1];
+    expect(fields).toBeDefined();
+    for (const column of searched) expect(fields).toContain(column);
   } finally {
     await client.close();
   }
