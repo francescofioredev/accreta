@@ -17,6 +17,7 @@
       "dependencies": {
         "@accreta/core": "workspace:*",
         "@accreta/mcp-server": "workspace:*",
+        "@modelcontextprotocol/sdk": "^1.30.0",
       },
     },
     "packages/adapters": {
