@@ -108,6 +108,11 @@ written to be cited, with normative keywords defined by RFC 2119. A corpus of me
 will score worse on every metric here, particularly (c), where "the cited lines support the
 claim" is far harder to adjudicate when the source does not make discrete claims.
 
+> **Partly run, 2026-09-28.** The drift confusion matrix and check (c) were run for a decision model
+> in [`../../2026-09-jev/`](../../2026-09-jev/README.md), on RFC errata and on a codebase. Its first
+> lesson applies here too: the perturbation class is not the claim-level label, so a claim-level
+> annotator and a human audit are needed alongside it.
+
 ## Falsification
 
 The hypothesis is that model choice changes citation validity materially, so that

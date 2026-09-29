@@ -1,0 +1,19 @@
+{
+ "run_at": "2026-09-28T17:51:17.623Z",
+ "machine": "darwin arm64",
+ "pages": 9842,
+ "links": 7408,
+ "build_ms": [
+  5038,
+  5193,
+  5167
+ ],
+ "index_bytes": 28098560,
+ "search_ms": 14.1,
+ "get_page_ms": 2.5,
+ "find_related_ms": 18.7,
+ "lint_ms": 205,
+ "lint_findings": 0,
+ "lint_response_bytes": 58,
+ "lint_kinds": {}
+}

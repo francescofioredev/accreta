@@ -1,0 +1,230 @@
+{
+ "run_at": "2026-09-28T18:29:51.459Z",
+ "agent": "claude-opus-5-5",
+ "repo": "https://github.com/sindresorhus/got@v13.0.0",
+ "budget_usd": 20,
+ "sessions": [
+  {
+   "run": 1,
+   "revision": "b1d61c173a681755ac23afb2f155f08801c1e7e4",
+   "code": 0,
+   "wall_ms": 1352225,
+   "duration_api_ms": 488987,
+   "num_turns": 60,
+   "total_cost_usd": 2.815716,
+   "usage": {
+    "input_tokens": 76,
+    "cache_creation_input_tokens": 135889,
+    "cache_read_input_tokens": 3351338,
+    "output_tokens": 50879,
+    "output_tokens_details": {
+     "thinking_tokens": 10132
+    },
+    "server_tool_use": {
+     "web_search_requests": 0,
+     "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 135889,
+     "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+     {
+      "input_tokens": 2,
+      "output_tokens": 269,
+      "cache_read_input_tokens": 142096,
+      "cache_creation_input_tokens": 4398,
+      "cache_creation": {
+       "ephemeral_5m_input_tokens": 0,
+       "ephemeral_1h_input_tokens": 4398
+      },
+      "type": "message"
+     }
+    ],
+    "speed": "standard"
+   },
+   "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+     "inputTokens": 1066,
+     "outputTokens": 15,
+     "cacheReadInputTokens": 0,
+     "cacheCreationInputTokens": 0,
+     "webSearchRequests": 0,
+     "costUSD": 0.001141,
+     "contextWindow": 200000,
+     "maxOutputTokens": 32000,
+     "thinkingTokens": 0,
+     "canonicalModel": "claude-haiku-4-5",
+     "provider": "firstParty",
+     "costBasis": "list"
+    },
+    "claude-opus-5-5": {
+     "inputTokens": 78,
+     "outputTokens": 50921,
+     "cacheReadInputTokens": 3485775,
+     "cacheCreationInputTokens": 137336,
+     "webSearchRequests": 0,
+     "costUSD": 2.814575,
+     "contextWindow": 1000000,
+     "maxOutputTokens": 128000,
+     "thinkingTokens": 10132,
+     "canonicalModel": "claude-opus-5-5",
+     "provider": "firstParty",
+     "costBasis": "list"
+    }
+   },
+   "result": "I wrote 15 pages under `kb/knowledge/`: `repositories/got`, `api/got-instance`, `modules/request`, `modules/options`, `modules/as-promise`, `modules/timed-out`, `concepts/options-merging`, `concepts/hooks`, `concepts/request-error`, `usecases/retry`, `usecases/redirects`, `usecases/pagination`, `integrations/cacheable-request`, `integrations/http2-wrapper`, `synthesis/promise-vs-stream`. I did not run `accreta reindex` or `accreta lint` because I have no shell here, and a manual check only confirmed that every wikilink points to a page I wrote.",
+   "is_error": false
+  },
+  {
+   "run": 2,
+   "revision": "b1d61c173a681755ac23afb2f155f08801c1e7e4",
+   "code": 0,
+   "wall_ms": 419963,
+   "duration_api_ms": 403981,
+   "num_turns": 76,
+   "total_cost_usd": 2.3185176,
+   "usage": {
+    "input_tokens": 52,
+    "cache_creation_input_tokens": 128101,
+    "cache_read_input_tokens": 2031703,
+    "output_tokens": 44301,
+    "output_tokens_details": {
+     "thinking_tokens": 7483
+    },
+    "server_tool_use": {
+     "web_search_requests": 0,
+     "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 128101,
+     "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+     {
+      "input_tokens": 2,
+      "output_tokens": 245,
+      "cache_read_input_tokens": 128274,
+      "cache_creation_input_tokens": 3421,
+      "cache_creation": {
+       "ephemeral_5m_input_tokens": 0,
+       "ephemeral_1h_input_tokens": 3421
+      },
+      "type": "message"
+     }
+    ],
+    "speed": "standard"
+   },
+   "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+     "inputTokens": 1066,
+     "outputTokens": 15,
+     "cacheReadInputTokens": 0,
+     "cacheCreationInputTokens": 0,
+     "webSearchRequests": 0,
+     "costUSD": 0.001141,
+     "contextWindow": 200000,
+     "maxOutputTokens": 32000,
+     "thinkingTokens": 0,
+     "canonicalModel": "claude-haiku-4-5",
+     "provider": "firstParty",
+     "costBasis": "list"
+    },
+    "claude-opus-5-5": {
+     "inputTokens": 52,
+     "outputTokens": 44301,
+     "cacheReadInputTokens": 2031703,
+     "cacheCreationInputTokens": 128101,
+     "webSearchRequests": 0,
+     "costUSD": 2.3173766000000002,
+     "contextWindow": 1000000,
+     "maxOutputTokens": 128000,
+     "thinkingTokens": 7483,
+     "canonicalModel": "claude-opus-5-5",
+     "provider": "firstParty",
+     "costBasis": "list"
+    }
+   },
+   "result": "I wrote 13 pages under `kb/knowledge/`: `repository/got.md`, `api/got-instance.md`, `modules/options.md`, `modules/request.md`, `modules/as-promise.md`, `concepts/option-merging.md`, `concepts/hooks.md`, `concepts/retry.md`, `concepts/request-errors.md`, `concepts/timeouts.md`, `usecases/redirects.md`, `usecases/pagination.md`, `integrations/http-cache.md`. I did not run `accreta reindex` or `accreta lint` because I have no shell here, so neither step has been done.",
+   "is_error": false
+  },
+  {
+   "run": 3,
+   "revision": "b1d61c173a681755ac23afb2f155f08801c1e7e4",
+   "code": 0,
+   "wall_ms": 366431,
+   "duration_api_ms": 355529,
+   "num_turns": 56,
+   "total_cost_usd": 2.0749874,
+   "usage": {
+    "input_tokens": 54,
+    "cache_creation_input_tokens": 113100,
+    "cache_read_input_tokens": 2063552,
+    "output_tokens": 37806,
+    "output_tokens_details": {
+     "thinking_tokens": 8724
+    },
+    "server_tool_use": {
+     "web_search_requests": 0,
+     "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 113100,
+     "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+     {
+      "input_tokens": 2,
+      "output_tokens": 351,
+      "cache_read_input_tokens": 121196,
+      "cache_creation_input_tokens": 1062,
+      "cache_creation": {
+       "ephemeral_5m_input_tokens": 0,
+       "ephemeral_1h_input_tokens": 1062
+      },
+      "type": "message"
+     }
+    ],
+    "speed": "standard"
+   },
+   "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+     "inputTokens": 1066,
+     "outputTokens": 15,
+     "cacheReadInputTokens": 0,
+     "cacheCreationInputTokens": 0,
+     "webSearchRequests": 0,
+     "costUSD": 0.001141,
+     "contextWindow": 200000,
+     "maxOutputTokens": 32000,
+     "thinkingTokens": 0,
+     "canonicalModel": "claude-haiku-4-5",
+     "provider": "firstParty",
+     "costBasis": "list"
+    },
+    "claude-opus-5-5": {
+     "inputTokens": 54,
+     "outputTokens": 37806,
+     "cacheReadInputTokens": 2063552,
+     "cacheCreationInputTokens": 113100,
+     "webSearchRequests": 0,
+     "costUSD": 2.0738464,
+     "contextWindow": 1000000,
+     "maxOutputTokens": 128000,
+     "thinkingTokens": 8724,
+     "canonicalModel": "claude-opus-5-5",
+     "provider": "firstParty",
+     "costBasis": "list"
+    }
+   },
+   "result": "I wrote 13 pages but did not run `accreta reindex` or `accreta lint`, because I have no shell here: `kb/knowledge/repository/got.md`, `api/got-instance.md`, `modules/options.md`, `modules/request.md`, `modules/as-promise.md`, `modules/timed-out.md`, `concepts/stream-and-promise-modes.md`, `concepts/hooks.md`, `concepts/error-model.md`, `usecases/retry.md`, `usecases/redirects.md`, `usecases/pagination.md`, `integration/cacheable-request.md`.",
+   "is_error": false
+  }
+ ]
+}

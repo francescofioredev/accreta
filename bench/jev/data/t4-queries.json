@@ -1,0 +1,4119 @@
+{
+ "seed": 20261003,
+ "per_class": 150,
+ "writer": "claude-sonnet-5",
+ "system": "You write one question a developer might type into a search box of a documentation site, whose answer is the specification described. Ask about what the specification lets you do or defines, in plain words. Do not use the specification's title, its acronyms or its distinctive terms; do not mention RFC numbers. Reply only with the JSON the schema requires.",
+ "queries": [
+  {
+   "id": "title:RFC9775",
+   "class": "title",
+   "query": "IRTF Code of Conduct",
+   "relevant": [
+    "knowledge/rfc/rfc9775.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC9995",
+   "class": "title",
+   "query": "CBOR Object Signing and Encryption (COSE) Hash Envelope",
+   "relevant": [
+    "knowledge/rfc/rfc9995.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC2884",
+   "class": "title",
+   "query": "Performance Evaluation of Explicit Congestion Notification (ECN) in IP Networks",
+   "relevant": [
+    "knowledge/rfc/rfc2884.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC4415",
+   "class": "title",
+   "query": "IANA Registration for Enumservice Voice",
+   "relevant": [
+    "knowledge/rfc/rfc4415.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC9927",
+   "class": "title",
+   "query": "Fixing the C-Flag in the Extended Address Registration Option (EARO)",
+   "relevant": [
+    "knowledge/rfc/rfc9927.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC4791",
+   "class": "title",
+   "query": "Calendaring Extensions to WebDAV (CalDAV)",
+   "relevant": [
+    "knowledge/rfc/rfc4791.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC8624",
+   "class": "title",
+   "query": "Algorithm Implementation Requirements and Usage Guidance for DNSSEC",
+   "relevant": [
+    "knowledge/rfc/rfc8624.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC3633",
+   "class": "title",
+   "query": "IPv6 Prefix Options for Dynamic Host Configuration Protocol (DHCP) version 6",
+   "relevant": [
+    "knowledge/rfc/rfc3633.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC1979",
+   "class": "title",
+   "query": "PPP Deflate Protocol",
+   "relevant": [
+    "knowledge/rfc/rfc1979.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC3481",
+   "class": "title",
+   "query": "TCP over Second (2.5G) and Third (3G) Generation Wireless Networks",
+   "relevant": [
+    "knowledge/rfc/rfc3481.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC9917",
+   "class": "title",
+   "query": "IGP Flexible Algorithms Reverse Affinity Constraint",
+   "relevant": [
+    "knowledge/rfc/rfc9917.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC9325",
+   "class": "title",
+   "query": "Recommendations for Secure Use of Transport Layer Security (TLS) and Datagram Transport Layer Security (DTLS)",
+   "relevant": [
+    "knowledge/rfc/rfc9325.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC8314",
+   "class": "title",
+   "query": "Cleartext Considered Obsolete: Use of Transport Layer Security (TLS) for Email Submission and Access",
+   "relevant": [
+    "knowledge/rfc/rfc8314.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC8240",
+   "class": "title",
+   "query": "Report from the Internet of Things Software Update (IoTSU) Workshop 2016",
+   "relevant": [
+    "knowledge/rfc/rfc8240.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC8321",
+   "class": "title",
+   "query": "Alternate-Marking Method for Passive and Hybrid Performance Monitoring",
+   "relevant": [
+    "knowledge/rfc/rfc8321.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC3123",
+   "class": "title",
+   "query": "A DNS RR Type for Lists of Address Prefixes (APL RR)",
+   "relevant": [
+    "knowledge/rfc/rfc3123.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC5076",
+   "class": "title",
+   "query": "ENUM Validation Information Mapping for the Extensible Provisioning Protocol",
+   "relevant": [
+    "knowledge/rfc/rfc5076.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC3465",
+   "class": "title",
+   "query": "TCP Congestion Control with Appropriate Byte Counting (ABC)",
+   "relevant": [
+    "knowledge/rfc/rfc3465.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC7873",
+   "class": "title",
+   "query": "Domain Name System (DNS) Cookies",
+   "relevant": [
+    "knowledge/rfc/rfc7873.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC7930",
+   "class": "title",
+   "query": "Larger Packets for RADIUS over TCP",
+   "relevant": [
+    "knowledge/rfc/rfc7930.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC6361",
+   "class": "title",
+   "query": "PPP Transparent Interconnection of Lots of Links (TRILL) Protocol Control Protocol",
+   "relevant": [
+    "knowledge/rfc/rfc6361.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC1616",
+   "class": "title",
+   "query": "X.400(1988) for the Academic and Research Community in Europe",
+   "relevant": [
+    "knowledge/rfc/rfc1616.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC8004",
+   "class": "title",
+   "query": "Host Identity Protocol (HIP) Rendezvous Extension",
+   "relevant": [
+    "knowledge/rfc/rfc8004.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC7925",
+   "class": "title",
+   "query": "Transport Layer Security (TLS) / Datagram Transport Layer Security (DTLS) Profiles for the Internet of Things",
+   "relevant": [
+    "knowledge/rfc/rfc7925.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC5256",
+   "class": "title",
+   "query": "Internet Message Access Protocol - SORT and THREAD Extensions",
+   "relevant": [
+    "knowledge/rfc/rfc5256.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC3202",
+   "class": "title",
+   "query": "Definitions of Managed Objects for Frame Relay Service Level Definitions",
+   "relevant": [
+    "knowledge/rfc/rfc3202.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC1524",
+   "class": "title",
+   "query": "A User Agent Configuration Mechanism For Multimedia Mail Format Information",
+   "relevant": [
+    "knowledge/rfc/rfc1524.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC5770",
+   "class": "title",
+   "query": "Basic Host Identity Protocol (HIP) Extensions for Traversal of Network Address Translators",
+   "relevant": [
+    "knowledge/rfc/rfc5770.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC9384",
+   "class": "title",
+   "query": "A BGP Cease NOTIFICATION Subcode for Bidirectional Forwarding Detection (BFD)",
+   "relevant": [
+    "knowledge/rfc/rfc9384.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC6827",
+   "class": "title",
+   "query": "Automatically Switched Optical Network (ASON) Routing for OSPFv2 Protocols",
+   "relevant": [
+    "knowledge/rfc/rfc6827.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC8049",
+   "class": "title",
+   "query": "YANG Data Model for L3VPN Service Delivery",
+   "relevant": [
+    "knowledge/rfc/rfc8049.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC5491",
+   "class": "title",
+   "query": "GEOPRIV Presence Information Data Format Location Object (PIDF-LO) Usage Clarification, Considerations, and Recommendations",
+   "relevant": [
+    "knowledge/rfc/rfc5491.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC9432",
+   "class": "title",
+   "query": "DNS Catalog Zones",
+   "relevant": [
+    "knowledge/rfc/rfc9432.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC3334",
+   "class": "title",
+   "query": "Policy-Based Accounting",
+   "relevant": [
+    "knowledge/rfc/rfc3334.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC3258",
+   "class": "title",
+   "query": "Distributing Authoritative Name Servers via Shared Unicast Addresses",
+   "relevant": [
+    "knowledge/rfc/rfc3258.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC7340",
+   "class": "title",
+   "query": "Secure Telephone Identity Problem Statement and Requirements",
+   "relevant": [
+    "knowledge/rfc/rfc7340.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC6108",
+   "class": "title",
+   "query": "Comcast's Web Notification System Design",
+   "relevant": [
+    "knowledge/rfc/rfc6108.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC5875",
+   "class": "title",
+   "query": "An Extensible Markup Language (XML) Configuration Access Protocol (XCAP) Diff Event Package",
+   "relevant": [
+    "knowledge/rfc/rfc5875.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC1782",
+   "class": "title",
+   "query": "TFTP Option Extension",
+   "relevant": [
+    "knowledge/rfc/rfc1782.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC4030",
+   "class": "title",
+   "query": "The Authentication Suboption for the Dynamic Host Configuration Protocol (DHCP) Relay Agent Option",
+   "relevant": [
+    "knowledge/rfc/rfc4030.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC7691",
+   "class": "title",
+   "query": "Updating the Term Dates of IETF Administrative Oversight Committee (IAOC) Members",
+   "relevant": [
+    "knowledge/rfc/rfc7691.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC9599",
+   "class": "title",
+   "query": "Guidelines for Adding Congestion Notification to Protocols that Encapsulate IP",
+   "relevant": [
+    "knowledge/rfc/rfc9599.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC9111",
+   "class": "title",
+   "query": "HTTP Caching",
+   "relevant": [
+    "knowledge/rfc/rfc9111.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC8268",
+   "class": "title",
+   "query": "More Modular Exponentiation (MODP) Diffie-Hellman (DH) Key Exchange (KEX) Groups for Secure Shell (SSH)",
+   "relevant": [
+    "knowledge/rfc/rfc8268.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC4332",
+   "class": "title",
+   "query": "Cisco's Mobile IPv4 Host Configuration Extensions",
+   "relevant": [
+    "knowledge/rfc/rfc4332.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC6071",
+   "class": "title",
+   "query": "IP Security (IPsec) and Internet Key Exchange (IKE) Document Roadmap",
+   "relevant": [
+    "knowledge/rfc/rfc6071.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC6008",
+   "class": "title",
+   "query": "Authentication-Results Registration for Differentiating among Cryptographic Results",
+   "relevant": [
+    "knowledge/rfc/rfc6008.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC6123",
+   "class": "title",
+   "query": "Inclusion of Manageability Sections in Path Computation Element (PCE) Working Group Drafts",
+   "relevant": [
+    "knowledge/rfc/rfc6123.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC7408",
+   "class": "title",
+   "query": "Forwarding and Control Element Separation (ForCES) Model Extension",
+   "relevant": [
+    "knowledge/rfc/rfc7408.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC6964",
+   "class": "title",
+   "query": "Operational Guidance for IPv6 Deployment in IPv4 Sites Using the Intra-Site Automatic Tunnel Addressing Protocol (ISATAP)",
+   "relevant": [
+    "knowledge/rfc/rfc6964.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC5230",
+   "class": "title",
+   "query": "Sieve Email Filtering: Vacation Extension",
+   "relevant": [
+    "knowledge/rfc/rfc5230.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC9017",
+   "class": "title",
+   "query": "Special-Purpose Label Terminology",
+   "relevant": [
+    "knowledge/rfc/rfc9017.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC9116",
+   "class": "title",
+   "query": "A File Format to Aid in Security Vulnerability Disclosure",
+   "relevant": [
+    "knowledge/rfc/rfc9116.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC3720",
+   "class": "title",
+   "query": "Internet Small Computer Systems Interface (iSCSI)",
+   "relevant": [
+    "knowledge/rfc/rfc3720.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC8221",
+   "class": "title",
+   "query": "Cryptographic Algorithm Implementation Requirements and Usage Guidance for Encapsulating Security Payload (ESP) and Authentication Header (AH)",
+   "relevant": [
+    "knowledge/rfc/rfc8221.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC6230",
+   "class": "title",
+   "query": "Media Control Channel Framework",
+   "relevant": [
+    "knowledge/rfc/rfc6230.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC9380",
+   "class": "title",
+   "query": "Hashing to Elliptic Curves",
+   "relevant": [
+    "knowledge/rfc/rfc9380.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC7665",
+   "class": "title",
+   "query": "Service Function Chaining (SFC) Architecture",
+   "relevant": [
+    "knowledge/rfc/rfc7665.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC6386",
+   "class": "title",
+   "query": "VP8 Data Format and Decoding Guide",
+   "relevant": [
+    "knowledge/rfc/rfc6386.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC7175",
+   "class": "title",
+   "query": "Transparent Interconnection of Lots of Links (TRILL): Bidirectional Forwarding Detection (BFD) Support",
+   "relevant": [
+    "knowledge/rfc/rfc7175.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC6983",
+   "class": "title",
+   "query": "Models for HTTP-Adaptive-Streaming-Aware Content Distribution Network Interconnection (CDNI)",
+   "relevant": [
+    "knowledge/rfc/rfc6983.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC2155",
+   "class": "title",
+   "query": "Definitions of Managed Objects for APPN using SMIv2",
+   "relevant": [
+    "knowledge/rfc/rfc2155.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC7914",
+   "class": "title",
+   "query": "The scrypt Password-Based Key Derivation Function",
+   "relevant": [
+    "knowledge/rfc/rfc7914.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC3378",
+   "class": "title",
+   "query": "EtherIP: Tunneling Ethernet Frames in IP Datagrams",
+   "relevant": [
+    "knowledge/rfc/rfc3378.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC7995",
+   "class": "title",
+   "query": "PDF Format for RFCs",
+   "relevant": [
+    "knowledge/rfc/rfc7995.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC3412",
+   "class": "title",
+   "query": "Message Processing and Dispatching for the Simple Network Management Protocol (SNMP)",
+   "relevant": [
+    "knowledge/rfc/rfc3412.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC1696",
+   "class": "title",
+   "query": "Modem Management Information Base (MIB) using SMIv2",
+   "relevant": [
+    "knowledge/rfc/rfc1696.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC3690",
+   "class": "title",
+   "query": "IP Telephony Requirements for Emergency Telecommunication Service (ETS)",
+   "relevant": [
+    "knowledge/rfc/rfc3690.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC5152",
+   "class": "title",
+   "query": "A Per-Domain Path Computation Method for Establishing Inter-Domain Traffic Engineering (TE) Label Switched Paths (LSPs)",
+   "relevant": [
+    "knowledge/rfc/rfc5152.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC2643",
+   "class": "title",
+   "query": "Cabletron's SecureFast VLAN Operational Model",
+   "relevant": [
+    "knowledge/rfc/rfc2643.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC2204",
+   "class": "title",
+   "query": "ODETTE File Transfer Protocol",
+   "relevant": [
+    "knowledge/rfc/rfc2204.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC2394",
+   "class": "title",
+   "query": "IP Payload Compression Using DEFLATE",
+   "relevant": [
+    "knowledge/rfc/rfc2394.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC1591",
+   "class": "title",
+   "query": "Domain Name System Structure and Delegation",
+   "relevant": [
+    "knowledge/rfc/rfc1591.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC2457",
+   "class": "title",
+   "query": "Definitions of Managed Objects for Extended Border Node",
+   "relevant": [
+    "knowledge/rfc/rfc2457.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC5226",
+   "class": "title",
+   "query": "Guidelines for Writing an IANA Considerations Section in RFCs",
+   "relevant": [
+    "knowledge/rfc/rfc5226.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC5094",
+   "class": "title",
+   "query": "Mobile IPv6 Vendor Specific Option",
+   "relevant": [
+    "knowledge/rfc/rfc5094.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC9409",
+   "class": "title",
+   "query": "The 'sip-trunking-capability' Link Relation Type",
+   "relevant": [
+    "knowledge/rfc/rfc9409.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC7439",
+   "class": "title",
+   "query": "Gap Analysis for Operating IPv6-Only MPLS Networks",
+   "relevant": [
+    "knowledge/rfc/rfc7439.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC5588",
+   "class": "title",
+   "query": "Generic Security Service Application Program Interface (GSS-API) Extension for Storing Delegated Credentials",
+   "relevant": [
+    "knowledge/rfc/rfc5588.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC4825",
+   "class": "title",
+   "query": "The Extensible Markup Language (XML) Configuration Access Protocol (XCAP)",
+   "relevant": [
+    "knowledge/rfc/rfc4825.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC8318",
+   "class": "title",
+   "query": "IAB, IESG, and IAOC Selection, Confirmation, and Recall Process: IAOC Advisor for the Nominating Committee",
+   "relevant": [
+    "knowledge/rfc/rfc8318.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC6642",
+   "class": "title",
+   "query": "RTP Control Protocol (RTCP) Extension for a Third-Party Loss Report",
+   "relevant": [
+    "knowledge/rfc/rfc6642.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC4298",
+   "class": "title",
+   "query": "RTP Payload Format for BroadVoice Speech Codecs",
+   "relevant": [
+    "knowledge/rfc/rfc4298.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC9235",
+   "class": "title",
+   "query": "TCP Authentication Option (TCP-AO) Test Vectors",
+   "relevant": [
+    "knowledge/rfc/rfc9235.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC5825",
+   "class": "title",
+   "query": "Displaying Downgraded Messages for Email Address Internationalization",
+   "relevant": [
+    "knowledge/rfc/rfc5825.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC5280",
+   "class": "title",
+   "query": "Internet X.509 Public Key Infrastructure Certificate and Certificate Revocation List (CRL) Profile",
+   "relevant": [
+    "knowledge/rfc/rfc5280.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC7973",
+   "class": "title",
+   "query": "Assignment of an Ethertype for IPv6 with Low-Power Wireless Personal Area Network (LoWPAN) Encapsulation",
+   "relevant": [
+    "knowledge/rfc/rfc7973.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC6517",
+   "class": "title",
+   "query": "Mandatory Features in a Layer 3 Multicast BGP/MPLS VPN Solution",
+   "relevant": [
+    "knowledge/rfc/rfc6517.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC9418",
+   "class": "title",
+   "query": "A YANG Data Model for Service Assurance",
+   "relevant": [
+    "knowledge/rfc/rfc9418.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC4733",
+   "class": "title",
+   "query": "RTP Payload for DTMF Digits, Telephony Tones, and Telephony Signals",
+   "relevant": [
+    "knowledge/rfc/rfc4733.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC3579",
+   "class": "title",
+   "query": "RADIUS (Remote Authentication Dial In User Service) Support For Extensible Authentication Protocol (EAP)",
+   "relevant": [
+    "knowledge/rfc/rfc3579.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC5990",
+   "class": "title",
+   "query": "Use of the RSA-KEM Key Transport Algorithm in the Cryptographic Message Syntax (CMS)",
+   "relevant": [
+    "knowledge/rfc/rfc5990.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC7358",
+   "class": "title",
+   "query": "Label Advertisement Discipline for LDP Forwarding Equivalence Classes (FECs)",
+   "relevant": [
+    "knowledge/rfc/rfc7358.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC9108",
+   "class": "title",
+   "query": "YANG Types for DNS Classes and Resource Record Types",
+   "relevant": [
+    "knowledge/rfc/rfc9108.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC7981",
+   "class": "title",
+   "query": "IS-IS Extensions for Advertising Router Information",
+   "relevant": [
+    "knowledge/rfc/rfc7981.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC2437",
+   "class": "title",
+   "query": "PKCS #1: RSA Cryptography Specifications Version 2.0",
+   "relevant": [
+    "knowledge/rfc/rfc2437.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC4595",
+   "class": "title",
+   "query": "Use of IKEv2 in the Fibre Channel Security Association Management Protocol",
+   "relevant": [
+    "knowledge/rfc/rfc4595.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC4924",
+   "class": "title",
+   "query": "Reflections on Internet Transparency",
+   "relevant": [
+    "knowledge/rfc/rfc4924.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC8534",
+   "class": "title",
+   "query": "Explicit Tracking with Wildcard Routes in Multicast VPN",
+   "relevant": [
+    "knowledge/rfc/rfc8534.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC3227",
+   "class": "title",
+   "query": "Guidelines for Evidence Collection and Archiving",
+   "relevant": [
+    "knowledge/rfc/rfc3227.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC2527",
+   "class": "title",
+   "query": "Internet X.509 Public Key Infrastructure Certificate Policy and Certification Practices Framework",
+   "relevant": [
+    "knowledge/rfc/rfc2527.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC8952",
+   "class": "title",
+   "query": "Captive Portal Architecture",
+   "relevant": [
+    "knowledge/rfc/rfc8952.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC6750",
+   "class": "title",
+   "query": "The OAuth 2.0 Authorization Framework: Bearer Token Usage",
+   "relevant": [
+    "knowledge/rfc/rfc6750.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC4861",
+   "class": "title",
+   "query": "Neighbor Discovery for IP version 6 (IPv6)",
+   "relevant": [
+    "knowledge/rfc/rfc4861.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC5183",
+   "class": "title",
+   "query": "Sieve Email Filtering: Environment Extension",
+   "relevant": [
+    "knowledge/rfc/rfc5183.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC5180",
+   "class": "title",
+   "query": "IPv6 Benchmarking Methodology for Network Interconnect Devices",
+   "relevant": [
+    "knowledge/rfc/rfc5180.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC4174",
+   "class": "title",
+   "query": "The IPv4 Dynamic Host Configuration Protocol (DHCP) Option for the Internet Storage Name Service",
+   "relevant": [
+    "knowledge/rfc/rfc4174.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC7620",
+   "class": "title",
+   "query": "Scenarios with Host Identification Complications",
+   "relevant": [
+    "knowledge/rfc/rfc7620.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC5468",
+   "class": "title",
+   "query": "Performance Analysis of Inter-Domain Path Computation Methodologies",
+   "relevant": [
+    "knowledge/rfc/rfc5468.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC7953",
+   "class": "title",
+   "query": "Calendar Availability",
+   "relevant": [
+    "knowledge/rfc/rfc7953.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC1688",
+   "class": "title",
+   "query": "IPng Mobility Considerations",
+   "relevant": [
+    "knowledge/rfc/rfc1688.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC3915",
+   "class": "title",
+   "query": "Domain Registry Grace Period Mapping for the Extensible Provisioning Protocol (EPP)",
+   "relevant": [
+    "knowledge/rfc/rfc3915.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC3685",
+   "class": "title",
+   "query": "SIEVE Email Filtering: Spamtest and VirusTest Extensions",
+   "relevant": [
+    "knowledge/rfc/rfc3685.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC8342",
+   "class": "title",
+   "query": "Network Management Datastore Architecture (NMDA)",
+   "relevant": [
+    "knowledge/rfc/rfc8342.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC2880",
+   "class": "title",
+   "query": "Internet Fax T.30 Feature Mapping",
+   "relevant": [
+    "knowledge/rfc/rfc2880.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC5048",
+   "class": "title",
+   "query": "Internet Small Computer System Interface (iSCSI) Corrections and Clarifications",
+   "relevant": [
+    "knowledge/rfc/rfc5048.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC4647",
+   "class": "title",
+   "query": "Matching of Language Tags",
+   "relevant": [
+    "knowledge/rfc/rfc4647.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC4672",
+   "class": "title",
+   "query": "RADIUS Dynamic Authorization Client MIB",
+   "relevant": [
+    "knowledge/rfc/rfc4672.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC6792",
+   "class": "title",
+   "query": "Guidelines for Use of the RTP Monitoring Framework",
+   "relevant": [
+    "knowledge/rfc/rfc6792.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC2487",
+   "class": "title",
+   "query": "SMTP Service Extension for Secure SMTP over TLS",
+   "relevant": [
+    "knowledge/rfc/rfc2487.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC3563",
+   "class": "title",
+   "query": "Cooperative Agreement Between the ISOC/IETF and ISO/IEC Joint Technical Committee 1/Sub Committee 6 (JTC1/SC6) on IS-IS Routing Protocol Development",
+   "relevant": [
+    "knowledge/rfc/rfc3563.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC7971",
+   "class": "title",
+   "query": "Application-Layer Traffic Optimization (ALTO) Deployment Considerations",
+   "relevant": [
+    "knowledge/rfc/rfc7971.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC4912",
+   "class": "title",
+   "query": "Abstract Syntax Notation X (ASN.X)",
+   "relevant": [
+    "knowledge/rfc/rfc4912.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC1853",
+   "class": "title",
+   "query": "IP in IP Tunneling",
+   "relevant": [
+    "knowledge/rfc/rfc1853.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC7185",
+   "class": "title",
+   "query": "Link Metrics for the Mobile Ad Hoc Network (MANET) Routing Protocol OLSRv2 - Rationale",
+   "relevant": [
+    "knowledge/rfc/rfc7185.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC1922",
+   "class": "title",
+   "query": "Chinese Character Encoding for Internet Messages",
+   "relevant": [
+    "knowledge/rfc/rfc1922.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC9462",
+   "class": "title",
+   "query": "Discovery of Designated Resolvers",
+   "relevant": [
+    "knowledge/rfc/rfc9462.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC1731",
+   "class": "title",
+   "query": "IMAP4 Authentication Mechanisms",
+   "relevant": [
+    "knowledge/rfc/rfc1731.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC2532",
+   "class": "title",
+   "query": "Extended Facsimile Using Internet Mail",
+   "relevant": [
+    "knowledge/rfc/rfc2532.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC1787",
+   "class": "title",
+   "query": "Routing in a Multi-provider Internet",
+   "relevant": [
+    "knowledge/rfc/rfc1787.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC1744",
+   "class": "title",
+   "query": "Observations on the Management of the Internet Address Space",
+   "relevant": [
+    "knowledge/rfc/rfc1744.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC7670",
+   "class": "title",
+   "query": "Generic Raw Public-Key Support for IKEv2",
+   "relevant": [
+    "knowledge/rfc/rfc7670.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC6231",
+   "class": "title",
+   "query": "An Interactive Voice Response (IVR) Control Package for the Media Control Channel Framework",
+   "relevant": [
+    "knowledge/rfc/rfc6231.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC8132",
+   "class": "title",
+   "query": "PATCH and FETCH Methods for the Constrained Application Protocol (CoAP)",
+   "relevant": [
+    "knowledge/rfc/rfc8132.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC5130",
+   "class": "title",
+   "query": "A Policy Control Mechanism in IS-IS Using Administrative Tags",
+   "relevant": [
+    "knowledge/rfc/rfc5130.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC5019",
+   "class": "title",
+   "query": "The Lightweight Online Certificate Status Protocol (OCSP) Profile for High-Volume Environments",
+   "relevant": [
+    "knowledge/rfc/rfc5019.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC8333",
+   "class": "title",
+   "query": "Micro-loop Prevention by Introducing a Local Convergence Delay",
+   "relevant": [
+    "knowledge/rfc/rfc8333.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC2096",
+   "class": "title",
+   "query": "IP Forwarding Table MIB",
+   "relevant": [
+    "knowledge/rfc/rfc2096.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC7149",
+   "class": "title",
+   "query": "Software-Defined Networking: A Perspective from within a Service Provider Environment",
+   "relevant": [
+    "knowledge/rfc/rfc7149.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC9784",
+   "class": "title",
+   "query": "Virtual Ethernet Segments for EVPN and Provider Backbone Bridge EVPN",
+   "relevant": [
+    "knowledge/rfc/rfc9784.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC4544",
+   "class": "title",
+   "query": "Definitions of Managed Objects for Internet Small Computer System Interface (iSCSI)",
+   "relevant": [
+    "knowledge/rfc/rfc4544.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC4267",
+   "class": "title",
+   "query": "The W3C Speech Interface Framework Media Types: application/voicexml+xml, application/ssml+xml, application/srgs, application/srgs+xml, application/ccxml+xml, and application/pls+xml",
+   "relevant": [
+    "knowledge/rfc/rfc4267.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC5131",
+   "class": "title",
+   "query": "A MIB Textual Convention for Language Tags",
+   "relevant": [
+    "knowledge/rfc/rfc5131.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC6045",
+   "class": "title",
+   "query": "Real-time Inter-network Defense (RID)",
+   "relevant": [
+    "knowledge/rfc/rfc6045.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC3841",
+   "class": "title",
+   "query": "Caller Preferences for the Session Initiation Protocol (SIP)",
+   "relevant": [
+    "knowledge/rfc/rfc3841.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC3580",
+   "class": "title",
+   "query": "IEEE 802.1X Remote Authentication Dial In User Service (RADIUS) Usage Guidelines",
+   "relevant": [
+    "knowledge/rfc/rfc3580.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC5903",
+   "class": "title",
+   "query": "Elliptic Curve Groups modulo a Prime (ECP Groups) for IKE and IKEv2",
+   "relevant": [
+    "knowledge/rfc/rfc5903.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC6896",
+   "class": "title",
+   "query": "SCS: KoanLogic's Secure Cookie Sessions for HTTP",
+   "relevant": [
+    "knowledge/rfc/rfc6896.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC7039",
+   "class": "title",
+   "query": "Source Address Validation Improvement (SAVI) Framework",
+   "relevant": [
+    "knowledge/rfc/rfc7039.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "title:RFC2964",
+   "class": "title",
+   "query": "Use of HTTP State Management",
+   "relevant": [
+    "knowledge/rfc/rfc2964.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC9761",
+   "class": "paraphrase",
+   "query": "How can a device profile specify expected encrypted connection settings so a network can flag unusual or unauthorized secure traffic from that device?",
+   "relevant": [
+    "knowledge/rfc/rfc9761.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC6829",
+   "class": "paraphrase",
+   "query": "How do I run LSP ping and traceroute checks on pseudowires that were established over IPv6 LDP sessions?",
+   "relevant": [
+    "knowledge/rfc/rfc6829.md",
+    "knowledge/rfc/rfc8029.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC8897",
+   "class": "paraphrase",
+   "query": "What are the software requirements that a client validating certificates and route origin data in the resource certification system needs to implement?",
+   "relevant": [
+    "knowledge/rfc/rfc8897.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC4955",
+   "class": "paraphrase",
+   "query": "How can I test experimental DNS security extensions on my domain without breaking standard DNSSEC validation for everyone else?",
+   "relevant": [
+    "knowledge/rfc/rfc4955.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC1984",
+   "class": "paraphrase",
+   "query": "Why does the IETF think strong encryption is needed to protect privacy and secure online business transactions?",
+   "relevant": [
+    "knowledge/rfc/rfc1984.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC4702",
+   "class": "paraphrase",
+   "query": "How can a DHCP server and client exchange the client's full domain name and agree on who updates the DNS record for its IP address?",
+   "relevant": [
+    "knowledge/rfc/rfc4702.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC3473",
+   "class": "paraphrase",
+   "query": "How do I extend RSVP-TE signaling to set up label-switched paths for non-packet switching types like time-division, wavelength, and fiber/port switching?",
+   "relevant": [
+    "knowledge/rfc/rfc3473.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC4448",
+   "class": "paraphrase",
+   "query": "How do you encapsulate and carry Ethernet frames over a point-to-point virtual circuit across a packet-based backbone network to emulate a direct Ethernet link between two sites?",
+   "relevant": [
+    "knowledge/rfc/rfc4448.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC3797",
+   "class": "paraphrase",
+   "query": "How can I pick people at random from a group in a way that anyone can verify afterward that the selection wasn't rigged?",
+   "relevant": [
+    "knowledge/rfc/rfc3797.md",
+    "knowledge/rfc/rfc2777.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC6666",
+   "class": "paraphrase",
+   "query": "Why does IPv6 need a dedicated address block reserved for dropping or rerouting traffic during a DoS attack, and how should that block be registered with IANA?",
+   "relevant": [
+    "knowledge/rfc/rfc6666.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC4122",
+   "class": "paraphrase",
+   "query": "How is a 128-bit unique identifier generated and formatted so it's guaranteed to be unique across systems?",
+   "relevant": [
+    "knowledge/rfc/rfc4122.md",
+    "knowledge/rfc/rfc9562.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC8798",
+   "class": "paraphrase",
+   "query": "How do I register additional measurement unit names, including ones derived by linear scaling from existing units, for use in sensor data formats?",
+   "relevant": [
+    "knowledge/rfc/rfc8798.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC6474",
+   "class": "paraphrase",
+   "query": "How can I add birthplace, place of death, and date of death fields to a digital contact card format?",
+   "relevant": [
+    "knowledge/rfc/rfc6474.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC7104",
+   "class": "paraphrase",
+   "query": "How do I group duplicate RTP streams in SDP so a receiver can use them for loss recovery?",
+   "relevant": [
+    "knowledge/rfc/rfc7104.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC8645",
+   "class": "paraphrase",
+   "query": "How can I extend the safe usage limit of a symmetric encryption key by deriving new keys, and what methods are recommended for use with modes like CTR, GCM, CBC, CFB, and OMAC?",
+   "relevant": [
+    "knowledge/rfc/rfc8645.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC5517",
+   "class": "paraphrase",
+   "query": "How can devices on the same IP subnet be kept isolated from each other at the switching layer while still sharing that subnet?",
+   "relevant": [
+    "knowledge/rfc/rfc5517.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC5621",
+   "class": "paraphrase",
+   "query": "How does SIP handle attachments or content like text, images, or other file types within a message, and what's expected for supporting those content types on the user agent side?",
+   "relevant": [
+    "knowledge/rfc/rfc5621.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC3008",
+   "class": "paraphrase",
+   "query": "How is a key authorized to sign a set of DNS records, and what rules determine which keys are valid signers in secure DNS resolution?",
+   "relevant": [
+    "knowledge/rfc/rfc3008.md",
+    "knowledge/rfc/rfc4033.md",
+    "knowledge/rfc/rfc4034.md",
+    "knowledge/rfc/rfc4035.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC4276",
+   "class": "paraphrase",
+   "query": "Which vendors reported on their support for the border gateway routing protocol in an implementation feature survey, and what were the results?",
+   "relevant": [
+    "knowledge/rfc/rfc4276.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC10023",
+   "class": "paraphrase",
+   "query": "Is there a standard DNS name I can add to signal that a domain is for sale without affecting its current use?",
+   "relevant": [
+    "knowledge/rfc/rfc10023.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC4970",
+   "class": "paraphrase",
+   "query": "How can a router advertise its optional capabilities to other routers in an OSPF network, and what new advertisement type is used to carry that information?",
+   "relevant": [
+    "knowledge/rfc/rfc4970.md",
+    "knowledge/rfc/rfc7770.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC4728",
+   "class": "paraphrase",
+   "query": "How does on-demand route discovery and maintenance work for mobile wireless ad hoc networks without existing infrastructure?",
+   "relevant": [
+    "knowledge/rfc/rfc4728.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC7993",
+   "class": "paraphrase",
+   "query": "What are the requirements for the default stylesheet used to style RFC documents, including how it should support accessibility and adapt to different screen sizes?",
+   "relevant": [
+    "knowledge/rfc/rfc7993.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC9901",
+   "class": "paraphrase",
+   "query": "How can I hide specific fields in a signed JSON token so only chosen claims are revealed when it's presented?",
+   "relevant": [
+    "knowledge/rfc/rfc9901.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC3314",
+   "class": "paraphrase",
+   "query": "What are the recommendations for how mobile network standards should handle assigning multiple IPv6 address prefixes to a device connection, ensuring each prefix goes to only one connection, and allowing devices to pick their own interface identifiers, including random ones?",
+   "relevant": [
+    "knowledge/rfc/rfc3314.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC6709",
+   "class": "paraphrase",
+   "query": "What are some best practices and design considerations for making an Internet protocol extensible when it's first being designed?",
+   "relevant": [
+    "knowledge/rfc/rfc6709.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC5137",
+   "class": "paraphrase",
+   "query": "What are the recommended approaches for encoding characters that can't be sent directly in a protocol, like using numeric escapes for non-ASCII or Unicode characters?",
+   "relevant": [
+    "knowledge/rfc/rfc5137.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC9541",
+   "class": "paraphrase",
+   "query": "How does MAC address flushing work when combining backbone bridging with EVPN in networks that don't use Ethernet Segments (i.e., zero ESI attachment circuits) but still need per-service instance flush granularity?",
+   "relevant": [
+    "knowledge/rfc/rfc9541.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC2982",
+   "class": "paraphrase",
+   "query": "How do I define and monitor managed objects that represent expressions or calculations built from other MIB objects for SNMP-based network management?",
+   "relevant": [
+    "knowledge/rfc/rfc2982.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC9215",
+   "class": "paraphrase",
+   "query": "How do I represent Russian GOST digital signature and hash algorithm keys and certificates in X.509 PKI formats, including their object identifiers and parameter encodings?",
+   "relevant": [
+    "knowledge/rfc/rfc9215.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC4139",
+   "class": "paraphrase",
+   "query": "What extra signaling requirements does GMPLS need to support automatically switched optical network features for connections like SONET/SDH and OTN?",
+   "relevant": [
+    "knowledge/rfc/rfc4139.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC7793",
+   "class": "paraphrase",
+   "query": "How do I stop reverse DNS lookups for the 100.64.0.0/10 shared address range from being sent out to the public DNS system, and how do I get those zones added to the list of DNS zones that should only be resolved locally?",
+   "relevant": [
+    "knowledge/rfc/rfc7793.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC8927",
+   "class": "paraphrase",
+   "query": "What's a good JSON-based way to define the structure and expected fields of my JSON data so I can generate code and validate messages consistently across different languages?",
+   "relevant": [
+    "knowledge/rfc/rfc8927.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC5530",
+   "class": "paraphrase",
+   "query": "What are the standard machine-readable codes that can appear in IMAP server response messages, and what do they mean?",
+   "relevant": [
+    "knowledge/rfc/rfc5530.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC6202",
+   "class": "paraphrase",
+   "query": "What are the known issues and recommended best practices for implementing server push using techniques like long polling or HTTP streaming?",
+   "relevant": [
+    "knowledge/rfc/rfc6202.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC7504",
+   "class": "paraphrase",
+   "query": "What SMTP reply code should a server return to indicate that a host doesn't accept any incoming mail at all?",
+   "relevant": [
+    "knowledge/rfc/rfc7504.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC9817",
+   "class": "paraphrase",
+   "query": "What are some real-world use cases and open research questions for running processing tasks directly on network devices like switches and NICs?",
+   "relevant": [
+    "knowledge/rfc/rfc9817.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC7858",
+   "class": "paraphrase",
+   "query": "How can I encrypt DNS queries using TLS to keep them private between a client and resolver?",
+   "relevant": [
+    "knowledge/rfc/rfc7858.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC7333",
+   "class": "paraphrase",
+   "query": "What are the key requirements for managing mobility in a way that avoids routing traffic through centralized anchor points in wireless networks?",
+   "relevant": [
+    "knowledge/rfc/rfc7333.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC5743",
+   "class": "paraphrase",
+   "query": "How does the process work for approving and publishing documents from an internet research group as an official document series, and what review steps are involved before publication?",
+   "relevant": [
+    "knowledge/rfc/rfc5743.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC8622",
+   "class": "paraphrase",
+   "query": "How should routers treat low-priority background traffic (like bulk backups or software updates) so it doesn't interfere with normal internet traffic during congestion, and what marking value should be used for it?",
+   "relevant": [
+    "knowledge/rfc/rfc8622.md",
+    "knowledge/rfc/rfc3662.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC2940",
+   "class": "paraphrase",
+   "query": "What variables can I monitor via SNMP for a client that communicates using the policy service protocol between a policy server and enforcement point?",
+   "relevant": [
+    "knowledge/rfc/rfc2940.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC1815",
+   "class": "paraphrase",
+   "query": "How do you define restricted character sets and naming conventions for using the universal character set in practice, like limiting allowed characters, disallowing certain combinations, and adding language tags?",
+   "relevant": [
+    "knowledge/rfc/rfc1815.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC6095",
+   "class": "paraphrase",
+   "query": "What extensions or additional language features have been proposed for modeling network configuration data to make data models more extensible and reusable?",
+   "relevant": [
+    "knowledge/rfc/rfc6095.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC3726",
+   "class": "paraphrase",
+   "query": "What are the requirements for handling signaling (like QoS reservations) when it needs to cross different network domains or technologies?",
+   "relevant": [
+    "knowledge/rfc/rfc3726.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC9045",
+   "class": "paraphrase",
+   "query": "What are the updated requirements for which hashing and MAC algorithms must be supported when using password-based integrity protection in certificate request messages?",
+   "relevant": [
+    "knowledge/rfc/rfc9045.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC6277",
+   "class": "paraphrase",
+   "query": "How can a client tell a certificate status responder which signature algorithms it supports, and how does the server decide which algorithm to sign its response with?",
+   "relevant": [
+    "knowledge/rfc/rfc6277.md",
+    "knowledge/rfc/rfc6960.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC3981",
+   "class": "paraphrase",
+   "query": "How do I use an XML-based protocol to query and retrieve information from an internet registry, and extend it for custom registry services?",
+   "relevant": [
+    "knowledge/rfc/rfc3981.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC1991",
+   "class": "paraphrase",
+   "query": "What's the file format for messages that have been encrypted and/or digitally signed using PGP?",
+   "relevant": [
+    "knowledge/rfc/rfc1991.md",
+    "knowledge/rfc/rfc4880.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC9139",
+   "class": "paraphrase",
+   "query": "How can information-centric networking packets like CCNx or NDN be carried efficiently over low-power IEEE 802.15.4 wireless networks with small frame sizes, including how to fragment, dispatch, and compress the packet headers to save space?",
+   "relevant": [
+    "knowledge/rfc/rfc9139.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC3501",
+   "class": "paraphrase",
+   "query": "How does a client connect to a mail server to browse folders, read, search, and manage messages remotely?",
+   "relevant": [
+    "knowledge/rfc/rfc3501.md",
+    "knowledge/rfc/rfc2060.md",
+    "knowledge/rfc/rfc9051.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC2293",
+   "class": "paraphrase",
+   "query": "How can I store key-to-value lookup tables or map a distinguished name to extra attribute values using a directory subtree structure?",
+   "relevant": [
+    "knowledge/rfc/rfc2293.md",
+    "knowledge/rfc/rfc1837.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC5697",
+   "class": "paraphrase",
+   "query": "Is there a certificate extension that lets you mark multiple certificates as belonging to the same entity so apps can treat them as equivalent for shared state data?",
+   "relevant": [
+    "knowledge/rfc/rfc5697.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC8378",
+   "class": "paraphrase",
+   "query": "How can multicast traffic be delivered between sites that don't have native multicast connectivity across the core network, using unicast replication and a mapping system to locate remote sites?",
+   "relevant": [
+    "knowledge/rfc/rfc8378.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC9852",
+   "class": "paraphrase",
+   "query": "Why should new protocols require the latest version of TLS instead of allowing older versions?",
+   "relevant": [
+    "knowledge/rfc/rfc9852.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC7403",
+   "class": "paraphrase",
+   "query": "How can I do a hop-by-hop test call to check the media path through relaying B2BUAs, similar to traceroute but using media loopback?",
+   "relevant": [
+    "knowledge/rfc/rfc7403.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC2288",
+   "class": "paraphrase",
+   "query": "How can book, serial, and article identifiers like ISBN, ISSN, and SICI be represented as URNs?",
+   "relevant": [
+    "knowledge/rfc/rfc2288.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC5090",
+   "class": "paraphrase",
+   "query": "How can I use RADIUS to carry HTTP-style Digest Authentication credentials for things like SIP?",
+   "relevant": [
+    "knowledge/rfc/rfc5090.md",
+    "knowledge/rfc/rfc4590.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC6379",
+   "class": "paraphrase",
+   "query": "What predefined algorithm combinations can I use to set up IPsec so it matches NSA Suite B cryptography requirements?",
+   "relevant": [
+    "knowledge/rfc/rfc6379.md",
+    "knowledge/rfc/rfc4869.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC6227",
+   "class": "paraphrase",
+   "query": "What are the prioritized goals a new Internet routing and addressing system should meet to solve scalability, mobility, multihoming, and traffic engineering problems?",
+   "relevant": [
+    "knowledge/rfc/rfc6227.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC8425",
+   "class": "paraphrase",
+   "query": "Is there an official registry for the flag bits in the IPv6 Router Advertisement Prefix Information Option, and how do I register a new flag bit there?",
+   "relevant": [
+    "knowledge/rfc/rfc8425.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC5792",
+   "class": "paraphrase",
+   "query": "How do endpoints exchange posture attribute information for network access assessment, and how does that message format measure up against the standard NEA requirements?",
+   "relevant": [
+    "knowledge/rfc/rfc5792.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC8229",
+   "class": "paraphrase",
+   "query": "How can I send VPN key negotiation and encrypted tunnel traffic over a TCP connection when UDP is blocked by a firewall or NAT device?",
+   "relevant": [
+    "knowledge/rfc/rfc8229.md",
+    "knowledge/rfc/rfc9329.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC2557",
+   "class": "paraphrase",
+   "query": "How can I package an HTML page together with its images and other linked resources into a single email-style message, and how do I reference those attached resources from within the HTML?",
+   "relevant": [
+    "knowledge/rfc/rfc2557.md",
+    "knowledge/rfc/rfc2110.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC8272",
+   "class": "paraphrase",
+   "query": "How do you send smart meter data records efficiently over a low-power wireless network like 6LoWPAN, and how do you convert that compact data format into a standard flow export format on a gateway device?",
+   "relevant": [
+    "knowledge/rfc/rfc8272.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC5646",
+   "class": "paraphrase",
+   "query": "How do I properly format a code that identifies a language, like the subtags for region or script, when tagging content with its language?",
+   "relevant": [
+    "knowledge/rfc/rfc5646.md",
+    "knowledge/rfc/rfc4646.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC4865",
+   "class": "paraphrase",
+   "query": "How can an email client tell a mail server to hold a message and send it out at a specific future time instead of delivering it right away?",
+   "relevant": [
+    "knowledge/rfc/rfc4865.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC2044",
+   "class": "paraphrase",
+   "query": "How do I encode 16-bit Unicode characters into a byte format that stays compatible with plain ASCII text?",
+   "relevant": [
+    "knowledge/rfc/rfc2044.md",
+    "knowledge/rfc/rfc2279.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC4046",
+   "class": "paraphrase",
+   "query": "What's the general architecture and framework for building key management protocols that set up shared security associations for group communication (one-to-many or many-to-many)?",
+   "relevant": [
+    "knowledge/rfc/rfc4046.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC3888",
+   "class": "paraphrase",
+   "query": "How can I track the path and delivery status of an email as it moves through a messaging system?",
+   "relevant": [
+    "knowledge/rfc/rfc3888.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC8896",
+   "class": "paraphrase",
+   "query": "How can a network guidance service expose time-varying cost values so apps can pick the best time interval, not just the best path, for scheduling large data transfers?",
+   "relevant": [
+    "knowledge/rfc/rfc8896.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC7413",
+   "class": "paraphrase",
+   "query": "How can I let a TCP connection send data during the initial handshake instead of waiting for it to finish, to cut down on connection setup latency?",
+   "relevant": [
+    "knowledge/rfc/rfc7413.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC3960",
+   "class": "paraphrase",
+   "query": "What are the recommended approaches for handling audio played before a call is answered, and how should a system decide whether to generate its own ringback tone locally?",
+   "relevant": [
+    "knowledge/rfc/rfc3960.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC5508",
+   "class": "paraphrase",
+   "query": "How should devices that translate network addresses handle ICMP error and echo messages so they work reliably with different applications?",
+   "relevant": [
+    "knowledge/rfc/rfc5508.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC2136",
+   "class": "paraphrase",
+   "query": "How do I dynamically add or delete DNS records in a zone, and how do prerequisite conditions for those updates work?",
+   "relevant": [
+    "knowledge/rfc/rfc2136.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC2838",
+   "class": "paraphrase",
+   "query": "How can I construct a URI that identifies a specific television broadcast channel, such as one received over terrestrial, satellite, or cable transmission?",
+   "relevant": [
+    "knowledge/rfc/rfc2838.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC7510",
+   "class": "paraphrase",
+   "query": "How can I wrap MPLS packets inside UDP so they can take advantage of ECMP or link aggregation, and what are the rules for safely deploying this within a single operator's network?",
+   "relevant": [
+    "knowledge/rfc/rfc7510.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC5611",
+   "class": "paraphrase",
+   "query": "How do I carry TDM traffic (both structure-agnostic and CESoPSN-style structure-aware) as a pseudowire over an IP tunneling protocol?",
+   "relevant": [
+    "knowledge/rfc/rfc5611.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC9835",
+   "class": "paraphrase",
+   "query": "Is there a data model for representing and provisioning attachment circuits on provider edge routers, including how it extends the base network and service attachment point models?",
+   "relevant": [
+    "knowledge/rfc/rfc9835.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC9411",
+   "class": "paraphrase",
+   "query": "What's the recommended methodology and terminology for benchmarking the performance of modern firewalls and intrusion prevention systems that inspect layer 7 traffic?",
+   "relevant": [
+    "knowledge/rfc/rfc9411.md",
+    "knowledge/rfc/rfc3511.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC1732",
+   "class": "paraphrase",
+   "query": "What are the recommended tips for making a mail server support older, legacy mail client versions?",
+   "relevant": [
+    "knowledge/rfc/rfc1732.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC1682",
+   "class": "paraphrase",
+   "query": "Is there a reference document analyzing how a common Unix system implements its networking stack, meant to help evaluate engineering trade-offs when choosing a next-generation Internet Protocol design?",
+   "relevant": [
+    "knowledge/rfc/rfc1682.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC3936",
+   "class": "paraphrase",
+   "query": "What are the guidelines for how to update and extend the reservation protocol used for signaling network resource requests, including rules for assigning new message types, object codes, and sub-object numbers?",
+   "relevant": [
+    "knowledge/rfc/rfc3936.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC7424",
+   "class": "paraphrase",
+   "query": "What techniques can help fully utilize the available bandwidth across multiple parallel paths, like link bundles or equal-cost routes, in a wired network?",
+   "relevant": [
+    "knowledge/rfc/rfc7424.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC9047",
+   "class": "paraphrase",
+   "query": "How can a route attribute carry a host's MAC and IP binding info so that a PE can answer ARP or neighbor discovery requests on its behalf in an EVPN network?",
+   "relevant": [
+    "knowledge/rfc/rfc9047.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC3439",
+   "class": "paraphrase",
+   "query": "Why should large-scale network design favor simplicity, and what guidelines help avoid complexity that limits scaling in backbone networks?",
+   "relevant": [
+    "knowledge/rfc/rfc3439.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC4458",
+   "class": "paraphrase",
+   "query": "How do I build a SIP URI that redirects a call to a specific service, like voicemail or an IVR system, based on the target extension?",
+   "relevant": [
+    "knowledge/rfc/rfc4458.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC7588",
+   "class": "paraphrase",
+   "query": "How do vendors typically handle fragmenting packets that use GRE tunneling to avoid MTU issues?",
+   "relevant": [
+    "knowledge/rfc/rfc7588.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC3729",
+   "class": "paraphrase",
+   "query": "What SNMP MIB objects can I use to monitor application response time and performance as seen by end-users?",
+   "relevant": [
+    "knowledge/rfc/rfc3729.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC4510",
+   "class": "paraphrase",
+   "query": "What are the different documents that make up the standard for accessing directory services over the network, and how do they fit together?",
+   "relevant": [
+    "knowledge/rfc/rfc4510.md",
+    "knowledge/rfc/rfc2251.md",
+    "knowledge/rfc/rfc2252.md",
+    "knowledge/rfc/rfc2253.md",
+    "knowledge/rfc/rfc2254.md",
+    "knowledge/rfc/rfc2255.md",
+    "knowledge/rfc/rfc2256.md",
+    "knowledge/rfc/rfc2829.md",
+    "knowledge/rfc/rfc2830.md",
+    "knowledge/rfc/rfc3377.md",
+    "knowledge/rfc/rfc3771.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC6224",
+   "class": "paraphrase",
+   "query": "How can multicast listener support be added for mobile nodes in a network using proxy-based mobility, without changing existing mobility or multicast protocols?",
+   "relevant": [
+    "knowledge/rfc/rfc6224.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC2382",
+   "class": "paraphrase",
+   "query": "How can quality-of-service reservations for IP traffic be handled when the underlying network uses ATM, and what issues come up in supporting that kind of resource signaling over an ATM link?",
+   "relevant": [
+    "knowledge/rfc/rfc2382.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC9865",
+   "class": "paraphrase",
+   "query": "How can I add cursor-based pagination support (extra query parameters and response fields) to a user/group directory API that already uses page tokens under the hood, instead of relying on offset-based paging?",
+   "relevant": [
+    "knowledge/rfc/rfc9865.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC2259",
+   "class": "paraphrase",
+   "query": "How does a client query a simple directory or lookup service to resolve names into information over the network?",
+   "relevant": [
+    "knowledge/rfc/rfc2259.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC8663",
+   "class": "paraphrase",
+   "query": "How can routers that only understand IP interoperate with segment routing MPLS routers by tunneling label stacks inside IP packets?",
+   "relevant": [
+    "knowledge/rfc/rfc8663.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC9270",
+   "class": "paraphrase",
+   "query": "How do you extend GMPLS signaling to control shared mesh protection for label switched paths, including support for sharing backup bandwidth among multiple working paths?",
+   "relevant": [
+    "knowledge/rfc/rfc9270.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC4714",
+   "class": "paraphrase",
+   "query": "What are the requirements and expectations for how technical documents get officially published and shared with the community?",
+   "relevant": [
+    "knowledge/rfc/rfc4714.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC7273",
+   "class": "paraphrase",
+   "query": "How do I signal in SDP which clock source a session's timestamps or media are referenced to for RTP synchronization?",
+   "relevant": [
+    "knowledge/rfc/rfc7273.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC8078",
+   "class": "paraphrase",
+   "query": "How can a child zone automatically signal DNSSEC key changes, including turning DNSSEC on or off, to its parent zone without manual intervention?",
+   "relevant": [
+    "knowledge/rfc/rfc8078.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC7631",
+   "class": "paraphrase",
+   "query": "What are the naming rules and guidelines for assigning names to registered type-length-value fields and their extensions used in mobile ad hoc network packet formats?",
+   "relevant": [
+    "knowledge/rfc/rfc7631.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC3278",
+   "class": "paraphrase",
+   "query": "How do I use elliptic curve public-key algorithms for signing and key exchange within a message syntax used for signed and encrypted data?",
+   "relevant": [
+    "knowledge/rfc/rfc3278.md",
+    "knowledge/rfc/rfc5753.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC2403",
+   "class": "paraphrase",
+   "query": "How do I use a keyed hashing method with a common message-digest algorithm to authenticate packets in IPsec's payload encryption and authentication header protocols?",
+   "relevant": [
+    "knowledge/rfc/rfc2403.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC9393",
+   "class": "paraphrase",
+   "query": "Is there a smaller, more compact binary format for representing software identification tags on devices with limited storage or bandwidth?",
+   "relevant": [
+    "knowledge/rfc/rfc9393.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC8392",
+   "class": "paraphrase",
+   "query": "How can I represent and securely transmit a compact set of claims about a subject using a binary format instead of JSON?",
+   "relevant": [
+    "knowledge/rfc/rfc8392.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC4627",
+   "class": "paraphrase",
+   "query": "What are the formatting rules for representing structured data as text in a lightweight, language-independent way?",
+   "relevant": [
+    "knowledge/rfc/rfc4627.md",
+    "knowledge/rfc/rfc7159.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC4327",
+   "class": "paraphrase",
+   "query": "What set of manageable objects can be used to monitor and configure link management sessions between neighboring network devices via SNMP?",
+   "relevant": [
+    "knowledge/rfc/rfc4327.md",
+    "knowledge/rfc/rfc4631.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC9009",
+   "class": "paraphrase",
+   "query": "How can I efficiently tell nodes to remove stale downward routes in a low-power mesh network instead of relying on the old no-path advertisement method?",
+   "relevant": [
+    "knowledge/rfc/rfc9009.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC5115",
+   "class": "paraphrase",
+   "query": "How can call routing signaling indicate that a gateway supports priority services like emergency or government telephone preference calling in the PSTN?",
+   "relevant": [
+    "knowledge/rfc/rfc5115.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC6687",
+   "class": "paraphrase",
+   "query": "Are there any simulation results on how well the low-power mesh networking routing protocol performs in real-world sensor deployments and large smart meter networks?",
+   "relevant": [
+    "knowledge/rfc/rfc6687.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC4158",
+   "class": "paraphrase",
+   "query": "What best practices should I follow when building and validating certificate chains for a public-key infrastructure in my application?",
+   "relevant": [
+    "knowledge/rfc/rfc4158.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC9674",
+   "class": "paraphrase",
+   "query": "How should servers and clients restrict requests to the same origin when transferring delta and snapshot files in a repository update protocol, to limit exposure to other repository servers?",
+   "relevant": [
+    "knowledge/rfc/rfc9674.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC3893",
+   "class": "paraphrase",
+   "query": "How do I create a digitally-signed message body in SIP to verify the sender's identity and ensure the headers haven't been tampered with?",
+   "relevant": [
+    "knowledge/rfc/rfc3893.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC3970",
+   "class": "paraphrase",
+   "query": "What managed objects are defined for monitoring and configuring MPLS traffic engineering tunnels via SNMP?",
+   "relevant": [
+    "knowledge/rfc/rfc3970.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC2230",
+   "class": "paraphrase",
+   "query": "How can DNS records be used to let one server delegate authority to another server to act as its key exchanger on its behalf?",
+   "relevant": [
+    "knowledge/rfc/rfc2230.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC2076",
+   "class": "paraphrase",
+   "query": "Is there a reference list of common email header field names used in message headings?",
+   "relevant": [
+    "knowledge/rfc/rfc2076.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC3539",
+   "class": "paraphrase",
+   "query": "What are the recommended best practices for how authentication and accounting protocols should handle their underlying network transport, like dealing with congestion control and reliable delivery?",
+   "relevant": [
+    "knowledge/rfc/rfc3539.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC7604",
+   "class": "paraphrase",
+   "query": "What are the different methods for getting media streams through a NAT or firewall when setting up a streaming session, and what are the security and deployment trade-offs of each?",
+   "relevant": [
+    "knowledge/rfc/rfc7604.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC2313",
+   "class": "paraphrase",
+   "query": "How do you encrypt data using RSA public-key encryption?",
+   "relevant": [
+    "knowledge/rfc/rfc2313.md",
+    "knowledge/rfc/rfc2437.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC7713",
+   "class": "paraphrase",
+   "query": "How can a sender signal the amount of congestion its packets have experienced back into the network at the IP layer, so routers along the path can see the total congestion for traffic management purposes?",
+   "relevant": [
+    "knowledge/rfc/rfc7713.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC4982",
+   "class": "paraphrase",
+   "query": "How do I update address generation that's based on hashing a public key so it can use more than one hash algorithm, given recent weaknesses found in common hash functions?",
+   "relevant": [
+    "knowledge/rfc/rfc4982.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC8598",
+   "class": "paraphrase",
+   "query": "How can I configure a VPN client to resolve internal-only DNS domains through an IKEv2 tunnel while keeping other DNS lookups going through the normal public servers?",
+   "relevant": [
+    "knowledge/rfc/rfc8598.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC3459",
+   "class": "paraphrase",
+   "query": "How can a sender mark specific parts of a multi-part email as critical so that a gateway knows which parts must be delivered or can be safely dropped for less capable systems?",
+   "relevant": [
+    "knowledge/rfc/rfc3459.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC1733",
+   "class": "paraphrase",
+   "query": "What are the different ways an email client can interact with a mail server—like working offline, staying connected, or syncing intermittently—and how does IMAP support each approach?",
+   "relevant": [
+    "knowledge/rfc/rfc1733.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC8679",
+   "class": "paraphrase",
+   "query": "How can I quickly reroute traffic around a failed egress router or link in an MPLS/IP network before routing protocols fully converge?",
+   "relevant": [
+    "knowledge/rfc/rfc8679.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC5858",
+   "class": "paraphrase",
+   "query": "How do I extend the security policy and security association databases to support header compression over IPsec?",
+   "relevant": [
+    "knowledge/rfc/rfc5858.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC8248",
+   "class": "paraphrase",
+   "query": "What are the requirements and scope for continuously monitoring and automating security across an organization's IT assets, including the underlying architecture, data model, and how the information should be exchanged?",
+   "relevant": [
+    "knowledge/rfc/rfc8248.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC3135",
+   "class": "paraphrase",
+   "query": "What are the common techniques used to improve TCP performance over links like satellite or wireless networks that suffer from high latency or loss?",
+   "relevant": [
+    "knowledge/rfc/rfc3135.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC6720",
+   "class": "paraphrase",
+   "query": "How can I use TTL or Hop Limit checking to make sure LDP packets are only accepted from directly connected neighbors, protecting the router from spoofed control-plane traffic?",
+   "relevant": [
+    "knowledge/rfc/rfc6720.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC9793",
+   "class": "paraphrase",
+   "query": "How can BGP be extended to advertise the routing information needed to set up multicast forwarding that doesn't rely on per-tree state or an explicit tree-building protocol?",
+   "relevant": [
+    "knowledge/rfc/rfc9793.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC9592",
+   "class": "paraphrase",
+   "query": "Why is that informal guide explaining how the IETF works being discontinued as an official document, and where should new participants look for that kind of guidance now?",
+   "relevant": [
+    "knowledge/rfc/rfc9592.md",
+    "knowledge/rfc/rfc6722.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC1581",
+   "class": "paraphrase",
+   "query": "How does RIP support running over on-demand (dial-up) WAN links, and what implementation experience exists for it?",
+   "relevant": [
+    "knowledge/rfc/rfc1581.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC7947",
+   "class": "paraphrase",
+   "query": "How can multiple routers at an internet exchange point share BGP routes through a single central router server instead of setting up separate connections with each other?",
+   "relevant": [
+    "knowledge/rfc/rfc7947.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC3644",
+   "class": "paraphrase",
+   "query": "How do I model network QoS management policies for differentiated and integrated services in a way that's independent of storage or protocol?",
+   "relevant": [
+    "knowledge/rfc/rfc3644.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC5328",
+   "class": "paraphrase",
+   "query": "How is a unique naming identifier structured for referencing official documents, schemas, and other resources published by a digital broadcasting standards organization?",
+   "relevant": [
+    "knowledge/rfc/rfc5328.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC9037",
+   "class": "paraphrase",
+   "query": "How do you carry deterministic networking traffic using MPLS labels over an 802.1 time-sensitive networking segment?",
+   "relevant": [
+    "knowledge/rfc/rfc9037.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC6289",
+   "class": "paraphrase",
+   "query": "How do I register a URN prefix so that CableLabs can identify and manage its own resources?",
+   "relevant": [
+    "knowledge/rfc/rfc6289.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC5140",
+   "class": "paraphrase",
+   "query": "How do telephony gateways announce the phone number prefixes they support so that routing servers can learn about them?",
+   "relevant": [
+    "knowledge/rfc/rfc5140.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC5527",
+   "class": "paraphrase",
+   "query": "How can operators combine number lookups for regular subscribers and carrier/infrastructure routing under the same phone-number-based domain tree as a temporary, country-specific setup?",
+   "relevant": [
+    "knowledge/rfc/rfc5527.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC8317",
+   "class": "paraphrase",
+   "query": "How can I use BGP signaling to set up a service where some network sites (roots) can talk to all other sites while other sites (leaves) can only talk to the roots, running over an MPLS network?",
+   "relevant": [
+    "knowledge/rfc/rfc8317.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC6046",
+   "class": "paraphrase",
+   "query": "How do you securely exchange security incident reports between organizations over HTTPS using a defined message transport method?",
+   "relevant": [
+    "knowledge/rfc/rfc6046.md",
+    "knowledge/rfc/rfc6546.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC9080",
+   "class": "paraphrase",
+   "query": "Which parts of the routing protocol used for home network device auto-configuration are required, and how does it need to work together with the home network control protocol?",
+   "relevant": [
+    "knowledge/rfc/rfc9080.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC8573",
+   "class": "paraphrase",
+   "query": "Why is MD5 no longer recommended for authenticating time sync packets, and what stronger algorithm should I use instead?",
+   "relevant": [
+    "knowledge/rfc/rfc8573.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC3033",
+   "class": "paraphrase",
+   "query": "How do I set the information field and protocol identifier values to signal IP traffic over ATM using generic identifier and user-to-user signaling fields?",
+   "relevant": [
+    "knowledge/rfc/rfc3033.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC5077",
+   "class": "paraphrase",
+   "query": "How can a TLS server let clients resume sessions using a ticket instead of the server storing per-client session state?",
+   "relevant": [
+    "knowledge/rfc/rfc5077.md",
+    "knowledge/rfc/rfc4507.md",
+    "knowledge/rfc/rfc8446.md",
+    "knowledge/rfc/rfc9846.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC2995",
+   "class": "paraphrase",
+   "query": "What are some real-world examples of services that let the phone network and the internet interact, like sending internet notifications for phone events?",
+   "relevant": [
+    "knowledge/rfc/rfc2995.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC7715",
+   "class": "paraphrase",
+   "query": "How do I set up fast reroute so multicast traffic can bypass a failed router in a multipoint LDP-built tree, by having the point of local repair discover the downstream merge points and use pre-built point-to-point backup paths around the failed node?",
+   "relevant": [
+    "knowledge/rfc/rfc7715.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC4670",
+   "class": "paraphrase",
+   "query": "What set of managed objects lets a network management system monitor and track statistics for RADIUS accounting client devices, including support for both IPv4 and IPv6 address formats?",
+   "relevant": [
+    "knowledge/rfc/rfc4670.md",
+    "knowledge/rfc/rfc2620.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC4213",
+   "class": "paraphrase",
+   "query": "How can a host or router support both old and new versions of the Internet Protocol at the same time, or tunnel newer IP packets through an existing older IP network?",
+   "relevant": [
+    "knowledge/rfc/rfc4213.md",
+    "knowledge/rfc/rfc2893.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC8217",
+   "class": "paraphrase",
+   "query": "When do I need to wrap a SIP URI in angle brackets instead of using the bare address form in a header field?",
+   "relevant": [
+    "knowledge/rfc/rfc8217.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "paraphrase:RFC9925",
+   "class": "paraphrase",
+   "query": "How can I use a dummy/placeholder signature algorithm in a certificate when the signature isn't actually meant to be checked?",
+   "relevant": [
+    "knowledge/rfc/rfc9925.md"
+   ],
+   "start": null
+  },
+  {
+   "id": "supersession:RFC4880",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"OpenPGP Message Format\"?",
+   "relevant": [
+    "knowledge/rfc/rfc9580.md"
+   ],
+   "start": "knowledge/rfc/rfc4880.md"
+  },
+  {
+   "id": "supersession:RFC3451",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Layered Coding Transport (LCT) Building Block\"?",
+   "relevant": [
+    "knowledge/rfc/rfc5651.md"
+   ],
+   "start": "knowledge/rfc/rfc3451.md"
+  },
+  {
+   "id": "supersession:RFC1548",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"The Point-to-Point Protocol (PPP)\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1661.md"
+   ],
+   "start": "knowledge/rfc/rfc1548.md"
+  },
+  {
+   "id": "supersession:RFC1653",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"SMTP Service Extension for Message Size Declaration\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1870.md"
+   ],
+   "start": "knowledge/rfc/rfc1653.md"
+  },
+  {
+   "id": "supersession:RFC160",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"RFC brief list\"?",
+   "relevant": [
+    "knowledge/rfc/rfc200.md",
+    "knowledge/rfc/rfc1000.md"
+   ],
+   "start": "knowledge/rfc/rfc160.md"
+  },
+  {
+   "id": "supersession:RFC2830",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Lightweight Directory Access Protocol (v3): Extension for Transport Layer Security\"?",
+   "relevant": [
+    "knowledge/rfc/rfc4510.md",
+    "knowledge/rfc/rfc4511.md",
+    "knowledge/rfc/rfc4513.md"
+   ],
+   "start": "knowledge/rfc/rfc2830.md"
+  },
+  {
+   "id": "supersession:RFC4423",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Host Identity Protocol (HIP) Architecture\"?",
+   "relevant": [
+    "knowledge/rfc/rfc9063.md"
+   ],
+   "start": "knowledge/rfc/rfc4423.md"
+  },
+  {
+   "id": "supersession:RFC1519",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Classless Inter-Domain Routing (CIDR): an Address Assignment and Aggregation Strategy\"?",
+   "relevant": [
+    "knowledge/rfc/rfc4632.md"
+   ],
+   "start": "knowledge/rfc/rfc1519.md"
+  },
+  {
+   "id": "supersession:RFC6402",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Certificate Management over CMS (CMC) Updates\"?",
+   "relevant": [
+    "knowledge/rfc/rfc10002.md",
+    "knowledge/rfc/rfc10003.md",
+    "knowledge/rfc/rfc10004.md"
+   ],
+   "start": "knowledge/rfc/rfc6402.md"
+  },
+  {
+   "id": "supersession:RFC252",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Network host status\"?",
+   "relevant": [
+    "knowledge/rfc/rfc288.md"
+   ],
+   "start": "knowledge/rfc/rfc252.md"
+  },
+  {
+   "id": "supersession:RFC5721",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"POP3 Support for UTF-8\"?",
+   "relevant": [
+    "knowledge/rfc/rfc6856.md"
+   ],
+   "start": "knowledge/rfc/rfc5721.md"
+  },
+  {
+   "id": "supersession:RFC2932",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"IPv4 Multicast Routing MIB\"?",
+   "relevant": [
+    "knowledge/rfc/rfc5132.md"
+   ],
+   "start": "knowledge/rfc/rfc2932.md"
+  },
+  {
+   "id": "supersession:RFC1972",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"A Method for the Transmission of IPv6 Packets over Ethernet Networks\"?",
+   "relevant": [
+    "knowledge/rfc/rfc2464.md"
+   ],
+   "start": "knowledge/rfc/rfc1972.md"
+  },
+  {
+   "id": "supersession:RFC1404",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"A Model for Common Operational Statistics\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1857.md"
+   ],
+   "start": "knowledge/rfc/rfc1404.md"
+  },
+  {
+   "id": "supersession:RFC6722",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Publishing the \"Tao of the IETF\" as a Web Page\"?",
+   "relevant": [
+    "knowledge/rfc/rfc9592.md"
+   ],
+   "start": "knowledge/rfc/rfc6722.md"
+  },
+  {
+   "id": "supersession:RFC832",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Who talks TCP?\"?",
+   "relevant": [
+    "knowledge/rfc/rfc847.md"
+   ],
+   "start": "knowledge/rfc/rfc832.md"
+  },
+  {
+   "id": "supersession:RFC1111",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Request for comments on Request for Comments: Instructions to RFC authors\"?",
+   "relevant": [
+    "knowledge/rfc/rfc7322.md"
+   ],
+   "start": "knowledge/rfc/rfc1111.md"
+  },
+  {
+   "id": "supersession:RFC5849",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"The OAuth 1.0 Protocol\"?",
+   "relevant": [
+    "knowledge/rfc/rfc6749.md"
+   ],
+   "start": "knowledge/rfc/rfc5849.md"
+  },
+  {
+   "id": "supersession:RFC790",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Assigned numbers\"?",
+   "relevant": [
+    "knowledge/rfc/rfc3232.md"
+   ],
+   "start": "knowledge/rfc/rfc790.md"
+  },
+  {
+   "id": "supersession:RFC4835",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Cryptographic Algorithm Implementation Requirements for Encapsulating Security Payload (ESP) and Authentication Header (AH)\"?",
+   "relevant": [
+    "knowledge/rfc/rfc8221.md"
+   ],
+   "start": "knowledge/rfc/rfc4835.md"
+  },
+  {
+   "id": "supersession:RFC1098",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Simple Network Management Protocol (SNMP)\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1157.md"
+   ],
+   "start": "knowledge/rfc/rfc1098.md"
+  },
+  {
+   "id": "supersession:RFC990",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Assigned numbers\"?",
+   "relevant": [
+    "knowledge/rfc/rfc3232.md"
+   ],
+   "start": "knowledge/rfc/rfc990.md"
+  },
+  {
+   "id": "supersession:RFC1253",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"OSPF Version 2 Management Information Base\"?",
+   "relevant": [
+    "knowledge/rfc/rfc4750.md"
+   ],
+   "start": "knowledge/rfc/rfc1253.md"
+  },
+  {
+   "id": "supersession:RFC3462",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"The Multipart/Report Content Type for the Reporting of Mail System Administrative Messages\"?",
+   "relevant": [
+    "knowledge/rfc/rfc6522.md"
+   ],
+   "start": "knowledge/rfc/rfc3462.md"
+  },
+  {
+   "id": "supersession:RFC4210",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Internet X.509 Public Key Infrastructure Certificate Management Protocol (CMP)\"?",
+   "relevant": [
+    "knowledge/rfc/rfc9810.md"
+   ],
+   "start": "knowledge/rfc/rfc4210.md"
+  },
+  {
+   "id": "supersession:RFC1134",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Point-to-Point Protocol: A proposal for multi-protocol transmission of datagrams over Point-to-Point links\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1661.md"
+   ],
+   "start": "knowledge/rfc/rfc1134.md"
+  },
+  {
+   "id": "supersession:RFC1497",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"BOOTP Vendor Information Extensions\"?",
+   "relevant": [
+    "knowledge/rfc/rfc2132.md"
+   ],
+   "start": "knowledge/rfc/rfc1497.md"
+  },
+  {
+   "id": "supersession:RFC300",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"ARPA Network mailing lists\"?",
+   "relevant": [
+    "knowledge/rfc/rfc402.md"
+   ],
+   "start": "knowledge/rfc/rfc300.md"
+  },
+  {
+   "id": "supersession:RFC1317",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Definitions of Managed Objects for RS-232-like Hardware Devices\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1659.md"
+   ],
+   "start": "knowledge/rfc/rfc1317.md"
+  },
+  {
+   "id": "supersession:RFC2413",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Dublin Core Metadata for Resource Discovery\"?",
+   "relevant": [
+    "knowledge/rfc/rfc5013.md"
+   ],
+   "start": "knowledge/rfc/rfc2413.md"
+  },
+  {
+   "id": "supersession:RFC1325",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"FYI on Questions and Answers Answers to Commonly asked \"New Internet User\" Questions\"?",
+   "relevant": [
+    "knowledge/rfc/rfc2664.md"
+   ],
+   "start": "knowledge/rfc/rfc1325.md"
+  },
+  {
+   "id": "supersession:RFC1443",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Textual Conventions for version 2 of the Simple Network Management Protocol (SNMPv2)\"?",
+   "relevant": [
+    "knowledge/rfc/rfc2579.md"
+   ],
+   "start": "knowledge/rfc/rfc1443.md"
+  },
+  {
+   "id": "supersession:RFC2679",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"A One-way Delay Metric for IPPM\"?",
+   "relevant": [
+    "knowledge/rfc/rfc7679.md"
+   ],
+   "start": "knowledge/rfc/rfc2679.md"
+  },
+  {
+   "id": "supersession:RFC4460",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Stream Control Transmission Protocol (SCTP) Specification Errata and Issues\"?",
+   "relevant": [
+    "knowledge/rfc/rfc9260.md"
+   ],
+   "start": "knowledge/rfc/rfc4460.md"
+  },
+  {
+   "id": "supersession:RFC739",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Assigned numbers\"?",
+   "relevant": [
+    "knowledge/rfc/rfc3232.md"
+   ],
+   "start": "knowledge/rfc/rfc739.md"
+  },
+  {
+   "id": "supersession:RFC884",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Telnet terminal type option\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1091.md"
+   ],
+   "start": "knowledge/rfc/rfc884.md"
+  },
+  {
+   "id": "supersession:RFC3090",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"DNS Security Extension Clarification on Zone Status\"?",
+   "relevant": [
+    "knowledge/rfc/rfc4033.md",
+    "knowledge/rfc/rfc4034.md",
+    "knowledge/rfc/rfc4035.md"
+   ],
+   "start": "knowledge/rfc/rfc3090.md"
+  },
+  {
+   "id": "supersession:RFC1528",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Principles of Operation for the TPC.INT Subdomain: Remote Printing -- Technical Procedures\"?",
+   "relevant": [
+    "knowledge/rfc/rfc9121.md"
+   ],
+   "start": "knowledge/rfc/rfc1528.md"
+  },
+  {
+   "id": "supersession:RFC1206",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"FYI on Questions and Answers: Answers to commonly asked \"new Internet user\" questions\"?",
+   "relevant": [
+    "knowledge/rfc/rfc2664.md"
+   ],
+   "start": "knowledge/rfc/rfc1206.md"
+  },
+  {
+   "id": "supersession:RFC3187",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Using International Standard Book Numbers as Uniform Resource Names\"?",
+   "relevant": [
+    "knowledge/rfc/rfc8254.md"
+   ],
+   "start": "knowledge/rfc/rfc3187.md"
+  },
+  {
+   "id": "supersession:RFC8422",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Elliptic Curve Cryptography (ECC) Cipher Suites for Transport Layer Security (TLS) Versions 1.2 and Earlier\"?",
+   "relevant": [
+    "knowledge/rfc/rfc9846.md"
+   ],
+   "start": "knowledge/rfc/rfc8422.md"
+  },
+  {
+   "id": "supersession:RFC1264",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Internet Engineering Task Force Internet Routing Protocol Standardization Criteria\"?",
+   "relevant": [
+    "knowledge/rfc/rfc4794.md"
+   ],
+   "start": "knowledge/rfc/rfc1264.md"
+  },
+  {
+   "id": "supersession:RFC7277",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"A YANG Data Model for IP Management\"?",
+   "relevant": [
+    "knowledge/rfc/rfc8344.md"
+   ],
+   "start": "knowledge/rfc/rfc7277.md"
+  },
+  {
+   "id": "supersession:RFC3288",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Using the Simple Object Access Protocol (SOAP) in Blocks Extensible Exchange Protocol (BEEP)\"?",
+   "relevant": [
+    "knowledge/rfc/rfc4227.md"
+   ],
+   "start": "knowledge/rfc/rfc3288.md"
+  },
+  {
+   "id": "supersession:RFC2496",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Definitions of Managed Object for the DS3/E3 Interface Type\"?",
+   "relevant": [
+    "knowledge/rfc/rfc3896.md"
+   ],
+   "start": "knowledge/rfc/rfc2496.md"
+  },
+  {
+   "id": "supersession:RFC2629",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Writing I-Ds and RFCs using XML\"?",
+   "relevant": [
+    "knowledge/rfc/rfc7991.md"
+   ],
+   "start": "knowledge/rfc/rfc2629.md"
+  },
+  {
+   "id": "supersession:RFC2248",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Network Services Monitoring MIB\"?",
+   "relevant": [
+    "knowledge/rfc/rfc2788.md"
+   ],
+   "start": "knowledge/rfc/rfc2248.md"
+  },
+  {
+   "id": "supersession:RFC331",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"IMP System Change Notification\"?",
+   "relevant": [
+    "knowledge/rfc/rfc359.md"
+   ],
+   "start": "knowledge/rfc/rfc331.md"
+  },
+  {
+   "id": "supersession:RFC2037",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Entity MIB using SMIv2\"?",
+   "relevant": [
+    "knowledge/rfc/rfc6933.md"
+   ],
+   "start": "knowledge/rfc/rfc2037.md"
+  },
+  {
+   "id": "supersession:RFC2821",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Simple Mail Transfer Protocol\"?",
+   "relevant": [
+    "knowledge/rfc/rfc5321.md"
+   ],
+   "start": "knowledge/rfc/rfc2821.md"
+  },
+  {
+   "id": "supersession:RFC1334",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"PPP Authentication Protocols\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1994.md"
+   ],
+   "start": "knowledge/rfc/rfc1334.md"
+  },
+  {
+   "id": "supersession:RFC4544",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Definitions of Managed Objects for Internet Small Computer System Interface (iSCSI)\"?",
+   "relevant": [
+    "knowledge/rfc/rfc7147.md"
+   ],
+   "start": "knowledge/rfc/rfc4544.md"
+  },
+  {
+   "id": "supersession:RFC6931",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Additional XML Security Uniform Resource Identifiers (URIs)\"?",
+   "relevant": [
+    "knowledge/rfc/rfc9231.md"
+   ],
+   "start": "knowledge/rfc/rfc6931.md"
+  },
+  {
+   "id": "supersession:RFC2752",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Identity Representation for RSVP\"?",
+   "relevant": [
+    "knowledge/rfc/rfc3182.md"
+   ],
+   "start": "knowledge/rfc/rfc2752.md"
+  },
+  {
+   "id": "supersession:RFC1294",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Multiprotocol Interconnect over Frame Relay\"?",
+   "relevant": [
+    "knowledge/rfc/rfc2427.md"
+   ],
+   "start": "knowledge/rfc/rfc1294.md"
+  },
+  {
+   "id": "supersession:RFC2298",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"An Extensible Message Format for Message Disposition Notifications\"?",
+   "relevant": [
+    "knowledge/rfc/rfc8098.md"
+   ],
+   "start": "knowledge/rfc/rfc2298.md"
+  },
+  {
+   "id": "supersession:RFC758",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Assigned numbers\"?",
+   "relevant": [
+    "knowledge/rfc/rfc3232.md"
+   ],
+   "start": "knowledge/rfc/rfc758.md"
+  },
+  {
+   "id": "supersession:RFC607",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Comments on the File Transfer Protocol\"?",
+   "relevant": [
+    "knowledge/rfc/rfc624.md"
+   ],
+   "start": "knowledge/rfc/rfc607.md"
+  },
+  {
+   "id": "supersession:RFC1064",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Interactive Mail Access Protocol: Version 2\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1176.md",
+    "knowledge/rfc/rfc1203.md"
+   ],
+   "start": "knowledge/rfc/rfc1064.md"
+  },
+  {
+   "id": "supersession:RFC1410",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"IAB Official Protocol Standards\"?",
+   "relevant": [
+    "knowledge/rfc/rfc7100.md"
+   ],
+   "start": "knowledge/rfc/rfc1410.md"
+  },
+  {
+   "id": "supersession:RFC5337",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Internationalized Delivery Status and Disposition Notifications\"?",
+   "relevant": [
+    "knowledge/rfc/rfc6533.md"
+   ],
+   "start": "knowledge/rfc/rfc5337.md"
+  },
+  {
+   "id": "supersession:RFC4941",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Privacy Extensions for Stateless Address Autoconfiguration in IPv6\"?",
+   "relevant": [
+    "knowledge/rfc/rfc8981.md"
+   ],
+   "start": "knowledge/rfc/rfc4941.md"
+  },
+  {
+   "id": "supersession:RFC8312",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"CUBIC for Fast Long-Distance Networks\"?",
+   "relevant": [
+    "knowledge/rfc/rfc9438.md"
+   ],
+   "start": "knowledge/rfc/rfc8312.md"
+  },
+  {
+   "id": "supersession:RFC343",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"IMP System change notification\"?",
+   "relevant": [
+    "knowledge/rfc/rfc359.md"
+   ],
+   "start": "knowledge/rfc/rfc343.md"
+  },
+  {
+   "id": "supersession:RFC1894",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"An Extensible Message Format for Delivery Status Notifications\"?",
+   "relevant": [
+    "knowledge/rfc/rfc3464.md"
+   ],
+   "start": "knowledge/rfc/rfc1894.md"
+  },
+  {
+   "id": "supersession:RFC5996",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Internet Key Exchange Protocol Version 2 (IKEv2)\"?",
+   "relevant": [
+    "knowledge/rfc/rfc7296.md"
+   ],
+   "start": "knowledge/rfc/rfc5996.md"
+  },
+  {
+   "id": "supersession:RFC2925",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Definitions of Managed Objects for Remote Ping, Traceroute, and Lookup Operations\"?",
+   "relevant": [
+    "knowledge/rfc/rfc4560.md"
+   ],
+   "start": "knowledge/rfc/rfc2925.md"
+  },
+  {
+   "id": "supersession:RFC3427",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Change Process for the Session Initiation Protocol (SIP)\"?",
+   "relevant": [
+    "knowledge/rfc/rfc5727.md"
+   ],
+   "start": "knowledge/rfc/rfc3427.md"
+  },
+  {
+   "id": "supersession:RFC1379",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Extending TCP for Transactions -- Concepts\"?",
+   "relevant": [
+    "knowledge/rfc/rfc6247.md"
+   ],
+   "start": "knowledge/rfc/rfc1379.md"
+  },
+  {
+   "id": "supersession:RFC1647",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"TN3270 Enhancements\"?",
+   "relevant": [
+    "knowledge/rfc/rfc2355.md"
+   ],
+   "start": "knowledge/rfc/rfc1647.md"
+  },
+  {
+   "id": "supersession:RFC770",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Assigned numbers\"?",
+   "relevant": [
+    "knowledge/rfc/rfc3232.md"
+   ],
+   "start": "knowledge/rfc/rfc770.md"
+  },
+  {
+   "id": "supersession:RFC1905",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Protocol Operations for Version 2 of the Simple Network Management Protocol (SNMPv2)\"?",
+   "relevant": [
+    "knowledge/rfc/rfc3416.md"
+   ],
+   "start": "knowledge/rfc/rfc1905.md"
+  },
+  {
+   "id": "supersession:RFC1645",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Simple Network Paging Protocol - Version 2\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1861.md"
+   ],
+   "start": "knowledge/rfc/rfc1645.md"
+  },
+  {
+   "id": "supersession:RFC4288",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Media Type Specifications and Registration Procedures\"?",
+   "relevant": [
+    "knowledge/rfc/rfc6838.md"
+   ],
+   "start": "knowledge/rfc/rfc4288.md"
+  },
+  {
+   "id": "supersession:RFC1627",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Network 10 Considered Harmful (Some Practices Shouldn't be Codified)\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1918.md"
+   ],
+   "start": "knowledge/rfc/rfc1627.md"
+  },
+  {
+   "id": "supersession:RFC2011",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"SNMPv2 Management Information Base for the Internet Protocol using SMIv2\"?",
+   "relevant": [
+    "knowledge/rfc/rfc4293.md"
+   ],
+   "start": "knowledge/rfc/rfc2011.md"
+  },
+  {
+   "id": "supersession:RFC2111",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Content-ID and Message-ID Uniform Resource Locators\"?",
+   "relevant": [
+    "knowledge/rfc/rfc2392.md"
+   ],
+   "start": "knowledge/rfc/rfc2111.md"
+  },
+  {
+   "id": "supersession:RFC3044",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Using The ISSN (International Serial Standard Number) as URN (Uniform Resource Names) within an ISSN-URN Namespace\"?",
+   "relevant": [
+    "knowledge/rfc/rfc8254.md"
+   ],
+   "start": "knowledge/rfc/rfc3044.md"
+  },
+  {
+   "id": "supersession:RFC2462",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"IPv6 Stateless Address Autoconfiguration\"?",
+   "relevant": [
+    "knowledge/rfc/rfc4862.md"
+   ],
+   "start": "knowledge/rfc/rfc2462.md"
+  },
+  {
+   "id": "supersession:RFC1830",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"SMTP Service Extensions for Transmission of Large and Binary MIME Messages\"?",
+   "relevant": [
+    "knowledge/rfc/rfc3030.md"
+   ],
+   "start": "knowledge/rfc/rfc1830.md"
+  },
+  {
+   "id": "supersession:RFC6944",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Applicability Statement: DNS Security (DNSSEC) DNSKEY Algorithm Implementation Status\"?",
+   "relevant": [
+    "knowledge/rfc/rfc9904.md"
+   ],
+   "start": "knowledge/rfc/rfc6944.md"
+  },
+  {
+   "id": "supersession:RFC2763",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Dynamic Hostname Exchange Mechanism for IS-IS\"?",
+   "relevant": [
+    "knowledge/rfc/rfc5301.md"
+   ],
+   "start": "knowledge/rfc/rfc2763.md"
+  },
+  {
+   "id": "supersession:RFC1558",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"A String Representation of LDAP Search Filters\"?",
+   "relevant": [
+    "knowledge/rfc/rfc4510.md",
+    "knowledge/rfc/rfc4515.md"
+   ],
+   "start": "knowledge/rfc/rfc1558.md"
+  },
+  {
+   "id": "supersession:RFC1103",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Proposed standard for the transmission of IP datagrams over FDDI Networks\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1188.md"
+   ],
+   "start": "knowledge/rfc/rfc1103.md"
+  },
+  {
+   "id": "supersession:RFC4676",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Dynamic Host Configuration Protocol (DHCPv4 and DHCPv6) Option for Civic Addresses Configuration Information\"?",
+   "relevant": [
+    "knowledge/rfc/rfc4776.md"
+   ],
+   "start": "knowledge/rfc/rfc4676.md"
+  },
+  {
+   "id": "supersession:RFC4582",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"The Binary Floor Control Protocol (BFCP)\"?",
+   "relevant": [
+    "knowledge/rfc/rfc8855.md"
+   ],
+   "start": "knowledge/rfc/rfc4582.md"
+  },
+  {
+   "id": "supersession:RFC1130",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"IAB official protocol standards\"?",
+   "relevant": [
+    "knowledge/rfc/rfc7100.md"
+   ],
+   "start": "knowledge/rfc/rfc1130.md"
+  },
+  {
+   "id": "supersession:RFC4441",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"The IEEE 802/IETF Relationship\"?",
+   "relevant": [
+    "knowledge/rfc/rfc7241.md"
+   ],
+   "start": "knowledge/rfc/rfc4441.md"
+  },
+  {
+   "id": "supersession:RFC2338",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Virtual Router Redundancy Protocol\"?",
+   "relevant": [
+    "knowledge/rfc/rfc9568.md"
+   ],
+   "start": "knowledge/rfc/rfc2338.md"
+  },
+  {
+   "id": "supersession:RFC1637",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"DNS NSAP Resource Records\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1706.md"
+   ],
+   "start": "knowledge/rfc/rfc1637.md"
+  },
+  {
+   "id": "supersession:RFC1293",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Inverse Address Resolution Protocol\"?",
+   "relevant": [
+    "knowledge/rfc/rfc2390.md"
+   ],
+   "start": "knowledge/rfc/rfc1293.md"
+  },
+  {
+   "id": "supersession:RFC6096",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Stream Control Transmission Protocol (SCTP) Chunk Flags Registration\"?",
+   "relevant": [
+    "knowledge/rfc/rfc9260.md"
+   ],
+   "start": "knowledge/rfc/rfc6096.md"
+  },
+  {
+   "id": "supersession:RFC8728",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"RFC Editor Model (Version 2)\"?",
+   "relevant": [
+    "knowledge/rfc/rfc9920.md"
+   ],
+   "start": "knowledge/rfc/rfc8728.md"
+  },
+  {
+   "id": "supersession:RFC3757",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Domain Name System KEY (DNSKEY) Resource Record (RR) Secure Entry Point (SEP) Flag\"?",
+   "relevant": [
+    "knowledge/rfc/rfc4033.md",
+    "knowledge/rfc/rfc4034.md",
+    "knowledge/rfc/rfc4035.md"
+   ],
+   "start": "knowledge/rfc/rfc3757.md"
+  },
+  {
+   "id": "supersession:RFC882",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Domain names: Concepts and facilities\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1034.md",
+    "knowledge/rfc/rfc1035.md"
+   ],
+   "start": "knowledge/rfc/rfc882.md"
+  },
+  {
+   "id": "supersession:RFC806",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Proposed Federal Information Processing Standard: Specification for message format for computer based message systems\"?",
+   "relevant": [
+    "knowledge/rfc/rfc841.md"
+   ],
+   "start": "knowledge/rfc/rfc806.md"
+  },
+  {
+   "id": "supersession:RFC816",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Fault isolation and recovery\"?",
+   "relevant": [
+    "knowledge/rfc/rfc7805.md"
+   ],
+   "start": "knowledge/rfc/rfc816.md"
+  },
+  {
+   "id": "supersession:RFC1385",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"EIP: The Extended Internet Protocol\"?",
+   "relevant": [
+    "knowledge/rfc/rfc6814.md"
+   ],
+   "start": "knowledge/rfc/rfc1385.md"
+  },
+  {
+   "id": "supersession:RFC944",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Official ARPA-Internet protocols\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1011.md"
+   ],
+   "start": "knowledge/rfc/rfc944.md"
+  },
+  {
+   "id": "supersession:RFC1386",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"The US Domain\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1480.md"
+   ],
+   "start": "knowledge/rfc/rfc1386.md"
+  },
+  {
+   "id": "supersession:RFC6490",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Resource Public Key Infrastructure (RPKI) Trust Anchor Locator\"?",
+   "relevant": [
+    "knowledge/rfc/rfc8630.md"
+   ],
+   "start": "knowledge/rfc/rfc6490.md"
+  },
+  {
+   "id": "supersession:RFC1836",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Representing the O/R Address hierarchy in the X.500 Directory Information Tree\"?",
+   "relevant": [
+    "knowledge/rfc/rfc2294.md"
+   ],
+   "start": "knowledge/rfc/rfc1836.md"
+  },
+  {
+   "id": "supersession:RFC5405",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Unicast UDP Usage Guidelines for Application Designers\"?",
+   "relevant": [
+    "knowledge/rfc/rfc8085.md"
+   ],
+   "start": "knowledge/rfc/rfc5405.md"
+  },
+  {
+   "id": "supersession:RFC3005",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"IETF Discussion List Charter\"?",
+   "relevant": [
+    "knowledge/rfc/rfc9245.md"
+   ],
+   "start": "knowledge/rfc/rfc3005.md"
+  },
+  {
+   "id": "supersession:RFC1146",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"TCP alternate checksum options\"?",
+   "relevant": [
+    "knowledge/rfc/rfc6247.md"
+   ],
+   "start": "knowledge/rfc/rfc1146.md"
+  },
+  {
+   "id": "supersession:RFC2576",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Coexistence between Version 1, Version 2, and Version 3 of the Internet-standard Network Management Framework\"?",
+   "relevant": [
+    "knowledge/rfc/rfc3584.md"
+   ],
+   "start": "knowledge/rfc/rfc2576.md"
+  },
+  {
+   "id": "supersession:RFC2754",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"RPS IANA Issues\"?",
+   "relevant": [
+    "knowledge/rfc/rfc6254.md"
+   ],
+   "start": "knowledge/rfc/rfc2754.md"
+  },
+  {
+   "id": "supersession:RFC1196",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Finger User Information Protocol\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1288.md"
+   ],
+   "start": "knowledge/rfc/rfc1196.md"
+  },
+  {
+   "id": "supersession:RFC2495",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Definitions of Managed Objects for the DS1, E1, DS2 and E2 Interface Types\"?",
+   "relevant": [
+    "knowledge/rfc/rfc4805.md"
+   ],
+   "start": "knowledge/rfc/rfc2495.md"
+  },
+  {
+   "id": "supersession:RFC3777",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"IAB and IESG Selection, Confirmation, and Recall Process: Operation of the Nominating and Recall Committees\"?",
+   "relevant": [
+    "knowledge/rfc/rfc8713.md"
+   ],
+   "start": "knowledge/rfc/rfc3777.md"
+  },
+  {
+   "id": "supersession:RFC4960",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Stream Control Transmission Protocol\"?",
+   "relevant": [
+    "knowledge/rfc/rfc9260.md"
+   ],
+   "start": "knowledge/rfc/rfc4960.md"
+  },
+  {
+   "id": "supersession:RFC1777",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Lightweight Directory Access Protocol\"?",
+   "relevant": [
+    "knowledge/rfc/rfc3494.md"
+   ],
+   "start": "knowledge/rfc/rfc1777.md"
+  },
+  {
+   "id": "supersession:RFC1387",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"RIP Version 2 Protocol Analysis\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1721.md"
+   ],
+   "start": "knowledge/rfc/rfc1387.md"
+  },
+  {
+   "id": "supersession:RFC6937",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Proportional Rate Reduction for TCP\"?",
+   "relevant": [
+    "knowledge/rfc/rfc9937.md"
+   ],
+   "start": "knowledge/rfc/rfc6937.md"
+  },
+  {
+   "id": "supersession:RFC5751",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Secure/Multipurpose Internet Mail Extensions (S/MIME) Version 3.2 Message Specification\"?",
+   "relevant": [
+    "knowledge/rfc/rfc8551.md"
+   ],
+   "start": "knowledge/rfc/rfc5751.md"
+  },
+  {
+   "id": "supersession:RFC1304",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Definitions of Managed Objects for the SIP Interface Type\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1694.md"
+   ],
+   "start": "knowledge/rfc/rfc1304.md"
+  },
+  {
+   "id": "supersession:RFC8398",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Internationalized Email Addresses in X.509 Certificates\"?",
+   "relevant": [
+    "knowledge/rfc/rfc9598.md"
+   ],
+   "start": "knowledge/rfc/rfc8398.md"
+  },
+  {
+   "id": "supersession:RFC2732",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Format for Literal IPv6 Addresses in URL's\"?",
+   "relevant": [
+    "knowledge/rfc/rfc3986.md"
+   ],
+   "start": "knowledge/rfc/rfc2732.md"
+  },
+  {
+   "id": "supersession:RFC5467",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"GMPLS Asymmetric Bandwidth Bidirectional Label Switched Paths (LSPs)\"?",
+   "relevant": [
+    "knowledge/rfc/rfc6387.md"
+   ],
+   "start": "knowledge/rfc/rfc5467.md"
+  },
+  {
+   "id": "supersession:RFC1318",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Definitions of Managed Objects for Parallel-printer-like Hardware Devices\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1660.md"
+   ],
+   "start": "knowledge/rfc/rfc1318.md"
+  },
+  {
+   "id": "supersession:RFC1716",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Towards Requirements for IP Routers\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1812.md"
+   ],
+   "start": "knowledge/rfc/rfc1716.md"
+  },
+  {
+   "id": "supersession:RFC3431",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Sieve Extension: Relational Tests\"?",
+   "relevant": [
+    "knowledge/rfc/rfc5231.md"
+   ],
+   "start": "knowledge/rfc/rfc3431.md"
+  },
+  {
+   "id": "supersession:RFC7489",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Domain-based Message Authentication, Reporting, and Conformance (DMARC)\"?",
+   "relevant": [
+    "knowledge/rfc/rfc9989.md",
+    "knowledge/rfc/rfc9990.md",
+    "knowledge/rfc/rfc9991.md"
+   ],
+   "start": "knowledge/rfc/rfc7489.md"
+  },
+  {
+   "id": "supersession:RFC1783",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"TFTP Blocksize Option\"?",
+   "relevant": [
+    "knowledge/rfc/rfc2348.md"
+   ],
+   "start": "knowledge/rfc/rfc1783.md"
+  },
+  {
+   "id": "supersession:RFC2541",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"DNS Security Operational Considerations\"?",
+   "relevant": [
+    "knowledge/rfc/rfc6781.md"
+   ],
+   "start": "knowledge/rfc/rfc2541.md"
+  },
+  {
+   "id": "supersession:RFC2466",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Management Information Base for IP Version 6: ICMPv6 Group\"?",
+   "relevant": [
+    "knowledge/rfc/rfc4293.md",
+    "knowledge/rfc/rfc8096.md"
+   ],
+   "start": "knowledge/rfc/rfc2466.md"
+  },
+  {
+   "id": "supersession:RFC6045",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Real-time Inter-network Defense (RID)\"?",
+   "relevant": [
+    "knowledge/rfc/rfc6545.md"
+   ],
+   "start": "knowledge/rfc/rfc6045.md"
+  },
+  {
+   "id": "supersession:RFC1827",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"IP Encapsulating Security Payload (ESP)\"?",
+   "relevant": [
+    "knowledge/rfc/rfc4303.md",
+    "knowledge/rfc/rfc8221.md"
+   ],
+   "start": "knowledge/rfc/rfc1827.md"
+  },
+  {
+   "id": "supersession:RFC2487",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"SMTP Service Extension for Secure SMTP over TLS\"?",
+   "relevant": [
+    "knowledge/rfc/rfc3207.md"
+   ],
+   "start": "knowledge/rfc/rfc2487.md"
+  },
+  {
+   "id": "supersession:RFC5081",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Using OpenPGP Keys for Transport Layer Security (TLS) Authentication\"?",
+   "relevant": [
+    "knowledge/rfc/rfc6091.md"
+   ],
+   "start": "knowledge/rfc/rfc5081.md"
+  },
+  {
+   "id": "supersession:RFC2305",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"A Simple Mode of Facsimile Using Internet Mail\"?",
+   "relevant": [
+    "knowledge/rfc/rfc3965.md"
+   ],
+   "start": "knowledge/rfc/rfc2305.md"
+  },
+  {
+   "id": "supersession:RFC2283",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Multiprotocol Extensions for BGP-4\"?",
+   "relevant": [
+    "knowledge/rfc/rfc4760.md"
+   ],
+   "start": "knowledge/rfc/rfc2283.md"
+  },
+  {
+   "id": "supersession:RFC7691",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Updating the Term Dates of IETF Administrative Oversight Committee (IAOC) Members\"?",
+   "relevant": [
+    "knowledge/rfc/rfc8711.md"
+   ],
+   "start": "knowledge/rfc/rfc7691.md"
+  },
+  {
+   "id": "supersession:RFC2370",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"The OSPF Opaque LSA Option\"?",
+   "relevant": [
+    "knowledge/rfc/rfc5250.md"
+   ],
+   "start": "knowledge/rfc/rfc2370.md"
+  },
+  {
+   "id": "supersession:RFC2797",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Certificate Management Messages over CMS\"?",
+   "relevant": [
+    "knowledge/rfc/rfc10002.md"
+   ],
+   "start": "knowledge/rfc/rfc2797.md"
+  },
+  {
+   "id": "supersession:RFC5953",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Transport Layer Security (TLS) Transport Model for the Simple Network Management Protocol (SNMP)\"?",
+   "relevant": [
+    "knowledge/rfc/rfc6353.md"
+   ],
+   "start": "knowledge/rfc/rfc5953.md"
+  },
+  {
+   "id": "supersession:RFC2388",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Returning Values from Forms: multipart/form-data\"?",
+   "relevant": [
+    "knowledge/rfc/rfc7578.md"
+   ],
+   "start": "knowledge/rfc/rfc2388.md"
+  },
+  {
+   "id": "supersession:RFC3016",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"RTP Payload Format for MPEG-4 Audio/Visual Streams\"?",
+   "relevant": [
+    "knowledge/rfc/rfc6416.md"
+   ],
+   "start": "knowledge/rfc/rfc3016.md"
+  },
+  {
+   "id": "supersession:RFC3280",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Internet X.509 Public Key Infrastructure Certificate and Certificate Revocation List (CRL) Profile\"?",
+   "relevant": [
+    "knowledge/rfc/rfc5280.md"
+   ],
+   "start": "knowledge/rfc/rfc3280.md"
+  },
+  {
+   "id": "supersession:RFC95",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Distribution of NWG/RFC's through the NIC\"?",
+   "relevant": [
+    "knowledge/rfc/rfc402.md"
+   ],
+   "start": "knowledge/rfc/rfc95.md"
+  },
+  {
+   "id": "supersession:RFC3015",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Megaco Protocol Version 1.0\"?",
+   "relevant": [
+    "knowledge/rfc/rfc5125.md"
+   ],
+   "start": "knowledge/rfc/rfc3015.md"
+  },
+  {
+   "id": "supersession:RFC1357",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"A Format for E-mailing Bibliographic Records\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1807.md"
+   ],
+   "start": "knowledge/rfc/rfc1357.md"
+  },
+  {
+   "id": "supersession:RFC2543",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"SIP: Session Initiation Protocol\"?",
+   "relevant": [
+    "knowledge/rfc/rfc3261.md",
+    "knowledge/rfc/rfc3262.md",
+    "knowledge/rfc/rfc3263.md",
+    "knowledge/rfc/rfc3264.md",
+    "knowledge/rfc/rfc6665.md"
+   ],
+   "start": "knowledge/rfc/rfc2543.md"
+  },
+  {
+   "id": "supersession:RFC7749",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"The \"xml2rfc\" Version 2 Vocabulary\"?",
+   "relevant": [
+    "knowledge/rfc/rfc7991.md"
+   ],
+   "start": "knowledge/rfc/rfc7749.md"
+  },
+  {
+   "id": "supersession:RFC2273",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"SNMPv3 Applications\"?",
+   "relevant": [
+    "knowledge/rfc/rfc3413.md"
+   ],
+   "start": "knowledge/rfc/rfc2273.md"
+  },
+  {
+   "id": "supersession:RFC1743",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"IEEE 802.5 MIB using SMIv2\"?",
+   "relevant": [
+    "knowledge/rfc/rfc1748.md"
+   ],
+   "start": "knowledge/rfc/rfc1743.md"
+  },
+  {
+   "id": "supersession:RFC4693",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"IETF Operational Notes\"?",
+   "relevant": [
+    "knowledge/rfc/rfc6393.md"
+   ],
+   "start": "knowledge/rfc/rfc4693.md"
+  },
+  {
+   "id": "supersession:RFC7283",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Handling Unknown DHCPv6 Messages\"?",
+   "relevant": [
+    "knowledge/rfc/rfc9915.md"
+   ],
+   "start": "knowledge/rfc/rfc7283.md"
+  },
+  {
+   "id": "supersession:RFC4722",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Media Server Control Markup Language (MSCML) and Protocol\"?",
+   "relevant": [
+    "knowledge/rfc/rfc5022.md"
+   ],
+   "start": "knowledge/rfc/rfc4722.md"
+  },
+  {
+   "id": "supersession:RFC292",
+   "class": "supersession",
+   "query": "What is the current specification that replaces \"Graphics Protocol: Level 0 only\"?",
+   "relevant": [
+    "knowledge/rfc/rfc493.md"
+   ],
+   "start": "knowledge/rfc/rfc292.md"
+  }
+ ]
+}

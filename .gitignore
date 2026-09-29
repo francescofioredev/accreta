@@ -56,3 +56,8 @@ bun-debug.log*
 # Local agent scratch space: session notes and working files that are not
 # project artifacts. Anything worth keeping graduates to docs/ or an issue.
 .scratch/
+
+# bench/jev: third-party data is fetched and verified by hash, never vendored; the call cache is local.
+bench/jev/.external/
+bench/jev/.cache/
+bench/jev/proxy/.wrangler/

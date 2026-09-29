@@ -325,7 +325,7 @@ demand "nothing unverified" without anyone pretending the source was inspected.
 
 ## Design decisions
 
-Thirteen ADRs in [`docs/adr/`](docs/adr/). The ones that decide the shape:
+Fourteen ADRs in [`docs/adr/`](docs/adr/). The ones that decide the shape:
 
 - **[0001](docs/adr/0001-lexical-search-first.md)** — search is lexical, and semantic search
   is **not built**. The benchmark said 85% recall@1 without it. It also found a bug in our own
@@ -356,7 +356,10 @@ Thirteen ADRs in [`docs/adr/`](docs/adr/). The ones that decide the shape:
   `npx skills`, and the installer we specified is **not built**.
 
 Further reading: [architecture](docs/architecture.md),
-[writing an adapter](docs/writing-an-adapter.md).
+[writing an adapter](docs/writing-an-adapter.md), and a
+[measured study](docs/research/2026-09-jev/README.md) of which of the agent's judgments a
+cheap decision model could take over. The answer: retrieval yes, ingest triage no, and drift's
+largest gain needs no model at all.
 
 ## Contributing
 

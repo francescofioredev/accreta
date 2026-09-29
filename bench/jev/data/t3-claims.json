@@ -1,0 +1,1512 @@
+{
+ "writer": "claude-sonnet-5",
+ "seed": 20260929,
+ "per_class": {
+  "calibration": 25,
+  "test": 100
+ },
+ "system": "You write one sentence for a technical documentation page. It states a specific, checkable fact taken from the given specification text, in your own words, and its truth must depend on the passage marked FOCUS. Do not hedge, do not mention errata, corrections or the marking. Reply only with the JSON the schema requires.",
+ "items": [
+  {
+   "id": "3945",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "When an ingress node needs to decrease ODUflex bandwidth, it is recommended, but not strictly required, that it send a Path message using the SE (Shared-Explicit) reservation style."
+  },
+  {
+   "id": "781",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "Within the local element's target element, the URI attribute is set to sip:alice@pc33.example.com and it contains a param child element indicating the +sip.rendering capability has a value of yes."
+  },
+  {
+   "id": "387",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "The example scenarios given for channel message propagation are based on the network topology depicted in Figure 2 of the specification."
+  },
+  {
+   "id": "517",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "In the SNTP round-trip delay calculation, the difference between the server's receive and transmit timestamps (T2 - T3) is subtracted from the difference between the client's destination and origin timestamps (T4 - T1) to compute the delay d."
+  },
+  {
+   "id": "4139",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "Section 2.7 of RFC 5663 contains no defined content."
+  },
+  {
+   "id": "481",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "In RFC 2202's HMAC-SHA-1 test case 6, using an 80-byte key of repeated 0xaa bytes with the 54-byte message \"Test Using Larger Than Block-Size Key - Hash Key First\" produces the digest 0xaa4ae5e15272d00e95705637ce8a3b55ed402112."
+  },
+  {
+   "id": "7866",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "In RESTCONF, the percent-encoding rules that reserved characters in leaf-list values, key values, and query parameter values must satisfy are defined by Section 2.1 of RFC 3986."
+  },
+  {
+   "id": "3267",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "A RID system responding to a 'GET /' or 'HEAD /' request should use the 204 No Content status code, since these methods carry no specific meaning within the RID protocol."
+  },
+  {
+   "id": "3229",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "In computing the product of two field elements a and b, the real component of the result is obtained by subtracting the product a_0*b_0 from the product a_1*b_1 and then reducing that difference modulo p."
+  },
+  {
+   "id": "5927",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "In the GostR3410-94-PublicKeyParameters sequence, the encryptionParamSet field, which is typed as Gost28147-89-ParamSet, is not mandatory and may therefore be left out."
+  },
+  {
+   "id": "595",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "In the EME-OAEP encoding process, the data block DB is formed as Padding2 concatenated with maskedseed, and this same maskedseed value later appears unchanged as the middle component of the final encoded message EM, positioned between maskedDB and the trailing bc octet."
+  },
+  {
+   "id": "29",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "The sum of the counts of access requests sent, pending requests, and client timeouts equals the number of responses successfully received."
+  },
+  {
+   "id": "4614",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "The entity declaration for rfc2629 in the example DTD uses the keyword PUBLIC to indicate that the referenced external entity is identified by a public identifier when fetching the data from xml2rfc.ietf.org."
+  },
+  {
+   "id": "477",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "In the extended-parameter production, an extended-initial-name is always paired with a single extended-value, rather than with extended-other-values."
+  },
+  {
+   "id": "3003",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "A received frame is processed according to the procedure in Section 4.6.2.1 when its outer destination MAC address equals All-IS-IS-RBridges and its Ethertype indicates L2-IS-IS."
+  },
+  {
+   "id": "617",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "In the ACAP protocol grammar, a LANG command can be followed by any number of space-separated language tags, including zero, since the \"SP lang-tag\" sequence is defined as a repeatable group rather than a single optional occurrence."
+  },
+  {
+   "id": "4550",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "In the first row of the example community value chart in section 4.1, the second octet field is set to the hexadecimal value 0x0008."
+  },
+  {
+   "id": "1748",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "In RFC 5423's IANA registry, event or class names lacking a \"vnd.\" prefix require IETF Consensus for allocation, whereas those prefixed with \"vnd.\" follow a First Come First Served policy."
+  },
+  {
+   "id": "289",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "RFC 3370 cites the Cryptographic Message Syntax specification by Housley as RFC 3269, published in August 2002."
+  },
+  {
+   "id": "4667",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "In the chunk-ext ABNF rule, each occurrence of a chunk extension is defined so that the semicolon, extension name, and value are grouped as a single optional unit, meaning that whenever an extension appears its chunk-ext-val is required while the equals sign preceding it is optional."
+  },
+  {
+   "id": "3812",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "According to RFC 6979 section 2.4, once s has been calculated the DSA/ECDSA signature output consists of the pair (r, s)."
+  },
+  {
+   "id": "3434",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "In the worked example of encoding a location into the DHCP Geodetic Form, the first four bytes of the resulting option—covering the Code, OptLen, LatUnc, and initial part of the Latitude field—are given in hexadecimal as 7B104BBC."
+  },
+  {
+   "id": "1311",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "In these test messages, the port number used is derived from the value of the final octet of the IPv6 address reference."
+  },
+  {
+   "id": "3043",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "RFC 4033 lists RFC 3007 among the earlier documents that it updates."
+  },
+  {
+   "id": "447",
+   "split": "calibration",
+   "label": "technical",
+   "claim": "In the RFC2421 example, the Date header specifies a time of 8:23:10."
+  },
+  {
+   "id": "5902",
+   "split": "test",
+   "label": "technical",
+   "claim": "In RFC 3125's CommitmentType SEQUENCE definition, the optional semantics field (tagged [1], of type DirectoryString) is the final component, with no additional fields following it after the closing brace."
+  },
+  {
+   "id": "948",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the example SSH invocation for establishing a NETCONF session, the client connects to the server's TCP port 830."
+  },
+  {
+   "id": "2760",
+   "split": "test",
+   "label": "technical",
+   "claim": "In RFC 6031, the PSKCAlgorithmParameters type is defined as a CHOICE construct, meaning an instance of it carries exactly one of the alternatives—suite, challengeFormat, or responseFormat—rather than all of them simultaneously."
+  },
+  {
+   "id": "7603",
+   "split": "test",
+   "label": "technical",
+   "claim": "In JSON, a string is composed of a series of Unicode characters, which may number zero or more."
+  },
+  {
+   "id": "3108",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the example, the GeneralizedTime value representing the encoded timestamp is \"197110141200Z\", corresponding to October 14, 1971, at 12:00:00 UTC."
+  },
+  {
+   "id": "2623",
+   "split": "test",
+   "label": "technical",
+   "claim": "When a DNS lookup of the Configuration Service Domain host name returns an NXDOMAIN response, indicating no matching record exists, the user agent must remove that request URL from its list of alternative configuration URLs."
+  },
+  {
+   "id": "4244",
+   "split": "test",
+   "label": "technical",
+   "claim": "The at-x520StateOrProvinceName ATTRIBUTE definition constrains its value type to DirectoryString bounded by the ub-state-name upper bound."
+  },
+  {
+   "id": "1562",
+   "split": "test",
+   "label": "technical",
+   "claim": "A TCP segment consumes a number of consecutive sequence numbers equal to the number of data octets it carries, and after a host crash the sequence-number space occupied by the octets of the last segment sent remains reserved until the Maximum Segment Lifetime has elapsed."
+  },
+  {
+   "id": "4129",
+   "split": "test",
+   "label": "technical",
+   "claim": "The MPTCP.Checksum flag becomes true when at least one host has set the C bit within the MP_CAPABLE options exchanged during connection establishment."
+  },
+  {
+   "id": "3939",
+   "split": "test",
+   "label": "technical",
+   "claim": "The example incident report wraps its content in an element named IODEF-Document."
+  },
+  {
+   "id": "4456",
+   "split": "test",
+   "label": "technical",
+   "claim": "Type 1 routing table entries are created when the host receives an ICMP Redirect message with code 1 (or code 3), while type 2 entries are created upon receipt of code 2 or code 0 Redirects."
+  },
+  {
+   "id": "1791",
+   "split": "test",
+   "label": "technical",
+   "claim": "The vdslPhysCurrSnrMgn MIB object originally specified its UNITS clause as \"0.25dBm\" rather than the corrected \"0.25dB\"."
+  },
+  {
+   "id": "1960",
+   "split": "test",
+   "label": "technical",
+   "claim": "When performing ECDH key exchange using ephemeral keys generated on the nistp256 curve, the corresponding method name is \"ecdsa-sha2-nistp256\"."
+  },
+  {
+   "id": "5439",
+   "split": "test",
+   "label": "technical",
+   "claim": "When a JSON member name in an RFC 8427 DNS message representation does not end in \"HEX\", its value represents a domain name built from DNS labels using UTF-8 codepoints in the range U+0000 to U+007F, with labels separated by a period character."
+  },
+  {
+   "id": "915",
+   "split": "test",
+   "label": "technical",
+   "claim": "In this example, the maximum TFRC data sending rate is calculated to be 1.184 Kbps."
+  },
+  {
+   "id": "8447",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the OptionalAttCertValidity sequence, the notBeforeTime field is typed as GeneralizedTime and is declared OPTIONAL."
+  },
+  {
+   "id": "6277",
+   "split": "test",
+   "label": "technical",
+   "claim": "If a client omits the insert query parameter when creating a new entry in a user-ordered list or leaf-list via RESTCONF, the server places that entry as the last member of the list."
+  },
+  {
+   "id": "190",
+   "split": "test",
+   "label": "technical",
+   "claim": "Reference [6] in RFC 4052 cites a document titled \"Procedure for Handling Liaison Statements Between Standards Bodies\" that was published in June 2004."
+  },
+  {
+   "id": "432",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the ASN.1 encoding example, the BIT STRING value has a length of 47 bytes."
+  },
+  {
+   "id": "6983",
+   "split": "test",
+   "label": "technical",
+   "claim": "An attacking host can send a Neighbor Advertisement containing a victim's IP address paired with its own link-layer address to overwrite an existing entry in the destination cache of the sender receiving the advertisement."
+  },
+  {
+   "id": "6412",
+   "split": "test",
+   "label": "technical",
+   "claim": "The object identifier id-ep-content is defined as the arc {joint-iso-itu-t(2) mhs(6) ipms(1) ep(11) 17}."
+  },
+  {
+   "id": "4750",
+   "split": "test",
+   "label": "technical",
+   "claim": "A 17-byte vector encoding uint16 elements is not valid because 17 is not evenly divisible by the 2-byte size of a uint16 element."
+  },
+  {
+   "id": "1646",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the RC4-HMAC key derivation, exactly 7 bytes of the Kseq buffer, starting at offset 7, are set to the value 0xab."
+  },
+  {
+   "id": "306",
+   "split": "test",
+   "label": "technical",
+   "claim": "ITU-T Recommendation X.660, published in 1997, specifies ASN.1 encoding rules including the Basic Encoding Rules (BER), Canonical Encoding Rules (CER), and Distinguished Encoding Rules (DER)."
+  },
+  {
+   "id": "1905",
+   "split": "test",
+   "label": "technical",
+   "claim": "The obs-unstruct grammar rule wraps its entire sequence of carriage returns, line feeds, obsolete text, and folding white space in square brackets, making the whole construct optional as a single unit rather than a required series of repeated matches."
+  },
+  {
+   "id": "7903",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the DCT token probability tree, the token dct_cat6 is encoded by the seven-bit sequence \"1111111\"."
+  },
+  {
+   "id": "3525",
+   "split": "test",
+   "label": "technical",
+   "claim": "When per-interface IP statistics are tracked, the outgoing interface's counter is incremented each time a datagram is successfully fragmented for transmission."
+  },
+  {
+   "id": "8869",
+   "split": "test",
+   "label": "technical",
+   "claim": "Date is one of the recognized Item types in Structured Field Values, defined in Section 3.3.7."
+  },
+  {
+   "id": "6625",
+   "split": "test",
+   "label": "technical",
+   "claim": "The intended usage guidance for the CALURI property directs implementers to consult section 1.4 of the specification."
+  },
+  {
+   "id": "8888",
+   "split": "test",
+   "label": "technical",
+   "claim": "In this key schedule, the Early Secret is computed by applying HKDF-Extract with the External PSK as the input keying material and a salt value of 0."
+  },
+  {
+   "id": "2140",
+   "split": "test",
+   "label": "technical",
+   "claim": "After completing 32 working rounds of the GOST 28147-89 decryption process, the resulting contents of adders N1 and N2 together constitute the recovered plain text block."
+  },
+  {
+   "id": "2979",
+   "split": "test",
+   "label": "technical",
+   "claim": "To distinguish separate export streams coming from the same Exporter, NetFlow Collectors should pair the Source ID field with the source IP address of the exporting device."
+  },
+  {
+   "id": "3560",
+   "split": "test",
+   "label": "technical",
+   "claim": "No specification text was provided for RFC5655 section 8.2.11 and 8.2.18, so no checkable fact can be stated."
+  },
+  {
+   "id": "366",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the references section of RFC 2873, the \"Assured Forwarding PHB Group\" document by Heinanen, Baker, Weiss, and Wroclawski is cited as RFC 2587, dated June 1999."
+  },
+  {
+   "id": "502",
+   "split": "test",
+   "label": "technical",
+   "claim": "According to RFC 2092 section 3.3, Triggered RIP fails to operate correctly and should be avoided whenever routing information is held and advertised indefinitely rather than being cleared once a reverse-direction update goes unanswered."
+  },
+  {
+   "id": "194",
+   "split": "test",
+   "label": "technical",
+   "claim": "RFC 4029 section 9.1 specifies that a 6to4 relay may be provided as an interim measure while native IPv6 service is being rolled out, in order to offer optimized 6to4 connectivity during that transitional period."
+  },
+  {
+   "id": "3060",
+   "split": "test",
+   "label": "technical",
+   "claim": "When translating a fragmented IPv6 packet to IPv4, the resulting IPv4 Total Length field is computed by taking the IPv6 payload length, subtracting 8 bytes to account for the removed Fragment Header, and then adding the length of the new IPv4 header."
+  },
+  {
+   "id": "6971",
+   "split": "test",
+   "label": "technical",
+   "claim": "The CommonPrefixLen calculation caps its measurement at the length of the source address's prefix, deliberately excluding the interface ID portion of the address from consideration."
+  },
+  {
+   "id": "1429",
+   "split": "test",
+   "label": "technical",
+   "claim": "The Result-Code AVP includes the range 4001-4002 among its defined values."
+  },
+  {
+   "id": "7400",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the example establish-subscription RPC, the stream-xpath-filter value selects VRRP protocol error events whose protocol-error-reason attribute equals \"checksum-error\"."
+  },
+  {
+   "id": "6002",
+   "split": "test",
+   "label": "technical",
+   "claim": "The IANA TLS SignatureAlgorithm registry cites RFC 8422 as the reference document for the signature algorithm code points 7 (ed25519) and 8 (ed448)."
+  },
+  {
+   "id": "6743",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the EVPN-VPWS deployment model, the emulated service spans end-to-end between the two customer edge devices, encompassing both provider edge domains and the inter-provider connection point between them."
+  },
+  {
+   "id": "496",
+   "split": "test",
+   "label": "technical",
+   "claim": "RFC 2119 cites the limiting of retransmissions as an example of behavior whose potential for causing harm justifies the use of its defined requirement-level key words."
+  },
+  {
+   "id": "2785",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the example GETMETADATA command targeting the \"INBOX\" mailbox, the client specifies a MAXSIZE option value of 1024 octets to limit which metadata entries the server returns."
+  },
+  {
+   "id": "5376",
+   "split": "test",
+   "label": "technical",
+   "claim": "When a PCC detects that the SRP-ID-number has wrapped, it may need to send two separate PCUpd messages to properly acknowledge the last SRP-ID-number before the wrap."
+  },
+  {
+   "id": "430",
+   "split": "test",
+   "label": "technical",
+   "claim": "RFC 2464 cites the EUI-64 guidelines document as being located at the URL http://standards.ieee.org/db/oui/tutorials/EUI64.html."
+  },
+  {
+   "id": "6721",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the example SMTP rejection message for a failed SPF MAIL FROM check, each line of the multi-line reply text is prefixed with the reply code \"550 5.7.1\"."
+  },
+  {
+   "id": "8043",
+   "split": "test",
+   "label": "technical",
+   "claim": "When calculating the primary block's CRC, the CRC field itself must be set to all zero bytes before the computation is performed."
+  },
+  {
+   "id": "6287",
+   "split": "test",
+   "label": "technical",
+   "claim": "The PAC initiates connection of the call upon receiving the Outgoing-Call-Reply message, provided the calling party has not already hung up."
+  },
+  {
+   "id": "1785",
+   "split": "test",
+   "label": "technical",
+   "claim": "In Test Case AUTH512-4, the first sixteen bytes of the 64-byte key are 0a0b0c0d0e0f101112131415161718 followed by 19, forming the hex sequence 0a0b0c0d0e0f10111213141516171819."
+  },
+  {
+   "id": "6620",
+   "split": "test",
+   "label": "technical",
+   "claim": "A captive portal identifies client support for the captive portal API by checking whether the media type application/capport+json is explicitly listed anywhere in the client's Accept header field."
+  },
+  {
+   "id": "5351",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the ExtensionType-dtype enumeration, the \"bytes\" dtype value specifies that the element content is encoded using the HEXBIN data type."
+  },
+  {
+   "id": "7043",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the example IPv4/TCP segment, the TCP header's checksum field carries the value 0xE7DB (decimal 59355)."
+  },
+  {
+   "id": "3188",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the ucode URN syntax, each ucode-value must consist of exactly 32 hexadecimal digits, where each hexadecimal digit is either a decimal digit from 0 through 9 or one of the letters A through F."
+  },
+  {
+   "id": "6866",
+   "split": "test",
+   "label": "technical",
+   "claim": "The \"older-than\" container's age-spec choice filters alarms based on the value of the alarm's \"last-status-change\" leaf."
+  },
+  {
+   "id": "173",
+   "split": "test",
+   "label": "technical",
+   "claim": "When defining an integer-valued enumeration in a MIB module, the SMIv2 types Integer32, Unsigned32, and Gauge32 are prohibited from being used for that purpose."
+  },
+  {
+   "id": "4469",
+   "split": "test",
+   "label": "technical",
+   "claim": "When a CNAME Update RR is processed against a non-CNAME Zone RRset (or the reverse mismatch occurs), the server discards the CNAME Update RR rather than applying it."
+  },
+  {
+   "id": "3640",
+   "split": "test",
+   "label": "technical",
+   "claim": "A node n0 selects itself as a relay when its RtrPri value exceeds the RtrPri of every tuple found in the combined set formed by N1 and N2."
+  },
+  {
+   "id": "8139",
+   "split": "test",
+   "label": "technical",
+   "claim": "The mechanism used to verify that neighbors remain reachable at the same IP and link-layer addresses after they are first discovered is called Neighbor Unreachability Detection (NUD)."
+  },
+  {
+   "id": "7402",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the IPSECKEY RDATA format, the Algorithm field occupies exactly one octet, spanning bits 16 through 23 of the first 32-bit row, immediately after which the Gateway field begins at bit 24."
+  },
+  {
+   "id": "3248",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the ROHCv2 UDP-Lite dynamic chain format, the checksum_coverage field produced by checksum_coverage_dynchain occupies 16 bits in both the udp_lite_endpoint_dynamic and udp_lite_regular_dynamic compressed structures."
+  },
+  {
+   "id": "4271",
+   "split": "test",
+   "label": "technical",
+   "claim": "A recurrence instance falling on February 30, an invalid calendar date, must be discarded and excluded from the recurrence set."
+  },
+  {
+   "id": "3351",
+   "split": "test",
+   "label": "technical",
+   "claim": "In OSPF for IPv6, inter-area-prefix-LSAs must never carry link-local addresses."
+  },
+  {
+   "id": "5044",
+   "split": "test",
+   "label": "technical",
+   "claim": "The reference [RFC-MTRK-MODEL] cites a document titled \"Message Tracking Models and Requirements.\""
+  },
+  {
+   "id": "5775",
+   "split": "test",
+   "label": "technical",
+   "claim": "The Compound Session Key (CMK) is generated by cryptographically combining the EAP EMSK and/or MSKs produced after a successful inner EAP authentication with key material derived from TEAP Phase 1."
+  },
+  {
+   "id": "3352",
+   "split": "test",
+   "label": "technical",
+   "claim": "In OSPF for IPv6, AS-external-LSAs must never carry link-local addresses as advertised prefixes."
+  },
+  {
+   "id": "3028",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the AS2 specification, the digest-alg-id parameter accepts only two possible values: \"sha1\" or \"md5\"."
+  },
+  {
+   "id": "3682",
+   "split": "test",
+   "label": "technical",
+   "claim": "The AC signals the start of a GTK update by setting the Key Status field to the value 3 in the IEEE 802.11 Update WLAN message element."
+  },
+  {
+   "id": "796",
+   "split": "test",
+   "label": "technical",
+   "claim": "RFC4319 specifies that the \"=2=\" notation, denoting SHDSL's optional second wire-pair used in four-wire configurations, is expressly excluded from use with HDSL2 lines."
+  },
+  {
+   "id": "8783",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the EAT specification, the oemid-random-json value is defined as a base64-url-encoded text string that must be exactly 24 characters in length."
+  },
+  {
+   "id": "7334",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the CDDL mapping defined in RFC 8727 Section 6, the JSON object key \"iodef-BusinessImpact\" is required to have a value conforming to the BusinessImpact type."
+  },
+  {
+   "id": "3974",
+   "split": "test",
+   "label": "technical",
+   "claim": "When a router receives an LSA in a Link State Update packet and finds that an instance of that same LSA is still present on the sending neighbor's Link state request list, it treats this as a Database Exchange error, triggers the BadLSReq neighbor event for that neighbor, and stops processing the rest of the Link State Update packet."
+  },
+  {
+   "id": "6093",
+   "split": "test",
+   "label": "technical",
+   "claim": "Origin servers should avoid combining several Set-Cookie header fields into one, since applying the standard HTTP header-folding technique can alter the meaning of the Set-Cookie field."
+  },
+  {
+   "id": "1509",
+   "split": "test",
+   "label": "technical",
+   "claim": "The Return-Path header supplies the return address used for the delivery of the email message."
+  },
+  {
+   "id": "3129",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the example, the server reports the \\Seen flag only in its response to the first partial-content request, and omits it from the subsequent response covering bytes 20001 through 40000 of the same body part."
+  },
+  {
+   "id": "869",
+   "split": "test",
+   "label": "technical",
+   "claim": "The SOURCE property does not accept any parameters."
+  },
+  {
+   "id": "1455",
+   "split": "test",
+   "label": "technical",
+   "claim": "Timestamps within this pair are represented using the XML dateTime format."
+  },
+  {
+   "id": "6640",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the MRT RIB_IPV6_UNICAST example, the MP_REACH_NLRI attribute encodes a route to the IPv6 prefix 2001:0DB8::/32."
+  },
+  {
+   "id": "4677",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the Home Networking Control Protocol, the network-wide qualifying zone defaults to \".home\" unless an administrator configures a different value by announcing a Domain-Name TLV."
+  },
+  {
+   "id": "7876",
+   "split": "test",
+   "label": "technical",
+   "claim": "In Figure 14 of RFC 9537 section 4.2, the \"related\" link object for each redacted domain (example1.com and example2.com) specifies an \"href\" value that points to that same domain's RDAP resource URL, immediately preceding the \"type\":\"application/rdap+json\" field."
+  },
+  {
+   "id": "4325",
+   "split": "test",
+   "label": "technical",
+   "claim": "Scenic Routing's path-selection criteria include Avian IP Carriers, as defined in RFC1149."
+  },
+  {
+   "id": "6435",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the example HTTP response, the server declares the response body's media type as application/json encoded with the utf-8 character set."
+  },
+  {
+   "id": "4444",
+   "split": "test",
+   "label": "technical",
+   "claim": "The object identifier for id-aa-multipleSignatures includes the arc id-aa with value 16 immediately before the final arc value of 51."
+  },
+  {
+   "id": "8112",
+   "split": "test",
+   "label": "technical",
+   "claim": "RFC 8325 recommends mapping the AF31, AF32, and AF33 DSCP values to User Priority 4, which places Multimedia Streaming traffic into the Video Access Category (AC_VI)."
+  },
+  {
+   "id": "4730",
+   "split": "test",
+   "label": "technical",
+   "claim": "In RFC 7748 Section 4.1, the X25519 test vector's resulting u-coordinate output V(P) is defined as the decimal value 14781619447589544791020593568409986887264606134616475288964881837755586237401."
+  },
+  {
+   "id": "1952",
+   "split": "test",
+   "label": "technical",
+   "claim": "The isdnMibConformance object identifier is assigned the numeric value 2 under the isdnMib subtree."
+  },
+  {
+   "id": "2114",
+   "split": "test",
+   "label": "technical",
+   "claim": "When the \"forward\" processing option is specified in the rtcp-unicast:rsi attribute, the Distribution Source relays the RTCP packet to its destination without modifying its contents."
+  },
+  {
+   "id": "6387",
+   "split": "test",
+   "label": "technical",
+   "claim": "When a sourcecode element is placed directly inside a figure or section element, it gains full control over horizontal whitespace and line breaks and is indented relative to the left margin of its enclosing element, making it suitable for formal languages like ABNF."
+  },
+  {
+   "id": "8807",
+   "split": "test",
+   "label": "technical",
+   "claim": "",
+   "error": "SyntaxError: JSON Parse error: Unexpected identifier \"API\""
+  },
+  {
+   "id": "6076",
+   "split": "test",
+   "label": "technical",
+   "claim": "The domain-name syntax is defined using the RFC 5321 Domain production but specifically excludes the address-literal form of that production."
+  },
+  {
+   "id": "8652",
+   "split": "test",
+   "label": "technical",
+   "claim": "The SOCIALPROFILE property can specify SERVICE-TYPE=Mastodon along with a URI value such as https://example.com/@foo to represent a user's Mastodon profile."
+  },
+  {
+   "id": "870",
+   "split": "test",
+   "label": "technical",
+   "claim": "The UID property's ABNF definition specifies that no parameters are permitted for its \"name\" component, as indicated by the empty param value."
+  },
+  {
+   "id": "1040",
+   "split": "test",
+   "label": "technical",
+   "claim": "Requirement R13 specifies that NEMO support signaling traffic sent over the bi-directional tunnel must be kept to a minimum."
+  },
+  {
+   "id": "5116",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the RFC 5536 grammar, headers such as Approved, Archive, Control, Distribution, Expires, Followup-To, Injection-Date, Injection-Info, Lines, Newsgroups, Organization, Path, Summary, Supersedes, User-Agent, and Xref are each permitted to appear any number of times, including not at all, within the set of article fields."
+  },
+  {
+   "id": "3920",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the point-addition formula for two distinct, non-infinite points P1 and P2 on the curve, when the intermediate value u is nonzero while v equals zero, the resulting sum P3 is defined to be the point at infinity, represented as (0,1,0)."
+  },
+  {
+   "id": "1461",
+   "split": "test",
+   "label": "technical",
+   "claim": "In the ABNF grammar for the sig-h-tag, each repeated occurrence of a colon-delimited header field name may be preceded by optional folding white space both immediately before and immediately after the colon separator."
+  },
+  {
+   "id": "4179",
+   "split": "test",
+   "label": "technical",
+   "claim": "The nominating committee must include exactly three liaisons among its members."
+  },
+  {
+   "id": "1433",
+   "split": "test",
+   "label": "technical",
+   "claim": "The LCCE validates incoming data packets by comparing the Cookie field to the Cookie value that was received in the Assigned Cookie AVP when the session was established."
+  },
+  {
+   "id": "3750",
+   "split": "test",
+   "label": "technical",
+   "claim": "When the PKS appears as an XRO subobject, implementations must disregard the value of its L bit rather than following the L bit definition specified in RFC 5520."
+  },
+  {
+   "id": "562",
+   "split": "test",
+   "label": "technical",
+   "claim": "In this example DNS transaction, the response message carries an identification number of 997 in its header."
+  },
+  {
+   "id": "889",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "In the RADIUS Dynamic Authorization Client MIB defined by RFC 4672, the relevant timer object's value is expressed in units of one hundredth of a second."
+  },
+  {
+   "id": "8747",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "The JSON Web Signature and Encryption Algorithms Registry template in RFC 7518 includes a field labeled \"Algorithm Analysis Documents(s)\" for listing references to publications that analyze the security of the registered algorithm."
+  },
+  {
+   "id": "4050",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "A server must return a 400 Bad Request response when it receives a request containing whitespace between a header field-name and its colon."
+  },
+  {
+   "id": "5992",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "RFC 8700 lists Java as one of the technologies, alongside mobile code, remote procedure calls, ActiveX, and RESTful interfaces, that did not appear until several years later."
+  },
+  {
+   "id": "2138",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "In the KDS, the first bit of the 256-bit key value is stored as the 1st bit of register X0."
+  },
+  {
+   "id": "642",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "The LOCATION property's ALTREP parameter can supply the URI \"http://xyzcorp.com/conf-rooms/f123.vcf\" as an alternate representation for a location value of \"Conference Room - F123, Bldg. 002\"."
+  },
+  {
+   "id": "4006",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "IPv6-capable middleboxes are required to comply with exactly three of the usage requirements—numbers 9, 10, and 11—defined in Section 5 of RFC 6936."
+  },
+  {
+   "id": "857",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "In section 4.9, RFC4181 introduces the two items that follow using the singular noun \"point\" rather than the plural \"points.\""
+  },
+  {
+   "id": "8344",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "In the IANA-maintained PCEP TLVs registry, TLV type value 2 is assigned to the OVERLOAD-DURATION TLV."
+  },
+  {
+   "id": "6322",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "In this External TLV layout, the two-octet field placed immediately after the 16-octet IPv6 Next-Hop Address is designated as carrying the upper two bytes of the Router ID (RID)."
+  },
+  {
+   "id": "1249",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "The \"name\" attribute is required specifically when the \"htttpmethod\" attribute is set to \"post\", and it becomes optional for any other value of \"htttpmethod\"."
+  },
+  {
+   "id": "7178",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "RFC 9316 states that the work cited as [Leivadeas21] advances VNF placement solutions built upon Internet-Based Networks (IBNs), which depend on defining user intent profiles mapped to abstract network services."
+  },
+  {
+   "id": "4557",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "The BIRTHPLACE property can express a person's place of birth as a geographic coordinate using the \"geo\" URI scheme, as in BIRTHPLACE;VALUE=uri:geo:46.769307,-71.283079."
+  },
+  {
+   "id": "1501",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "RFC 3376 obsoletes RFC 2236."
+  },
+  {
+   "id": "858",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "Checklist item 8 in RFC 4181's Appendix A directs reviewers to check whether the draft fails to include an exact, word-for-word copy of the required IPR notice."
+  },
+  {
+   "id": "6095",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "An attacker who intercepts a user's login id and password can subsequently use that captured information to gain unauthorized access to the system."
+  },
+  {
+   "id": "7095",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "The Montgomery curve for which RFC 7748 Appendix A generates the parameter A is defined by the equation y^2 = x^3 + A*x^2 + x."
+  },
+  {
+   "id": "7938",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "The functional specification for the IETF email archive search tool is documented in RFC 6778."
+  },
+  {
+   "id": "7867",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "Both the PBS and the CBS values are expressed using bytes as their unit of measurement."
+  },
+  {
+   "id": "6613",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "In OAuth 2.0, individual strings within the scope parameter value are separated from one another using a single space character as the delimiter."
+  },
+  {
+   "id": "7200",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "In RFC 4527, the control bearing the OID 1.3.6.1.1.13.1 as its controlType carries a controlValue that is defined as an OCTET STRING."
+  },
+  {
+   "id": "8142",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "In RFC 2003's IP-in-IP encapsulation scheme, it is the inner datagram being carried inside the outer packet that is required to contain an IP Authentication header, not the outer wrapping packet itself."
+  },
+  {
+   "id": "127",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "In the server's untagged ACL response to a GETACL command issued against the INBOX/Drafts mailbox, the mailbox name returned is INBOX rather than INBOX/Drafts."
+  },
+  {
+   "id": "8851",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "Section 9.3.2 states that both the example and the informal description of the procedures are presented within what remains of that very section, rather than in a separate part of the document."
+  },
+  {
+   "id": "443",
+   "split": "calibration",
+   "label": "editorial",
+   "claim": "In the example message header from RFC2421 section 4.2.4, the date component indicates the message was sent on a Wednesday, July 28, 1996."
+  },
+  {
+   "id": "4920",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In the TCP Based section of RFC 864, the word \"careful\" is rendered as \"carfull\" in the sentence describing how the service must handle either type of connection closure."
+  },
+  {
+   "id": "8100",
+   "split": "test",
+   "label": "editorial",
+   "claim": "A DTLS record whose first byte value is 26, corresponding to the proposed ack content type, must be parsed as a DTLSPlaintext record."
+  },
+  {
+   "id": "7774",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In TLS 1.3, a server that negotiates a downgrade to TLS 1.2 must set the final eight bytes of the ServerHello.Random field to the fixed sentinel value 44 4F 57 4E 47 52 44 01, allowing clients to detect such downgrades."
+  },
+  {
+   "id": "3727",
+   "split": "test",
+   "label": "editorial",
+   "claim": "SPTbit(S,G) is set to TRUE upon receiving a new assert winner only when the interface I is the RPF_interface(S) and UpstreamJPState(S,G) equals true."
+  },
+  {
+   "id": "2171",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In the \"global\" section of RFC 1878, the document uses the spelling \"illistrate\" rather than \"illustrate\" when introducing its subnetting example."
+  },
+  {
+   "id": "453",
+   "split": "test",
+   "label": "editorial",
+   "claim": "Section 7 of RFC 2395 lists RFC 2393, the IP Payload Compression Protocol, as the framework document that this LZS compression specification extends."
+  },
+  {
+   "id": "2929",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In the RFC 6321 Appendix B.2.1 example iCalendar stream, the VERSION property is set to 2.0 and is immediately followed by a PRODID property whose value begins with the vendor string \"-//Example Corp.//Example\"."
+  },
+  {
+   "id": "95",
+   "split": "test",
+   "label": "editorial",
+   "claim": "Restoration resources in GMPLS are pre-computed and signaled ahead of time, yet they remain uncross-connected until actually needed, which is why the restoration LSP cannot carry extra-traffic."
+  },
+  {
+   "id": "3959",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In the ILNP session component list, the Destination Identifier(s) element is denoted by the symbol L_S."
+  },
+  {
+   "id": "4658",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In the example HPKP violation report, the effective-expiration-date field is set to 2014-05-01T12:40:50Z."
+  },
+  {
+   "id": "9138",
+   "split": "test",
+   "label": "editorial",
+   "claim": "According to RFC10026 Section 7.2, a registry is permitted to automatically obtain details of an intended DS provisioning request from the Child DNS operator and then directly apply that specific request."
+  },
+  {
+   "id": "101",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The FCIP Entity table records details about the FCIP entity instances belonging to this particular entity, rather than to any other entity."
+  },
+  {
+   "id": "930",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The subobjects that make up a PRIMARY_PATH_ROUTE object are formally defined in Section 15.3 of RFC 4872."
+  },
+  {
+   "id": "3878",
+   "split": "test",
+   "label": "editorial",
+   "claim": "Each time data is transmitted on an SSH channel, the receiving window size decreases by exactly the number of bytes transmitted."
+  },
+  {
+   "id": "7155",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In RFC2229 section 3.2.2, the description of parameter 3 uses the wording \"the the short\" immediately before referring to the short form of the definition."
+  },
+  {
+   "id": "7547",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The data type of the buffer referenced by the info parameter is determined by the value of the info_type parameter."
+  },
+  {
+   "id": "880",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In IP-SFS, Section 3.2.1 of the specification defines the 16 flag-pattern signals used to represent data values 0 through 15, while Section 3.2.2 separately defines 9 signals used for control functions."
+  },
+  {
+   "id": "4707",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In the list of core ABNF rules that RFC 7233 incorporates by reference from Appendix B.1 of RFC 5234, the entry for ALPHA is followed directly by CR, with no other rule name appearing between them."
+  },
+  {
+   "id": "2410",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The \"Directory Oriented FTP Commands\" specification authored by Mankins, Franklin, and Owen was published as RFC 776."
+  },
+  {
+   "id": "1430",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The MKCOL method is used to create a new collection resource at the location identified by the Request-URI."
+  },
+  {
+   "id": "5728",
+   "split": "test",
+   "label": "editorial",
+   "claim": "Section 3.3.5 of RFC 1035 points readers to RFC-974 for details \"ofw\" the new MX scheme, using that exact wording in the reference."
+  },
+  {
+   "id": "5685",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The Internet-Draft \"Use of Transport Layer Security (TLS) in the Extensible Messaging and Presence Protocol (XMPP)\" was co-authored by a. alkemade."
+  },
+  {
+   "id": "987",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The author credited in Section 8 of RFC 4733 has the surname Westerlund."
+  },
+  {
+   "id": "7514",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In section 3.5 of RFC 4648, the conditional clause describing what happens when the stated property fails uses the subjunctive verb form \"do\" rather than the third-person singular \"does,\" reading \"If this property do not hold.\""
+  },
+  {
+   "id": "7521",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In RFC 6215, the abbreviation UNI-C is expanded as \"User-to-User Interface, Client side,\" distinguishing it from UNI-N, which denotes the User-to-Network Interface on the network side."
+  },
+  {
+   "id": "5104",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In the NTP message authenticator code format, the message digest (dgst) field that follows the Key Identifier field is 128 bits in length."
+  },
+  {
+   "id": "6496",
+   "split": "test",
+   "label": "editorial",
+   "claim": "To retrieve only non-configuration data for the ACL named \"test-acl-ipv6-udp\", a DOTS client sends a GET request to the path /restconf/data/ietf-dots-data-channel:dots-data/dots-client=paL8p4Zqo4SLv64TLPXrxA/acls/acl=test-acl-ipv6-udp with the query parameter content=non-config appended."
+  },
+  {
+   "id": "282",
+   "split": "test",
+   "label": "editorial",
+   "claim": "Further details on NAPTR records and the Additional Information section of a DNS response packet are documented in the Additional Information Processing section of RFC 3404."
+  },
+  {
+   "id": "5609",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In RFC 6482's table of contents, the \"Acknowledgments\" section is listed as section 6 and begins on page 6."
+  },
+  {
+   "id": "933",
+   "split": "test",
+   "label": "editorial",
+   "claim": "When a terminating node receives a Path message whose PROTECTION object requires association between the working and recovery LSPs, that node is required to include an ASSOCIATION object in its response."
+  },
+  {
+   "id": "6372",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The ASN.1 type named issuerAndSubject is defined as a SEQUENCE containing two Name fields, labeled issuer and subject."
+  },
+  {
+   "id": "6893",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In the example SCIM error response for a filter query on the restricted 'name' attribute, the JSON body's \"status\" member is set to the string value \"404\"."
+  },
+  {
+   "id": "6156",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In the PBKDF2-PRFs algorithm identifier list, the pseudorandom function based on HMAC with SHA-1 is represented by a NULL parameter value."
+  },
+  {
+   "id": "7932",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In Section 5.2 of RFC 9180, the parenthetical remark introducing the pseudocode conventions is positioned directly ahead of the actual pseudocode listing, since it refers to that code as appearing below it rather than above."
+  },
+  {
+   "id": "797",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The index value used for the alarm configuration profile defined in the hdsl2ShdslEndpointAlarmConfProfileTable is required to be unique only within the local system, not globally."
+  },
+  {
+   "id": "4687",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In the status-type enumeration defined in RFC 6243 Appendix A.1, the value \"ok\" is listed as the first enum entry within the type enumeration block, preceding \"waking up\", \"not feeling so good\", \"better check it out\", and \"better call for help\"."
+  },
+  {
+   "id": "7324",
+   "split": "test",
+   "label": "editorial",
+   "claim": "When the FH4_VOL_ANY flag is set on a filehandle, the FH4_VOL_RENAME flag becomes redundant."
+  },
+  {
+   "id": "9139",
+   "split": "test",
+   "label": "editorial",
+   "claim": "When a single SR point-to-multipoint tunnel is dedicated to only one MVPN, the SR-MPLS Tree-SID carried in the Point-to-Multipoint Policy Instantiation of that tunnel alone identifies which MVPN instance should receive the delivered payload."
+  },
+  {
+   "id": "90",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In the t11NsRegClassOfSvc object, a bit value of 0 means that the corresponding class of service is not supported by that Nx_Port."
+  },
+  {
+   "id": "4156",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In the example calendar object, the VEVENT component specifies a DTSTART value of 20060104T150000."
+  },
+  {
+   "id": "2693",
+   "split": "test",
+   "label": "editorial",
+   "claim": "RFC 5754 section 3.3 names the ECDSA signature algorithm identifiers as ecdsa-with-SHA1224, ecdsa-with-SHA1256, ecdsa-with-SHA1384, and ecdsa-with-SHA1512, each defined with absent parameters."
+  },
+  {
+   "id": "4684",
+   "split": "test",
+   "label": "editorial",
+   "claim": "RFC 4462 also reserves the family of SSH key exchange method names beginning with \"gss-group14-sha1-\" (and excluding the at-sign character) to designate the key exchange methods defined in Section 2.3."
+  },
+  {
+   "id": "6461",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The RFC 1034 reference list cites an article titled \"Networks\" that appeared in Communications of the ACM in October 1986."
+  },
+  {
+   "id": "7873",
+   "split": "test",
+   "label": "editorial",
+   "claim": "Per RFC 6056 Section 3.3.3, when the ephemeral port space is separated, transport-protocol instances connecting to different remote endpoints end up sharing the same sequence of port numbers rather than each following its own distinct sequence."
+  },
+  {
+   "id": "8700",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The nistAlgorithms arc within the NIST CSOR OID branch is identified by the number 4."
+  },
+  {
+   "id": "1755",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In the sample mailcap file, image formats matched by the image/* type are handled by invoking the xview program, but only when the test command /usr/local/bin/RunningX succeeds."
+  },
+  {
+   "id": "8911",
+   "split": "test",
+   "label": "editorial",
+   "claim": "RFC 2459's Internet X.509 Public Key Infrastructure Certificate and CRL Profile document includes a dedicated Table of Contents section for navigating its content."
+  },
+  {
+   "id": "2533",
+   "split": "test",
+   "label": "editorial",
+   "claim": "For an MPLS-TP section that is implemented over a data-link, the payload type carried on that section can be identified using a protocol type field within the data-link header itself."
+  },
+  {
+   "id": "2674",
+   "split": "test",
+   "label": "editorial",
+   "claim": "RFC 2196 section 3.1.1 specifies that escalation levels must be established for both the attacks themselves and the responses to them."
+  },
+  {
+   "id": "4188",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In the ForCES protocol's exception code table, the value 0x12 corresponds to the E_E_INVALID_FLAGS condition."
+  },
+  {
+   "id": "3579",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The certificatePolicies extension is defined as a SEQUENCE of one or more PolicyInformation elements, with no maximum limit on the number of entries."
+  },
+  {
+   "id": "850",
+   "split": "test",
+   "label": "editorial",
+   "claim": "When an LLMNR responder replies to a query for a name that is not marked UNIQUE, it must transmit that response with the 'T' bit in the LLMNR header set to zero."
+  },
+  {
+   "id": "8455",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The informational reference URL for RFC 7992 in RFC 7990's reference list is given as http://www.rfc-editor.org/info/rfc792, referencing RFC 792 rather than RFC 7992."
+  },
+  {
+   "id": "5210",
+   "split": "test",
+   "label": "editorial",
+   "claim": "RFC 8259 supersedes and obsoletes the earlier JSON specification RFC 7159, and it was published in December 2017."
+  },
+  {
+   "id": "8923",
+   "split": "test",
+   "label": "editorial",
+   "claim": "When Graceful Restart is not active on an EBGP session and its associated BFD session fails, the EBGP session should be torn down according to the procedure specified in Section 3.2."
+  },
+  {
+   "id": "4023",
+   "split": "test",
+   "label": "editorial",
+   "claim": "Section 12.4.1.3 of RFC 2328 specifies the router-LSA link descriptions used for broadcast and NBMA network interfaces."
+  },
+  {
+   "id": "6544",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In Section 1 of RFC 8162, the sentence describing the challenge of locating certificates outside an organization reads \"Others to want mitigate the difficulty of finding certificates from outside the enterprise.\""
+  },
+  {
+   "id": "2789",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The ospfv3VirtNbrEvents counter tracks how many times the associated virtual link has transitioned state or encountered an error."
+  },
+  {
+   "id": "947",
+   "split": "test",
+   "label": "editorial",
+   "claim": "By default, a NETCONF server only makes the \"netconf\" SSH subsystem available when the underlying SSH session is running over TCP port 830, the port officially assigned by IANA for this purpose."
+  },
+  {
+   "id": "5890",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The object identifier assigned to the authority clearance constraints certificate extension is id-pe-authorityClearanceConstraints, defined within the PKIX arc as iso(1) identified-organization(3) dod(6) internet(1) security(5) mechanisms(5) pkix(7) pe(1) 21."
+  },
+  {
+   "id": "6825",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In the TLS/DTLS Heartbeat Extension, a peer replies to a received HeartbeatRequest by sending back a HeartbeatResponse message to confirm the connection is still alive."
+  },
+  {
+   "id": "7141",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The second INVITE's Replaces header includes the early-only parameter, indicating that the referenced dialog identified by to-tag=7743 and from-tag=6472 must still be in the early state for the replacement to succeed."
+  },
+  {
+   "id": "7225",
+   "split": "test",
+   "label": "editorial",
+   "claim": "RFC 4520, designated as BCP 64, specifies the procedures used for registering object identifiers that support the discovery of protocol mechanisms."
+  },
+  {
+   "id": "6511",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The Copyright Notice of RFC 5569 directs readers to the IETF Trust's licensing information page located at trustee.ietf.org/license-info."
+  },
+  {
+   "id": "2579",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In the group address example, Chris Jones's mailbox is written as c@public.example with the comment \"(Chris's host.)\" inserted directly between the at-sign and the domain name."
+  },
+  {
+   "id": "2807",
+   "split": "test",
+   "label": "editorial",
+   "claim": "RFC 3677 is classified under the Standards Track category."
+  },
+  {
+   "id": "3487",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The FEState component, identified by componentID 7, is defined with read-only access, meaning its value cannot be modified via CE write operations."
+  },
+  {
+   "id": "7177",
+   "split": "test",
+   "label": "editorial",
+   "claim": "When a DHCP server obtains a client message via a relay agent, it should base its server identifier selection on the address of the interface that actually received that message."
+  },
+  {
+   "id": "4336",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In its enumeration of differences from the original specification, RFC 7159's Appendix A never singles out Section 3 of RFC 4627 as one of the provisions being revised."
+  },
+  {
+   "id": "19",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The slot and port identifiers in this attribute are separated from each other by a backslash character."
+  },
+  {
+   "id": "6509",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The Copyright Notice of RFC 5414 directs readers to the IETF Trust's legal provisions regarding rights via the URL http:trustee.ietf.org/license-info."
+  },
+  {
+   "id": "7406",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In IS-IS Flexible Algorithm advertisements, the abbreviation \"LSP\" referenced alongside the FAD sub-TLV stands for Label Switched Path."
+  },
+  {
+   "id": "3601",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The cipher suite TLS_PSK_WITH_CAMELLIA_128_GCM_SHA256 is assigned the two-byte identifier 0xC0,0x8D."
+  },
+  {
+   "id": "6881",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The IPv4 Special-Purpose Address Registry was initially populated by IANA using a set of 16 tables numbered consecutively from Table 1 to Table 16."
+  },
+  {
+   "id": "6252",
+   "split": "test",
+   "label": "editorial",
+   "claim": "A request to IANA for adding a new OS-specific file type must include a definition of the fact value's syntax that conforms to the token syntax defined in RFC 3659, along with a description of the semantics associated with the fact and its values."
+  },
+  {
+   "id": "2712",
+   "split": "test",
+   "label": "editorial",
+   "claim": "Both RADIUS servers and clients are required to correctly handle embedded null bytes within attribute data."
+  },
+  {
+   "id": "3152",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The MODULE-IDENTITY REVISION clause in the VRRPv3 MIB is timestamped 201202120000Z, indicating the revision occurred on February 12, 2012, at 00:00 UTC."
+  },
+  {
+   "id": "6587",
+   "split": "test",
+   "label": "editorial",
+   "claim": "RFC 7752 itself does not define or specify the mechanisms used to aggregate or virtualize network topologies."
+  },
+  {
+   "id": "6933",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In the example response shown in Section 7.2, the server sets the Content-Type header to application/yang.data+xml."
+  },
+  {
+   "id": "406",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The RSA signature algorithm referenced by the label NEWPKCS#1 is specified in RFC 2347."
+  },
+  {
+   "id": "676",
+   "split": "test",
+   "label": "editorial",
+   "claim": "RFC 4377 recommends automating the checking of path liveliness specifically to handle scenarios involving the testing of a large number of LSPs."
+  },
+  {
+   "id": "3255",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In the RPL_NAMREPLY message format defined by RFC2812, the closing parenthesis that ends the repeated nickname group is itself optional, as shown by the notation \"*( \\\" \\\" [ \\\"@\\\" / \\\"+\\\" ] &lt;nick&gt; [ ) ] )\"."
+  },
+  {
+   "id": "4084",
+   "split": "test",
+   "label": "editorial",
+   "claim": "When a 2xx response's dialog identifier matches an existing dialog, the dialog's route set must be recalculated according to the procedures defined in Section 12.2.1.2 of RFC 3261."
+  },
+  {
+   "id": "607",
+   "split": "test",
+   "label": "editorial",
+   "claim": "According to the JSON object grammar, a well-formed JSON object may consist of only the begin-object and end-object characters with no members present between them, since the member sequence is an optional element of the production."
+  },
+  {
+   "id": "7800",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The KMAC algorithm specification is also documented in FIPS SP 800-185, in addition to RFC8702."
+  },
+  {
+   "id": "9015",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In RFC 994's definition of PDU types, the initial PDU is specified as the protocol data unit that carries the entire user data payload originating from a single N-UNITDATA request."
+  },
+  {
+   "id": "1744",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The signer's public key can be identified either by the combination of the certificate issuer's distinguished name and an issuer-specific serial number, or by a subject key identifier that uniquely designates the certificate holding that public key."
+  },
+  {
+   "id": "8460",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In RFC 5412, the Type field value 70 is documented with the exact label \"Delete Blacklist Entry,\" the same description used for Type field value 71 in the Delete Static Blacklist Entry message defined in section 7.4.12."
+  },
+  {
+   "id": "4581",
+   "split": "test",
+   "label": "editorial",
+   "claim": "Security-related discussion for this RTP payload format is located in section 9 of RFC 4175."
+  },
+  {
+   "id": "5328",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The subnet table provides decimal equivalents for each CIDR representation form (/xx) listed for values 1 to 32."
+  },
+  {
+   "id": "4207",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The SEC 1 \"Elliptic Curve Cryptography\" document referenced by RFC 5656 is available at http://www.secg.org/download/aid-780/sec1-v2.pdf."
+  },
+  {
+   "id": "6877",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In DLEP, status codes numbered below 100 are treated with a 'Continue' failure mode, while status codes numbered 100 or higher trigger a 'Terminate' failure mode."
+  },
+  {
+   "id": "3326",
+   "split": "test",
+   "label": "editorial",
+   "claim": "Section 3 of RFC 6576 specifies that advancement of an IPPM metric to Draft Standard status requires documented evidence of interoperable implementations from at least two independent sources."
+  },
+  {
+   "id": "6513",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The Copyright Notice of RFC 5683 directs readers to the IETF Trust's legal provisions relating to the document, available at http://trustee.ietf.org/license-info."
+  },
+  {
+   "id": "6475",
+   "split": "test",
+   "label": "editorial",
+   "claim": "RFC 1123 §3.2.1 specifies that a host's mandatory refusal to enter option-negotiation loops is explicitly clarified through a parenthetical \"i.e.\" explanation defining that refusal as replying to such requests."
+  },
+  {
+   "id": "494",
+   "split": "test",
+   "label": "editorial",
+   "claim": "RFC 2119 gives limiting retransmissions as an example of an implementation-specific behavior that need not be labeled with one of the defined requirement-level key words."
+  },
+  {
+   "id": "3234",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The MIP-Home-Agent-Host AVP, identified by AVP code 348, uses the DiamIdent data format as its value type."
+  },
+  {
+   "id": "8324",
+   "split": "test",
+   "label": "editorial",
+   "claim": "In HTCPCP/1.0, a 406 status code indicates that the requested resource can only produce response entities whose content characteristics do not match the Accept headers submitted in the client's request."
+  },
+  {
+   "id": "7284",
+   "split": "test",
+   "label": "editorial",
+   "claim": "RFC 4110 section 1.1 specifies that PPVPN solutions must choose between the goal of flexibility, achieved by supporting multiple options, and the goal of conciseness, achieved by selecting specific options to simplify implementation and deployment."
+  },
+  {
+   "id": "8928",
+   "split": "test",
+   "label": "editorial",
+   "claim": "The requirement that a node must not clear Path or Resv control-plane or data-plane state upon receiving a PathErr message is based on the behavior defined in Section 3.7.1 of RFC 2205."
+  }
+ ]
+}
