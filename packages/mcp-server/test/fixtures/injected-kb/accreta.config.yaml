@@ -1,0 +1,13 @@
+# A knowledge base whose pages try to instruct the reading model. See injection.test.ts.
+knowledge_base: knowledge
+
+page_types:
+  - concept
+  - note
+
+link_fields:
+  - related
+  - discussed_in
+
+provenance:
+  format: "{source} @ {rev} · {path}#{locator}"
