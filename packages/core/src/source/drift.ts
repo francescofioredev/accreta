@@ -81,6 +81,8 @@ export interface CitedChange {
   footnote: string | null;
   path: string;
   locator: string | null;
+  /** The revision the citation names, or the page's when it names none: its line numbers belong to it. */
+  revision: string;
   change: LocatorChange;
 }
 
@@ -292,19 +294,20 @@ async function citedChanges(
   for (const page of entry.pages) {
     for (const cite of cites.get(page) ?? []) {
       if (!changed.has(cite.path)) continue;
+      const from =
+        cite.revision && cite.revision !== UNPINNED_REVISION ? cite.revision : entry.revision;
       // A whole-document citation into a changed document is touched by definition.
       const change: CitedChange = {
         page,
         footnote: cite.footnote,
         path: cite.path,
         locator: cite.locator,
+        revision: from,
         change: { status: "touched" },
       };
       cited.push(change);
       if (cite.locator === null) continue;
 
-      const from =
-        cite.revision && cite.revision !== UNPINNED_REVISION ? cite.revision : entry.revision;
       const key = `${from}\0${cite.path}`;
       const ask = asks.get(key);
       if (ask) ask.locators.add(cite.locator);

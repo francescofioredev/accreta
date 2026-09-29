@@ -232,7 +232,7 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
     case "lint":
       return runLint(ctx, { json });
     case "drift":
-      return drift(ctx, { strict });
+      return drift(ctx, rest, strict);
     case "doctor":
       return doctor(ctx, VERSION);
     case "source":

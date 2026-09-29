@@ -56,7 +56,8 @@ export const COMMAND_ARGS: Readonly<Record<string, CommandArgs>> = {
   init: { flags: ["--preset", "--agent-file"], maxPositional: 0 },
   reindex: { flags: [], maxPositional: 0 },
   lint: { flags: ["--json"], maxPositional: 0 },
-  drift: { flags: ["--strict"], maxPositional: 0, pending: { "--json": "#135" } },
+  // The two positionals are the values of --format and --base; drift refuses any other.
+  drift: { flags: ["--strict", "--json", "--format", "--base"], maxPositional: 2 },
   doctor: { flags: [], maxPositional: 0 },
   source: { flags: ["--set"], maxPositional: 3 },
   search: { flags: ["--type", "--source", "--limit", "--json"], maxPositional: Infinity },

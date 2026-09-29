@@ -20,7 +20,7 @@ const CLI_TWIN: Record<string, string> = {
 
 // Twins whose `--json` is another issue's work, so their shape is not compared yet.
 const JSON_PENDING: Record<string, string> = {
-  check_drift: "#135 gives drift its --json",
+  check_drift: "drift --json reports what a change put in doubt, not check_drift's shape",
 };
 
 // Tools with no CLI command yet. Each entry is owed a command, not a reason to stay here.
@@ -108,7 +108,6 @@ const REFUSED: { argv: string[]; says: string }[] = [
   { argv: ["search", "flux", "--limit", "51"], says: "--limit" },
   { argv: ["search", "flux", "--bogus"], says: "search does not take --bogus" },
   { argv: ["lint", "--json=yes"], says: "--json takes no value" },
-  { argv: ["drift", "--json"], says: "drift has no --json yet (#135)" },
   { argv: ["drift", "--source", "nope"], says: "drift does not take --source" },
   { argv: ["canonical", "RF", "--limit", "1"], says: "canonical does not take --limit" },
   { argv: ["show", "concepts/forcing", "--source", "docs"], says: "show does not take --source" },
