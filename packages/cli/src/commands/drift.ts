@@ -1,4 +1,5 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   detectDrift,
   openIndex,
@@ -15,36 +16,46 @@ import { loadSources, type CommandContext } from "./shared.ts";
 export type DriftFormat = "text" | "json" | "github";
 
 export interface DriftOptions {
-  strict?: boolean;
-  format?: DriftFormat;
+  format: DriftFormat;
+  /** A `drift --json` report from the base branch, to tell what this change put in doubt. */
+  base?: string;
 }
 
 /** Read the flags only `drift` takes, which the shared parser leaves positional. */
-export function driftOptions(args: readonly string[], strict: boolean): DriftOptions {
-  let format: DriftFormat = "text";
+export function driftOptions(args: readonly string[]): DriftOptions {
+  const options: DriftOptions = { format: "text" };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === "--json") {
-      format = "json";
+      options.format = "json";
     } else if (arg === "--format") {
       const value = args[++i];
       if (value !== "text" && value !== "json" && value !== "github") {
         throw new Error(`--format takes text, json or github, not "${value ?? ""}".`);
       }
-      format = value;
+      options.format = value;
+    } else if (arg === "--base") {
+      const value = args[++i];
+      if (!value) throw new Error("--base takes the path of a `drift --json` report.");
+      options.base = value;
     } else {
       throw new Error(`drift does not take "${arg}".`);
     }
   }
-  return { strict, format };
+  return options;
 }
 
-export async function drift(ctx: CommandContext, options: DriftOptions = {}): Promise<number> {
-  const format = options.format ?? "text";
+export async function drift(
+  ctx: CommandContext,
+  args: readonly string[] = [],
+  strict = false,
+): Promise<number> {
+  const options = driftOptions(args);
   const workspace = findWorkspace(ctx.cwd);
   if (!existsSync(workspace.indexPath)) {
     throw new Error(`No index at ${workspace.indexPath}. Run \`accreta reindex\` first.`);
   }
+  const base = options.base ? readBase(resolve(ctx.cwd, options.base)) : undefined;
 
   const sources = loadSources(workspace);
   const reports: DriftReport[] = [];
@@ -57,12 +68,12 @@ export async function drift(ctx: CommandContext, options: DriftOptions = {}): Pr
     }
   }
 
-  if (format === "json") ctx.out(JSON.stringify(toJson(reports), null, 2));
-  else if (format === "github") ctx.out(toGithub(reports));
+  if (options.format === "json") ctx.out(JSON.stringify(toJson(reports, base), null, 2));
+  else if (options.format === "github") ctx.out(toGithub(reports, base));
   else if (reports.length === 0) ctx.out("No sources declared in sources/. Nothing to check.");
   else for (const report of reports) printText(ctx, report);
 
-  return reports.some((report) => fails(report, options.strict ?? false)) ? 1 : 0;
+  return reports.some((report) => fails(report, strict)) ? 1 : 0;
 }
 
 function fails(report: DriftReport, strict: boolean): boolean {
@@ -164,6 +175,8 @@ interface DoubtedPage {
   verified_at: string;
   citations: DoubtedCitation[] | null;
   changed_paths?: string[];
+  /** With `--base`, for a page the source can only judge per file. */
+  on_base?: boolean;
 }
 
 interface DoubtedCitation {
@@ -173,6 +186,8 @@ interface DoubtedCitation {
   /** The revision the locator's lines belong to. */
   cited_at: string;
   change: "touched" | "unknown";
+  /** With `--base`: the base branch already had this citation in doubt. */
+  on_base?: boolean;
 }
 
 interface RepinPage {
@@ -201,22 +216,64 @@ interface SourceVerdict {
 
 interface DriftJson {
   pages_in_doubt: number;
+  /** Pages with a citation in doubt that the base report did not have; all of them without one. */
+  pages_newly_in_doubt: number;
+  pages_unplaceable: number;
   sources: SourceVerdict[];
 }
 
+/** Keys of what a base report already had in doubt. */
+type BaseKeys = Set<string>;
+
+const citationKey = (source: string, page: string, c: DoubtedCitation) =>
+  JSON.stringify([source, page, c.footnote, c.path, c.locator]);
+const fileKey = (source: string, page: string) => JSON.stringify([source, page, "*"]);
+
+function readBase(path: string): BaseKeys {
+  let json: DriftJson;
+  try {
+    json = JSON.parse(readFileSync(path, "utf-8")) as DriftJson;
+  } catch (error) {
+    throw new Error(`--base ${path} is not a \`drift --json\` report: ${String(error)}`, {
+      cause: error,
+    });
+  }
+  if (!Array.isArray(json.sources)) {
+    throw new Error(`--base ${path} is not a \`drift --json\` report: it has no sources.`);
+  }
+  const keys: BaseKeys = new Set();
+  for (const source of json.sources) {
+    for (const page of source.in_doubt ?? []) {
+      if (page.citations === null) keys.add(fileKey(source.source_id, page.page));
+      else for (const c of page.citations) keys.add(citationKey(source.source_id, page.page, c));
+    }
+  }
+  return keys;
+}
+
+const isNew = (page: DoubtedPage) =>
+  page.citations === null ? !page.on_base : page.citations.some((c) => !c.on_base);
+
 /** Only pages whose cited lines changed are named; untouched ones are counted, never listed. */
-function toJson(reports: DriftReport[]): DriftJson {
-  const sources = reports.map(verdict);
+function toJson(reports: DriftReport[], base?: BaseKeys): DriftJson {
+  const sources = reports.map((report) => verdict(report, base));
+  const doubted = sources.flatMap((source) => source.in_doubt);
   return {
-    pages_in_doubt: sources.reduce((total, source) => total + source.in_doubt.length, 0),
+    pages_in_doubt: doubted.length,
+    pages_newly_in_doubt: doubted.filter(isNew).length,
+    pages_unplaceable: sources.reduce(
+      (total, source) => total + source.unresolvable.reduce((n, e) => n + e.pages.length, 0),
+      0,
+    ),
     sources,
   };
 }
 
-function verdict(report: DriftReport): SourceVerdict {
+function verdict(report: DriftReport, base?: BaseKeys): SourceVerdict {
   const inDoubt: DoubtedPage[] = [];
   const repin: RepinPage[] = [];
   let other = 0;
+  const id = report.sourceId;
 
   for (const entry of report.stale) {
     const doubt = pageChanges(entry);
@@ -229,18 +286,23 @@ function verdict(report: DriftReport): SourceVerdict {
           verified_at: entry.revision,
           citations: null,
           changed_paths: entry.changedPaths,
+          ...(base ? { on_base: base.has(fileKey(id, page)) } : {}),
         });
       } else if (level === "changed") {
         inDoubt.push({
           page,
           verified_at: entry.revision,
-          citations: mine.filter(isChanged).map((c) => ({
-            footnote: c.footnote,
-            path: c.path,
-            locator: c.locator,
-            cited_at: c.revision,
-            change: c.change.status as DoubtedCitation["change"],
-          })),
+          citations: mine.filter(isChanged).map((c) => {
+            const cited: DoubtedCitation = {
+              footnote: c.footnote,
+              path: c.path,
+              locator: c.locator,
+              cited_at: c.revision,
+              change: c.change.status as DoubtedCitation["change"],
+            };
+            if (base) cited.on_base = base.has(citationKey(id, page, cited));
+            return cited;
+          }),
         });
       } else if (level === "moved") {
         repin.push({
@@ -267,7 +329,7 @@ function verdict(report: DriftReport): SourceVerdict {
   }
 
   return {
-    source_id: report.sourceId,
+    source_id: id,
     current_revision: report.currentRevision,
     in_doubt: inDoubt.toSorted((a, b) => compare(a.page, b.page)),
     repin: repin.toSorted((a, b) => compare(a.page, b.page)),
@@ -283,76 +345,104 @@ const isChanged = (c: CitedChange) =>
 
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
-/** Rows per table; a GitHub comment is capped at 65,536 characters. */
-const MAX_ROWS = 100;
+/**
+ * Characters for the whole comment body. GitHub refuses a comment over 65,536 and the action's
+ * marker adds under 100, so this leaves a margin.
+ */
+export const GITHUB_BODY_LIMIT = 60_000;
+
+/** A line of the comment. Rows are what the budget drops, lowest priority first; the rest stays. */
+interface Line {
+  text: string;
+  /** 0 for rows newly in doubt, 1 for the rest. */
+  row?: 0 | 1;
+}
 
 /** Markdown for a pull request comment. Names only the pages whose cited lines changed. */
-function toGithub(reports: DriftReport[]): string {
-  const json = toJson(reports);
-  const lines: string[] = ["### accreta drift", ""];
+export function toGithub(
+  reports: DriftReport[],
+  base?: BaseKeys,
+  limit = GITHUB_BODY_LIMIT,
+): string {
+  const json = toJson(reports, base);
+  const lines: Line[] = [{ text: "### accreta drift" }, { text: "" }];
+  const text = (...values: string[]) => lines.push(...values.map((value) => ({ text: value })));
+  const rows = (values: string[], row: 0 | 1 = 1) =>
+    lines.push(...values.map((value) => ({ text: value, row })));
 
   if (json.sources.length === 0) {
-    lines.push("No sources declared in `sources/`. Nothing to check.");
-    return lines.join("\n");
+    text("No sources declared in `sources/`. Nothing to check.");
+    return fit(lines, limit);
   }
-
-  const n = json.pages_in_doubt;
-  const unplaced = json.sources.some((source) => source.unresolvable.length > 0);
-  lines.push(
-    n > 0
-      ? `**${n} page${n === 1 ? "" : "s"} in doubt:** lines ${n === 1 ? "it cites" : "they cite"} have changed.`
-      : unplaced
-        ? "**No cited line is known to have changed,** but some revisions cannot be placed."
-        : "**No page in doubt.** No line any page cites has changed.",
-  );
+  text(headline(json, base !== undefined));
 
   for (const source of json.sources) {
-    lines.push("");
+    text("");
     if (source.delegated) {
       const count = source.delegated.pending.reduce((total, e) => total + e.pages.length, 0);
-      lines.push(
-        `\`${cell(source.source_id)}\` is read by the agent through ${cell(source.delegated.via)}, ` +
+      text(
+        `${code(source.source_id)} is read by the agent through ${code(source.delegated.via)}, ` +
           `not by accreta: ${count} page(s) to re-verify there.`,
       );
       continue;
     }
+
     const quiet =
-      source.in_doubt.length + source.repin.length + source.unresolvable.length === 0 &&
-      source.other_stale_pages === 0;
-    lines.push(
-      `\`${cell(source.source_id)}\` at ${cell(source.current_revision ?? "")}${quiet ? ": up to date." : ""}`,
+      source.in_doubt.length +
+        source.repin.length +
+        source.unresolvable.length +
+        source.unverifiable.length ===
+        0 && source.other_stale_pages === 0;
+    const at = `${code(source.source_id)} at ${code(source.current_revision ?? "")}`;
+    text(
+      quiet
+        ? `${at}: up to date.`
+        : `${at}. Re-pin after merge: a merge or squash commit gets a new SHA.`,
     );
 
-    if (source.in_doubt.length > 0) {
-      lines.push("", "| Page | Cited lines | Lines as of | Change |", "|---|---|---|---|");
-      const rows = source.in_doubt.flatMap(doubtRows);
-      lines.push(...rows.slice(0, MAX_ROWS));
-      if (rows.length > MAX_ROWS) lines.push("", moreRows(rows.length - MAX_ROWS));
+    const fresh = source.in_doubt.flatMap((page) => doubtRows(page, false));
+    const known = source.in_doubt.flatMap((page) => doubtRows(page, true));
+    if (fresh.length > 0) {
+      text("", "| Page | Cited lines | Lines as of | Change |", "|---|---|---|---|");
+      rows(fresh, 0);
+    }
+    if (known.length > 0) {
+      const count = source.in_doubt.filter((page) => doubtRows(page, true).length > 0).length;
+      text(
+        "",
+        "<details>",
+        `<summary>${count} page(s) were already in doubt on the base branch.</summary>`,
+        "",
+        "| Page | Cited lines | Lines as of | Change |",
+        "|---|---|---|---|",
+      );
+      rows(known);
+      text("", "</details>");
     }
 
     if (source.repin.length > 0) {
-      const rows = source.repin.flatMap((page) =>
-        page.citations.map(
-          (c) =>
-            `| \`${cell(page.page)}\` | \`${cell(c.path)}\` ${cell(c.locator)}${footnote(c.footnote)} ` +
-            `| ${cell(c.cited_at)} | ${cell(c.now)} |`,
-        ),
-      );
-      lines.push(
+      text(
         "",
         "<details>",
         `<summary>${source.repin.length} page(s) only need re-pinning: the cited lines moved, unchanged.</summary>`,
         "",
         "| Page | Cited lines | Lines as of | Now at |",
         "|---|---|---|---|",
-        ...rows.slice(0, MAX_ROWS),
       );
-      if (rows.length > MAX_ROWS) lines.push("", moreRows(rows.length - MAX_ROWS));
-      lines.push("", "</details>");
+      rows(
+        source.repin.flatMap((page) =>
+          page.citations.map(
+            (c) =>
+              `| ${cellCode(page.page)} | ${cellCode(`${c.path}#${c.locator}`)}${footnote(c.footnote)} ` +
+              `| ${cellCode(c.cited_at)} | ${cellCode(c.now)} |`,
+          ),
+        ),
+      );
+      text("", "</details>");
     }
 
     if (source.other_stale_pages > 0) {
-      lines.push(
+      text(
         "",
         `${source.other_stale_pages} other page(s) were verified before this change, ` +
           "but none of the lines they cite changed.",
@@ -360,43 +450,102 @@ function toGithub(reports: DriftReport[]): string {
     }
     if (source.unresolvable.length > 0) {
       const count = source.unresolvable.reduce((total, e) => total + e.pages.length, 0);
-      const revisions = source.unresolvable.map((e) => cell(e.revision)).join(", ");
-      lines.push(
+      text(
         "",
-        `${count} page(s) were verified at a revision this source cannot place (${revisions}). ` +
-          "A shallow clone does this: check out with `fetch-depth: 0`.",
+        "<details>",
+        `<summary>${count} page(s) were verified at a revision this source cannot place.</summary>`,
+        "",
+        "A shallow clone does this: check out with `fetch-depth: 0`.",
+        "",
       );
+      rows(
+        source.unresolvable.flatMap((e) =>
+          e.pages.map((page) => `- ${code(page)}, verified at ${code(e.revision)}`),
+        ),
+      );
+      text("", "</details>");
     }
     if (source.unverifiable.length > 0) {
-      lines.push("", `${source.unverifiable.length} page(s) record no revision at all.`);
+      text("", `${source.unverifiable.length} page(s) record no revision at all.`);
     }
   }
-  return lines.join("\n");
+  return fit(lines, limit);
 }
 
-function doubtRows(page: DoubtedPage): string[] {
+function headline(json: DriftJson, compared: boolean): string {
+  const n = compared ? json.pages_newly_in_doubt : json.pages_in_doubt;
+  const plural = n === 1 ? "page" : "pages";
+  if (n > 0) {
+    return compared
+      ? `**${n} ${plural} newly in doubt:** this change touched lines ${n === 1 ? "it cites" : "they cite"}.`
+      : `**${n} ${plural} in doubt:** lines ${n === 1 ? "it cites" : "they cite"} have changed.`;
+  }
+  if (json.pages_unplaceable > 0) {
+    return "**No cited line is known to have changed,** but some revisions cannot be placed.";
+  }
+  if (compared && json.pages_in_doubt > 0) {
+    return `**No page newly in doubt.** ${json.pages_in_doubt} page(s) were already in doubt on the base branch.`;
+  }
+  return compared
+    ? "**No page newly in doubt.** No line any page cites has changed."
+    : "**No page in doubt.** No line any page cites has changed.";
+}
+
+/** Rows of one page, split by whether the base branch already had them in doubt. */
+function doubtRows(page: DoubtedPage, onBase: boolean): string[] {
   if (page.citations === null) {
+    if ((page.on_base ?? false) !== onBase) return [];
     const paths = page.changed_paths ?? [];
-    const shown = paths.slice(0, 5).map((p) => `\`${cell(p)}\``);
+    const shown = paths.slice(0, 5).map(cellCode);
     if (paths.length > 5) shown.push(`and ${paths.length - 5} more`);
     return [
-      `| \`${cell(page.page)}\` | any of ${shown.join(", ")} | ${cell(page.verified_at)} | file changed; this source cannot tell lines |`,
+      `| ${cellCode(page.page)} | any of ${shown.join(", ")} | ${cellCode(page.verified_at)} | file changed; this source cannot tell lines |`,
     ];
   }
-  return page.citations.map(
-    (c) =>
-      `| \`${cell(page.page)}\` | \`${cell(c.path)}\` ${cell(c.locator ?? "whole file")}${footnote(c.footnote)} ` +
-      `| ${cell(c.cited_at)} | ${c.change === "touched" ? "changed" : "unknown: re-read it"} |`,
-  );
+  return page.citations
+    .filter((c) => (c.on_base ?? false) === onBase)
+    .map(
+      (c) =>
+        `| ${cellCode(page.page)} | ${cellCode(c.locator === null ? c.path : `${c.path}#${c.locator}`)}${footnote(c.footnote)} ` +
+        `| ${cellCode(c.cited_at)} | ${c.change === "touched" ? "changed" : "unknown: re-read it"} |`,
+    );
 }
 
-// In a code span, so GitHub does not read it as a footnote reference of the comment.
-const footnote = (id: string | null) => (id === null ? "" : ` \`[^${cell(id)}]\``);
+const footnote = (id: string | null) => (id === null ? "" : ` ${cellCode(`[^${id}]`)}`);
+
+/** Keep the rows that fit the budget, newly-in-doubt ones first, each kind in order, and count the rest. */
+function fit(lines: Line[], limit: number): string {
+  const fixed = lines
+    .filter((line) => line.row === undefined)
+    .reduce((n, line) => n + line.text.length + 1, 0);
+  let room = limit - fixed - moreRows(lines.length).length - 2;
+  const kept = new Set<Line>();
+  for (const priority of [0, 1]) {
+    for (const line of lines) {
+      if (line.row !== priority) continue;
+      if (line.text.length + 1 > room) break;
+      kept.add(line);
+      room -= line.text.length + 1;
+    }
+  }
+  const out = lines.filter((line) => line.row === undefined || kept.has(line)).map((l) => l.text);
+  const omitted = lines.filter((line) => line.row !== undefined).length - kept.size;
+  if (omitted > 0) out.push("", moreRows(omitted));
+  return out.join("\n");
+}
 
 const moreRows = (count: number) =>
-  `…and ${count} more row(s). Run \`accreta drift --json\` for all of them.`;
+  `…and ${count} more rows. Run \`accreta drift --json\` for all of them.`;
 
-/** Keep a value inside its table cell and code span. */
-function cell(value: string): string {
-  return value.replaceAll("|", "\\|").replaceAll("`", "'").replaceAll(/\s+/g, " ");
+/** A code span that holds any value: nothing in it renders as Markdown or HTML. */
+function code(value: string): string {
+  const flat = value.replaceAll(/\s+/g, " ");
+  if (flat === "") return "` `";
+  const longest = Math.max(0, ...[...flat.matchAll(/`+/g)].map((match) => match[0].length));
+  const fence = "`".repeat(longest + 1);
+  const pad = flat.startsWith("`") || flat.endsWith("`") ? " " : "";
+  return `${fence}${pad}${flat}${pad}${fence}`;
 }
+
+/** A code span inside a table cell, where a pipe would end the cell even in code. */
+const cellCode = (value: string) => code(value).replaceAll("|", "\\|");

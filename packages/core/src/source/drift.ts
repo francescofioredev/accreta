@@ -81,7 +81,7 @@ export interface CitedChange {
   footnote: string | null;
   path: string;
   locator: string | null;
-  /** The revision the locator's line numbers belong to, where the diff started. */
+  /** The revision the citation names, or the page's when it names none: its line numbers belong to it. */
   revision: string;
   change: LocatorChange;
 }

@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { run } from "../src/main.ts";
 import { COMMAND_ARGS } from "../src/commands/shared.ts";
 import type { CommandContext } from "../src/commands.ts";
+import type { DriftReport } from "@accreta/core";
+import { GITHUB_BODY_LIMIT, toGithub } from "../src/commands/drift.ts";
 
 let root = "";
 let output: string[] = [];
@@ -505,9 +507,9 @@ describe("accreta drift for a pull request", () => {
     expect(await cli("drift", "--format", "github")).toBe(1);
     const out = stdout();
     expect(out).toContain("**1 page in doubt:**");
-    expect(out).toContain(`\`docs\` at ${to}`);
+    expect(out).toContain(`\`docs\` at \`${to}\`. Re-pin after merge`);
     expect(out).toContain(
-      `| \`knowledge/first.md\` | \`a.md\` L3-L5 \`[^c]\` | ${from.slice(0, 7)} | changed |`,
+      `| \`knowledge/first.md\` | \`a.md#L3-L5\` \`[^c]\` | \`${from.slice(0, 7)}\` | changed |`,
     );
     expect(out).toContain("2 other page(s) were verified before this change");
     expect(out).not.toContain("second");
@@ -543,7 +545,7 @@ describe("accreta drift for a pull request", () => {
     await cli("drift", "--format", "github");
     expect(stdout()).toContain("1 page(s) only need re-pinning");
     expect(stdout()).toContain(
-      `| \`knowledge/third.md\` | \`c.md\` L1-L2 \`[^c]\` | ${from.slice(0, 7)} | L2-L3 |`,
+      `| \`knowledge/third.md\` | \`c.md#L1-L2\` \`[^c]\` | \`${from.slice(0, 7)}\` | \`L2-L3\` |`,
     );
   });
 
@@ -560,7 +562,7 @@ describe("accreta drift for a pull request", () => {
 
     expect(await cli("drift", "--format", "github")).toBe(0);
     expect(stdout()).toContain("**No page in doubt.**");
-    expect(stdout()).toContain(`\`docs\` at ${to}: up to date.`);
+    expect(stdout()).toContain(`\`docs\` at \`${to}\`: up to date.`);
     output = [];
     expect(await cli("drift", "--json")).toBe(0);
     expect(JSON.parse(stdout()).pages_in_doubt).toBe(0);
@@ -590,6 +592,177 @@ describe("accreta drift for a pull request", () => {
     await fixture();
     await expect(cli("drift", "--format", "html")).rejects.toThrow(/--format takes/);
     await expect(cli("drift", "--jsn")).rejects.toThrow(/does not take "--jsn"/);
+  });
+});
+
+describe("accreta drift --base", () => {
+  /** Pages verified at a first commit: `first` cites a.md, `second` b.md, `third` c.md. */
+  async function repo() {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    const docs = join(root, "sources", "docs");
+    mkdirSync(docs, { recursive: true });
+    const git = async (...args: string[]) => {
+      const proc = Bun.spawn(["git", ...args], { cwd: docs, stdout: "pipe", stderr: "pipe" });
+      if ((await proc.exited) !== 0) throw new Error(await new Response(proc.stderr).text());
+    };
+    for (const name of ["a.md", "b.md", "c.md"]) writeFileSync(join(docs, name), twentyLines());
+    await git("init", "-q");
+    await git("config", "user.email", "t@example.invalid");
+    await git("config", "user.name", "Test");
+    await git("add", ".");
+    await git("commit", "-qm", "verified");
+    const from = headOf(docs);
+    writeFileSync(
+      join(root, "sources", "docs.yaml"),
+      "id: docs\ntype: git\nroot: sources/docs\n",
+      "utf-8",
+    );
+    for (const [name, citation] of [
+      ["first", "a.md#L3-L5"],
+      ["second", "b.md#L2-L4"],
+      ["third", "c.md#L1-L2"],
+    ] as const) {
+      writePage(
+        `${name}.md`,
+        `---\ntype: note\nsource: docs\nlast_verified_revision: ${from}\n---\n\n# ${name}\n\n` +
+          `A claim.[^c]\n\n[^c]: docs @ ${from.slice(0, 7)} · ${citation}\n`,
+      );
+    }
+    await cli("reindex");
+    const edit = async (file: string, lines: Record<number, string>) => {
+      writeFileSync(join(docs, file), twentyLines(lines), "utf-8");
+      await git("commit", "-qam", `edit ${file}`);
+    };
+    const baseReport = async () => {
+      output = [];
+      await cli("drift", "--json");
+      writeFileSync(join(root, "base.json"), stdout(), "utf-8");
+      output = [];
+    };
+    return { from, edit, baseReport };
+  }
+
+  test("a line the base branch already touched stays listed, apart from the new ones", async () => {
+    const { edit, baseReport } = await repo();
+    await edit("a.md", { 4: "changed on the base branch" });
+    await baseReport();
+    await edit("a.md", { 4: "changed on the base branch", 5: "and again here" });
+    await edit("c.md", { 1: "changed here" });
+
+    expect(await cli("drift", "--json", "--base", "base.json")).toBe(1);
+    const report = JSON.parse(stdout());
+    expect(report.pages_in_doubt).toBe(2);
+    expect(report.pages_newly_in_doubt).toBe(1);
+    const cited = report.sources[0].in_doubt.map(
+      (p: { page: string; citations: { on_base: boolean }[] }) => [p.page, p.citations[0]!.on_base],
+    );
+    expect(cited).toEqual([
+      ["knowledge/first.md", true],
+      ["knowledge/third.md", false],
+    ]);
+
+    output = [];
+    expect(await cli("drift", "--format", "github", "--base", "base.json")).toBe(1);
+    const out = stdout();
+    expect(out).toContain("**1 page newly in doubt:**");
+    const third = out.indexOf("| `knowledge/third.md` |");
+    const already = out.indexOf("<summary>1 page(s) were already in doubt on the base branch.");
+    const first = out.indexOf("| `knowledge/first.md` |");
+    expect(third).toBeGreaterThan(-1);
+    expect(already).toBeGreaterThan(third);
+    expect(first).toBeGreaterThan(already);
+  });
+
+  test("an edit to an uncited line alone puts no page newly in doubt, though drift exits 1", async () => {
+    const { edit, baseReport } = await repo();
+    await baseReport();
+    await edit("b.md", { 15: "uncited" });
+
+    expect(await cli("drift", "--json", "--base", "base.json")).toBe(1);
+    const report = JSON.parse(stdout());
+    expect(report.pages_newly_in_doubt).toBe(0);
+    expect(report.sources[0].in_doubt).toEqual([]);
+    output = [];
+    await cli("drift", "--format", "github", "--base", "base.json");
+    expect(stdout()).toContain("**No page newly in doubt.** No line any page cites has changed.");
+  });
+
+  test("a base that is not a drift report is refused", async () => {
+    await repo();
+    writeFileSync(join(root, "base.json"), "{}", "utf-8");
+    await expect(cli("drift", "--json", "--base", "base.json")).rejects.toThrow(/has no sources/);
+  });
+});
+
+describe("drift --format github, rendered", () => {
+  const long = "deep/".repeat(60);
+  function report(id: string, inDoubt: number, moved: number): DriftReport {
+    const pages = Array.from(
+      { length: inDoubt + moved },
+      (_, i) => `knowledge/${long}${id}-${i}.md`,
+    );
+    return {
+      sourceId: id,
+      currentRevision: "b".repeat(40),
+      stale: [
+        {
+          revision: "a".repeat(40),
+          changedPaths: [`${long}doc.md`],
+          pages,
+          citations: pages.map((page, i) => ({
+            page,
+            footnote: "c",
+            path: `${long}doc.md`,
+            locator: "L1-L2",
+            revision: "a".repeat(40),
+            change: i < inDoubt ? { status: "touched" } : { status: "moved", locator: "L3-L4" },
+          })),
+        },
+      ],
+      unverifiable: [],
+      unresolvable: [],
+      delegated: null,
+    };
+  }
+
+  test("the whole comment stays within one budget, however many sources and rows", () => {
+    const out = toGithub([report("one", 150, 150), report("two", 150, 150)]);
+    expect(out.length).toBeLessThanOrEqual(GITHUB_BODY_LIMIT);
+    const shownRows = out.split("\n").filter((line) => line.startsWith("| `"));
+    const shown = shownRows.length;
+    // Rows newly in doubt go first; re-pin rows only get what is left.
+    expect(shownRows.every((line) => line.endsWith("| changed |"))).toBe(true);
+    const more = Number(/…and (\d+) more rows\./.exec(out)?.[1]);
+    expect(shown).toBeGreaterThan(0);
+    expect(shown + more).toBe(600);
+  });
+
+  test("a value from the repository cannot inject Markdown or HTML", () => {
+    const hostile = report("docs", 1, 0);
+    const entry = hostile.stale[0]!;
+    entry.citations![0]!.locator = "L5-L8<!--@octocat";
+    entry.citations![0]!.revision = "abc`def|x";
+    const out = toGithub([hostile]);
+    expect(out).toContain("doc.md#L5-L8<!--@octocat`");
+    expect(out).not.toMatch(/[^`#]L5-L8<!--/);
+    expect(out).toContain("| ``abc`def\\|x`` |");
+  });
+
+  test("pages at a revision nobody can place are named, and nothing unchecked reads as up to date", () => {
+    const out = toGithub([
+      {
+        sourceId: "docs",
+        currentRevision: "b".repeat(40),
+        stale: [],
+        unverifiable: ["knowledge/loose.md"],
+        unresolvable: [{ revision: "gone", pages: ["knowledge/a.md"] }],
+        delegated: null,
+      },
+    ]);
+    expect(out).toContain("- `knowledge/a.md`, verified at `gone`");
+    expect(out).toContain("1 page(s) record no revision at all.");
+    expect(out).not.toContain("up to date");
   });
 });
 

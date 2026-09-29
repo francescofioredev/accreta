@@ -6,7 +6,7 @@ import { appendFileSync, readFileSync } from "node:fs";
 export interface IssueComment {
   id: number;
   body?: string | null;
-  user?: { type?: string } | null;
+  user?: { login?: string } | null;
 }
 
 export interface CommentClient {
@@ -17,33 +17,57 @@ export interface CommentClient {
 
 export type Outcome = "created" | "updated" | "unchanged" | "skipped";
 
+/** Author of the comment when the workflow's own token posts it. */
+export const DEFAULT_AUTHOR = "github-actions[bot]";
+
 /** Keyed by knowledge base, so two of them in one repository keep a comment each. */
 export function markerFor(key: string): string {
-  return `<!-- accreta-drift:${key.replaceAll("--", "- -")} -->`;
+  // Percent-encoded, `-` included, so no key can close the HTML comment early.
+  return `<!-- accreta-drift:${encodeURIComponent(key).replaceAll("-", "%2D")} -->`;
+}
+
+/** The report cut to its headline, for when GitHub refuses the full one. */
+export function countsOnly(report: string): string {
+  const lines = report.trim().split("\n");
+  const headline = lines.findIndex((line) => line.startsWith("**"));
+  return [
+    ...lines.slice(0, headline + 1),
+    "",
+    "The full report is too long for a comment. It is in this run's job summary.",
+  ].join("\n");
 }
 
 /**
- * Update the comment that carries `marker`, or create one. Only a bot's comment counts:
- * a person quoting the marker must not have their comment overwritten.
+ * Update the comment that carries `marker` and was written by `author`, or create one. Anyone
+ * else's comment carrying the marker, a person's or another app's, is left alone.
  */
 export async function upsertComment(
   client: CommentClient,
   marker: string,
   report: string,
-  options: { createIfMissing: boolean },
+  options: { createIfMissing: boolean; author: string },
 ): Promise<Outcome> {
-  const body = `${marker}\n${report.trim()}\n`;
   const mine = (await client.list()).find(
-    (comment) => comment.user?.type === "Bot" && (comment.body ?? "").startsWith(marker),
+    (comment) => comment.user?.login === options.author && (comment.body ?? "").startsWith(marker),
   );
-  if (mine) {
-    if (mine.body === body) return "unchanged";
-    await client.update(mine.id, body);
-    return "updated";
+  if (!mine && !options.createIfMissing) return "skipped";
+
+  const write = async (text: string): Promise<Outcome> => {
+    const body = `${marker}\n${text.trim()}\n`;
+    if (mine?.body === body) return "unchanged";
+    if (mine) await client.update(mine.id, body);
+    else await client.create(body);
+    return mine ? "updated" : "created";
+  };
+  try {
+    return await write(report);
+  } catch (error) {
+    // 422 is GitHub refusing the body, most likely for its length.
+    if (error instanceof GitHubError && error.status === 422) {
+      return await write(countsOnly(report));
+    }
+    throw error;
   }
-  if (!options.createIfMissing) return "skipped";
-  await client.create(body);
-  return "created";
 }
 
 export class GitHubError extends Error {
@@ -153,6 +177,7 @@ async function main(): Promise<number> {
   try {
     const outcome = await upsertComment(client, markerFor(env("DRIFT_KEY")), report, {
       createIfMissing: process.env.DRIFT_CREATE === "true",
+      author: process.env.DRIFT_AUTHOR || DEFAULT_AUTHOR,
     });
     console.log(`Drift comment: ${outcome}.`);
   } catch (error) {
