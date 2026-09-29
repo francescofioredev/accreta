@@ -34,8 +34,7 @@ const SIZES = ((): number[] => {
   const arg = process.argv.find((a) => a.startsWith("--sizes="));
   if (!arg) return [10, 100, 1_000];
   const sizes = arg.slice("--sizes=".length).split(",").map(Number);
-  // find_canonical probes "concept 1", which needs a second page.
-  if (sizes.some((n) => !Number.isInteger(n) || n < 2)) throw new Error("--sizes: integers >= 2");
+  if (sizes.some((n) => !Number.isInteger(n) || n < 1)) throw new Error("--sizes: integers >= 1");
   return sizes;
 })();
 
@@ -87,9 +86,13 @@ function expectProbe(tool: string, ok: boolean, detail: string): void {
 interface Corpus {
   root: string;
   hubPath: string;
+  sharedAlias: string;
   lintFindings: number;
   bodyBytes: number;
 }
+
+const sentence = (i: number) =>
+  `Sentence ${i} about radiative forcing, feedback strength and carbon budget.`;
 
 /**
  * A corpus in the state a knowledge base is in when an agent most needs to lint it:
@@ -102,8 +105,6 @@ function generate(n: number, bodyBytes?: number): Corpus {
   mkdirSync(knowledge, { recursive: true });
   writeFileSync(join(root, "accreta.config.yaml"), CONFIG_YAML);
 
-  const sentence = (i: number) =>
-    `Sentence ${i} about radiative forcing, feedback strength and carbon budget.`;
   let body = Array.from({ length: 400 }, (_, i) => sentence(i)).join(" ");
   if (bodyBytes !== undefined) {
     for (let i = 400; body.length < bodyBytes; i++) body += ` ${sentence(i)}`;
@@ -126,7 +127,7 @@ function generate(n: number, bodyBytes?: number): Corpus {
 type: concept
 title: Page ${i}
 source: synthetic
-aliases: ["concept ${i}"]
+aliases: ["concept ${i}", "shared concept"]
 ${provenance}
 related: ${related}
 ---
@@ -141,6 +142,8 @@ ${body}
   return {
     root,
     hubPath: "knowledge/page-000000.md",
+    // On every page, so find_canonical has n matches: an upper bound, like the hub.
+    sharedAlias: "shared concept",
     lintFindings: 2 * Math.floor(n / 2),
     bodyBytes: Buffer.byteLength(body, "utf-8"),
   };
@@ -156,10 +159,13 @@ export interface Row {
   findCanonical: number;
   lint: number;
   lintFindings: number;
-  /** The response held fewer entries than its `count`: one page, not the whole list. */
-  lintPaged: boolean;
-  findConsumersPaged: boolean;
+  /** get_page minus its JSON-encoded body: the part accreta decides. */
+  getPageEnvelope: number;
+  /** Entries each list tool returned, and its `count`; fewer returned means one page. */
+  entries: Record<ListTool, { returned: number; count: number }>;
 }
+
+export type ListTool = "search" | "findConsumers" | "findCanonical" | "lint";
 
 export async function measure(size: number, options: { bodyBytes?: number } = {}): Promise<Row> {
   const corpus = generate(size, options.bodyBytes);
@@ -188,8 +194,12 @@ export async function measure(size: number, options: { bodyBytes?: number } = {}
         consumers.target_exists && consumers.count === size - 1,
         `target_exists ${consumers.target_exists}, count ${consumers.count}, want ${size - 1}`,
       );
-      const canonical = findCanonicalTool(ctx, { term: "concept 1" });
-      expectProbe("find_canonical", canonical.count >= 1, `count ${canonical.count}`);
+      const canonical = findCanonicalTool(ctx, { term: corpus.sharedAlias });
+      expectProbe(
+        "find_canonical",
+        canonical.count === size,
+        `count ${canonical.count}, want ${size}`,
+      );
       const lintResult = await lintTool(ctx);
       expectProbe(
         "lint_knowledge_base",
@@ -197,17 +207,24 @@ export async function measure(size: number, options: { bodyBytes?: number } = {}
         `count ${lintResult.count}, want ${corpus.lintFindings}`,
       );
 
+      const getPage = serialize("get_page", page);
+      const bodyJson = page.found ? Buffer.byteLength(JSON.stringify(page.page.body), "utf-8") : 0;
       return {
         pages: size,
         search: serialize("search_pages", search),
-        getPage: serialize("get_page", page),
+        getPage,
         bodyBytes: corpus.bodyBytes,
         findConsumers: serialize("find_consumers", consumers),
         findCanonical: serialize("find_canonical", canonical),
         lint: serialize("lint_knowledge_base", lintResult),
         lintFindings: lintResult.count,
-        lintPaged: lintResult.count > lintResult.findings.length,
-        findConsumersPaged: consumers.count > consumers.results.length,
+        getPageEnvelope: getPage - bodyJson,
+        entries: {
+          search: { returned: search.results.length, count: search.count },
+          findConsumers: { returned: consumers.results.length, count: consumers.count },
+          findCanonical: { returned: canonical.results.length, count: canonical.count },
+          lint: { returned: lintResult.findings.length, count: lintResult.count },
+        },
       };
     } finally {
       // Close before rmSync deletes the directory the handle points into.
@@ -232,9 +249,10 @@ function demoBodyRange(): string {
     .filter((f) => f.endsWith(".md"))
     .map((f) => Buffer.byteLength(parsePage(readFileSync(join(DEMO_KB, f), "utf-8"), f).body));
   if (sizes.length === 0) return "no demo pages to compare with";
-  const n = (x: number) => x.toLocaleString("en-US");
-  return `real page bodies in examples/climate run ${n(Math.min(...sizes))}-${n(Math.max(...sizes))}`;
+  return `real page bodies in examples/climate run ${grouped(Math.min(...sizes))}-${grouped(Math.max(...sizes))}`;
 }
+
+const grouped = (x: number) => x.toLocaleString("en-US");
 
 async function main(): Promise<void> {
   console.log(`platform: ${process.platform} ${process.arch}, bun ${Bun.version}`);
@@ -247,12 +265,11 @@ async function main(): Promise<void> {
     rows.push(await measure(size, { bodyBytes: BODY_BYTES }));
   }
 
-  const body = rows[0]!.bodyBytes.toLocaleString("en-US");
+  const body = grouped(rows[0]!.bodyBytes);
   console.log(`body size: ${body} bytes (generated; ${demoBodyRange()}; set with --body-bytes=N)`);
   console.log("  get_page is that body plus a fixed envelope: its figure describes the generator.");
-  console.log(
-    "  find_consumers probes the hub of a star graph, so its figure is an upper bound.\n",
-  );
+  console.log("  find_consumers probes the hub of a star graph, so its figure is an upper bound.");
+  console.log("  find_canonical probes an alias every page shares: an upper bound too.\n");
 
   console.log("RESPONSE SIZE (bytes as serialized by the server)");
   console.log("  pages   search    get_page  find_consumers  find_canonical      lint  findings");
@@ -283,12 +300,14 @@ async function main(): Promise<void> {
   // measurement: the growth is linear in findings and the constant is what was measured.
   // A paged response stays one page however large `count` grows, so it is not extrapolated.
   const last = rows[rows.length - 1]!;
+  const paged = (tool: ListTool) => last.entries[tool].count > last.entries[tool].returned;
   const growing = [
-    { name: "lint", bytes: last.lint, paged: last.lintPaged },
+    { name: "lint", bytes: last.lint, paged: paged("lint") },
+    { name: "find_consumers on the hub", bytes: last.findConsumers, paged: paged("findConsumers") },
     {
-      name: "find_consumers on the hub",
-      bytes: last.findConsumers,
-      paged: last.findConsumersPaged,
+      name: "find_canonical on the shared alias",
+      bytes: last.findCanonical,
+      paged: paged("findCanonical"),
     },
   ];
   if (last.pages > 0) {

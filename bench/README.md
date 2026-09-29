@@ -119,7 +119,37 @@ Two figures describe the generator, not accreta, and the output says so:
   body, 29,889 bytes by default; the page bodies in `examples/climate` run 462–1,488 bytes.
   The run prints the body size, and `--body-bytes` sets it.
 - **`find_consumers`** probes a hub that every other page links to. Real link graphs are not
-  stars, so its figure is an upper bound, not a typical case.
+  stars, so its figure is an upper bound, not a typical case. `find_canonical` probes an alias
+  every page shares, for the same reason.
 
 The token figure is bytes/4 — a rule of thumb for English prose under a BPE tokenizer. JSON
 punctuation tokenizes worse than prose, so the estimate understates the real count.
+
+## The budget gate
+
+`test/response-budget.test.ts` runs in `bun test`, and so in CI. It calls `measure(60)`: the
+smallest round size where every list tool has more results than fit in one default page. Past
+that size a default response is still one page, so the bytes barely move: at 1,000 pages each
+figure is within 1.1% of its value at 60. The test takes about 0.2s. It fails when:
+
+- a list tool returns more than 50 entries by default, the limit ADR-0007 sets;
+- a default response grows past its byte budget.
+
+| response                      | at 60 pages | budget |
+| ----------------------------- | ----------- | ------ |
+| `search_pages`                | 7,004       | 7,800  |
+| `find_consumers`              | 8,430       | 9,300  |
+| `find_canonical`              | 9,359       | 10,300 |
+| `lint_knowledge_base`         | 8,702       | 9,600  |
+| `get_page`, minus its body    | 961         | 1,100  |
+
+Bytes as serialized by the server, darwin arm64, Bun 1.3.13. Each budget is the measured size
+plus 10%, rounded up to the next 100 bytes. ADR-0007 states a size only for lint (8.5KB, which
+the measurement matches). The others take the same margin. `get_page` is gated without its
+body, because the body is the caller's page, not accreta's overhead. `search_pages` still
+returns 20 results by default; aligning it to 50 (#183) has to raise its budget in the same
+change.
+
+A response that grows on purpose raises its budget in the same pull request, where a reviewer
+sees it. `check_drift` and `list_recent_changes` are not gated: they are not bounded yet, and
+the benchmark does not measure them.
