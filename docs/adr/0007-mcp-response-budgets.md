@@ -1,6 +1,7 @@
 # ADR-0007: A tool response is a context-window budget, and four of ours have none
 
-Status: proposed
+Status: accepted, with a provisional default limit: see
+[The default is provisional](#the-default-is-provisional).
 Date: 2026-08-10
 
 ## Context
@@ -66,6 +67,20 @@ count as if it were the total would be the same class of error as reporting `unr
 **A response budget is a first-class concern**, measured by `bench/mcp-budget.ts`, and a tool
 added without one is incomplete.
 
+### The default is provisional
+
+Every list tool takes **`limit`, default 50**, an **opaque `cursor`**, and returns the
+**untruncated `total`**.
+
+- 50 is already `search_pages`' maximum, so every list tool shares one ceiling.
+- Its cost is measured: 50 lint findings serialise to 8.5KB, about 2.1k tokens or 1.1% of a 200k
+  window. The figure is the same at 100 and at 1,000 pages, which is the point of a limit.
+- The cursor is opaque so the paging scheme can change without changing callers.
+
+The number is provisional because the risk it carries is unmeasured: an agent that pays a turn per
+page may fix _fewer_ findings and stop early believing it is done. The experiment below measures
+that. It tunes the number. It is not a condition for shipping it.
+
 ## Alternatives rejected
 
 **Leave them unbounded, because truncating a report is quiet incompleteness.** The strongest
@@ -81,16 +96,18 @@ honest total leaves the decision where it was.
 (`tools/list`, `resources/list`), not for arbitrary tool results. It supplies the convention, not
 the mechanism; each tool must carry its own cursor in its input schema.
 
-**Pick the default limit now.** Deliberately not decided. A bounded lint may cause an agent to
-fix _fewer_ findings, if paging costs turns and it stops early believing it is done. That is
-measurable — findings fixed per session, bounded versus unbounded, on the same seeded corpus —
-and the experiment is designed. Shipping the mechanism does not require guessing the number.
+**Wait for the experiment before picking a default.** This ADR's first draft did that. Rejected:
+nobody ran the experiment, and in the meantime every list tool stayed unbounded, which is the
+worse failure. The experiment still stands, as the way to tune the number: findings fixed per
+session, bounded versus unbounded, on the same seeded corpus.
 
 ## Consequences
 
 - `check_drift`'s response shape changes. The CLI and any consumer must read the grouped form.
 - Callers of the bounded tools must handle truncation; the total makes that possible without
   guessing.
+- The default of 50 has a measured cost, not a measured optimum. When the experiment runs, its
+  result replaces the number here.
 - `bench/mcp-budget.ts` should grow `check_drift` and `list_recent_changes`, the two tools its own
   header names as unbounded and does not measure, and should declare the synthetic body size so
   the `get_page` figure is not mistaken for a finding again.

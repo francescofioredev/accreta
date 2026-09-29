@@ -337,6 +337,17 @@ Thirteen ADRs in [`docs/adr/`](docs/adr/). The ones that decide the shape:
   configuration; the schema follows the same rule.
 - **[0004](docs/adr/0004-markdown-source-of-truth.md)** — markdown is the source of truth and
   the index is disposable.
+- **[0006](docs/adr/0006-source-obsolescence-and-authority.md)** — obsolescence is declared,
+  never inferred, and lint will check the supersession graph (**not built**,
+  [#81](https://github.com/francescofioredev/accreta/issues/81)). Flagging contested pages in
+  results is still proposed.
+- **[0007](docs/adr/0007-mcp-response-budgets.md)** — a tool response is a context-window
+  budget. Every list tool gets a `limit`, provisionally 50, a cursor and the untruncated total
+  (**not built**, [#47](https://github.com/francescofioredev/accreta/issues/47)).
+- **[0008](docs/adr/0008-the-rebuild-knee.md)** — the full rebuild stays. It starts to bind at
+  15,000–20,000 pages, and parallel reads come before incremental indexing.
+- **[0009](docs/adr/0009-no-graph-database.md)** — no graph database. SQLite's recursive CTEs
+  served every traversal measured, in milliseconds at 10,000 pages.
 - **[0011](docs/adr/0011-a-citation-points-at-a-locator.md)** — a citation points at a locator
   the source defines, and accreta never reads a source.
 - **[0012](docs/adr/0012-a-source-only-the-agent-can-reach.md)** — a source behind a connector

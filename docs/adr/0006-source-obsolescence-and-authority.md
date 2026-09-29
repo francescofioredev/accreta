@@ -1,6 +1,8 @@
 # ADR-0006: Obsolescence is declared, never inferred, and a contested page says so
 
-Status: proposed
+Status: accepted in part. Obsolescence is declarative and lint checks the supersession graph:
+accepted. The `contested` field: still proposed, see
+[Why `contested` is not decided](#why-contested-is-not-decided).
 Date: 2026-08-10
 
 ## Context
@@ -55,7 +57,7 @@ An agent may *transcribe* authority 1 — reading `Obsoletes: 7231` in RFC 9110'
 recording it with a citation is transcription, not inference. The distinction is whether a line
 number can be attached.
 
-**A contested page says so, and nothing more.** `SearchHit` and `PageRecord` gain a `contested`
+**A contested page says so, and nothing more.** _(Still proposed.)_ `SearchHit` and `PageRecord` gain a `contested`
 field, populated from the already-indexed `links` table: the page's own `superseded_by`, plus
 inbound `contradicts` and `supersedes` edges. Which fields count is a configuration key, read
 the same way `extractLinks` already reads `link_fields`, so the core still enumerates no
@@ -70,6 +72,21 @@ a ranking function that resolves contradictions, and it should be reverted rathe
 key: a mutual `supersedes` pair, and a `supersedes` edge whose target does not carry the
 reciprocal `superseded_by`. Both are pure graph properties over `links`. No page types, no
 adapter knowledge, no inference.
+
+## Why `contested` is not decided
+
+The supersession lint stands on its own and is accepted. It reads edges and changes no response
+shape. The `contested` field waits, for two reasons:
+
+- **It would read edges nothing checks yet.** Until the lint ships
+  ([#81](https://github.com/francescofioredev/accreta/issues/81)), a mutual `supersedes` pair
+  marks both pages contested. An authoring error would reach agents as a signal about the sources.
+- **It changes two agent-facing shapes**, `SearchHit` and `PageRecord`, while the surfaces lane
+  ([#127](https://github.com/francescofioredev/accreta/issues/127)) is fixing the shapes of
+  `search_pages` and `get_page`. A field added now would be decided twice.
+
+**Reopen when** the supersession lint has merged and #127 has fixed those two response shapes.
+Decide `contested` then, as an addition to them, with the membership-invariant test as the gate.
 
 ## Alternatives rejected
 
