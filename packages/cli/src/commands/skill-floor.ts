@@ -1,56 +1,134 @@
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { closeSync, existsSync, lstatSync, openSync, readSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { parsePage } from "@accreta/core";
 
 export const SKILL_NAME = "accreta-setup";
 
-export const CLI_VERSION = (
-  JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf-8")) as {
-    version: string;
-  }
-).version;
+/** Frontmatter sits at the top; a longer read buys nothing and a huge file costs. */
+const READ_LIMIT = 64 * 1024;
 
 export interface InstalledSkill {
-  /** Where it was found, written the way a reader would type it. */
+  /** Where it was found, as a reader in the current directory would type it. */
   where: string;
   floor: { ok: true; requires: string } | { ok: false; reason: string };
 }
 
+export interface SkillSearch {
+  installed: InstalledSkill[];
+  /** The project directories searched, relative to the current one, nearest first. */
+  levels: string[];
+  globals: string[];
+}
+
+interface SkillDirectory {
+  label: string;
+  path: string;
+}
+
 /**
- * Where `npx skills` 1.7.0 writes: `.agents/skills` for symlink and universal-agent installs,
- * Claude Code's own for a Claude-only copy. Other agents' copy installs are not looked for.
+ * `npx skills` 1.7.0 writes `.agents/skills`, or Claude Code's own for a Claude-only copy, where it
+ * runs; Claude Code and Codex load both from every directory up to the repository root.
  */
-export function skillDirectories(root: string): { label: string; path: string }[] {
+export function findInstalledSkills(from: string): SkillSearch {
+  const cwd = resolve(from);
   // Bun caches homedir() at startup; Node, and so the skills CLI, re-reads HOME.
-  const home = process.env.HOME || homedir();
+  const home = resolve(process.env.HOME || homedir());
+  const levels = projectLevels(cwd, home);
   const claudeConfig = process.env.CLAUDE_CONFIG_DIR?.trim();
-  return [
-    { label: ".agents/skills", path: join(root, ".agents", "skills") },
-    { label: ".claude/skills", path: join(root, ".claude", "skills") },
+  const globals: SkillDirectory[] = [
     { label: "~/.agents/skills", path: join(home, ".agents", "skills") },
     claudeConfig
       ? { label: "$CLAUDE_CONFIG_DIR/skills", path: join(claudeConfig, "skills") }
       : { label: "~/.claude/skills", path: join(home, ".claude", "skills") },
   ];
+  const directories = levels.flatMap((dir) =>
+    [".agents", ".claude"].map((agent) => ({
+      label: join(relative(cwd, dir), agent, "skills"),
+      path: join(dir, agent, "skills"),
+    })),
+  );
+
+  const seen = new Set<string>();
+  const installed: InstalledSkill[] = [];
+  for (const dir of [...directories, ...globals]) {
+    const probe = probeSkill(dir);
+    if (!probe || seen.has(probe.key)) continue;
+    seen.add(probe.key);
+    installed.push(probe.skill);
+  }
+  return {
+    installed,
+    levels: levels.map((dir) => (dirname(dir) === dir ? dir : relative(cwd, dir) || ".")),
+    globals: globals.map((dir) => dir.label),
+  };
 }
 
-export function findInstalledSkills(root: string): InstalledSkill[] {
-  const seen = new Set<string>();
-  const found: InstalledSkill[] = [];
-  for (const dir of skillDirectories(root)) {
-    const file = join(dir.path, SKILL_NAME, "SKILL.md");
-    if (!existsSync(file)) continue;
-    // A symlink install points the agent's directory at the canonical copy: one file, not two.
-    const real = realpathSync(file);
-    if (seen.has(real)) continue;
-    seen.add(real);
-    found.push({
-      where: `${dir.label}/${SKILL_NAME}`,
-      floor: readFloor(readFileSync(file, "utf-8")),
-    });
+/** From here up to the repository root. Home is left to the global labels, which name it plainly. */
+function projectLevels(cwd: string, home: string): string[] {
+  const levels: string[] = [];
+  for (let dir = cwd; dir !== home; dir = dirname(dir)) {
+    levels.push(dir);
+    if (existsSync(join(dir, ".git")) || dirname(dir) === dir) break;
   }
-  return found;
+  return levels;
+}
+
+/** Null only when nothing is there. Anything that is there but cannot be read is reported as such. */
+function probeSkill(dir: SkillDirectory): { key: string; skill: InstalledSkill } | null {
+  const entry = join(dir.path, SKILL_NAME);
+  const where = `${dir.label}/${SKILL_NAME}`;
+  const broken = (key: string, reason: string) => ({
+    key,
+    skill: { where, floor: { ok: false as const, reason } },
+  });
+
+  let link;
+  try {
+    link = lstatSync(entry);
+  } catch (error) {
+    const code = errorCode(error);
+    if (code === "ENOENT" || code === "ENOTDIR") return null;
+    return broken(entry, `it could not be read — ${code}`);
+  }
+  const linkKey = `${link.dev}:${link.ino}`;
+
+  try {
+    statSync(entry);
+  } catch (error) {
+    const code = errorCode(error);
+    return link.isSymbolicLink() && code === "ENOENT"
+      ? broken(linkKey, "it is a symlink to something that is gone")
+      : broken(linkKey, `it could not be read — ${code}`);
+  }
+
+  const file = join(entry, "SKILL.md");
+  try {
+    const stat = statSync(file);
+    // Keyed on the file itself, so a symlinked agent directory and its canonical copy count once.
+    const key = `${stat.dev}:${stat.ino}`;
+    if (!stat.isFile()) return broken(key, "it could not be read — SKILL.md is not a file");
+    return { key, skill: { where, floor: readFloor(readHead(file)) } };
+  } catch (error) {
+    const code = errorCode(error);
+    return code === "ENOENT"
+      ? broken(linkKey, "it has no SKILL.md")
+      : broken(linkKey, `it could not be read — ${code}`);
+  }
+}
+
+function readHead(file: string): string {
+  const fd = openSync(file, "r");
+  try {
+    const buffer = Buffer.alloc(READ_LIMIT);
+    return buffer.toString("utf-8", 0, readSync(fd, buffer, 0, READ_LIMIT, 0));
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function errorCode(error: unknown): string {
+  return (error as NodeJS.ErrnoException).code ?? String(error);
 }
 
 const RELEASE = /^\d+\.\d+\.\d+$/;
@@ -72,14 +150,19 @@ function readFloor(text: string): InstalledSkill["floor"] {
   return { ok: true, requires };
 }
 
-const releaseParts = (v: string) => v.split(/[.-]/, 3).map(Number);
+const VERSION = /^(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
-/** Ascending, on the three numeric parts: the ordering `scripts/check-version.ts` uses. */
-export function compareVersions(a: string, b: string): number {
-  const [left, right] = [releaseParts(a), releaseParts(b)];
-  for (let i = 0; i < 3; i++) {
-    const diff = (left[i] ?? 0) - (right[i] ?? 0);
+/**
+ * Numeric on the three parts, as `scripts/check-version.ts` compares; build metadata ignored and a
+ * prerelease below its release. Two prereleases of one release tie: a floor is never one.
+ */
+export function compareVersions(a: string, b: string): number | null {
+  const [left, right] = [VERSION.exec(a), VERSION.exec(b)];
+  if (!left || !right) return null;
+  for (let i = 1; i <= 3; i++) {
+    const diff = Number(left[i]) - Number(right[i]);
     if (diff !== 0) return diff;
   }
-  return 0;
+  if (Boolean(left[4]) === Boolean(right[4])) return 0;
+  return left[4] ? -1 : 1;
 }

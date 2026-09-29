@@ -551,6 +551,19 @@ describe("accreta source add", () => {
 });
 
 describe("accreta doctor", () => {
+  // doctor looks for the setup skill under HOME; keep it off the real one.
+  const saved = { HOME: process.env.HOME, CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR };
+  beforeEach(() => {
+    process.env.HOME = root;
+    delete process.env.CLAUDE_CONFIG_DIR;
+  });
+  afterEach(() => {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
   test("a source it cannot reach fails; one it cannot check does not", async () => {
     await cli("init");
     rmSync(join(root, "sources", "example.yaml"), { force: true });
