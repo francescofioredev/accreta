@@ -325,7 +325,7 @@ demand "nothing unverified" without anyone pretending the source was inspected.
 
 ## Design decisions
 
-Fourteen ADRs in [`docs/adr/`](docs/adr/). The ones that decide the shape:
+Fifteen ADRs in [`docs/adr/`](docs/adr/). The ones that decide the shape:
 
 - **[0001](docs/adr/0001-lexical-search-first.md)** — search is lexical, and semantic search
   is **not built**. The benchmark said 85% recall@1 without it. It also found a bug in our own
@@ -354,6 +354,8 @@ Fourteen ADRs in [`docs/adr/`](docs/adr/). The ones that decide the shape:
   is declared, not fetched. accreta holds no credential.
 - **[0013](docs/adr/0013-skill-distribution-is-not-ours.md)** — the setup skill installs through
   `npx skills`, and the installer we specified is **not built**.
+- **[0015](docs/adr/0015-drift-at-line-granularity.md)** — drift is per cited line range where
+  the source can diff contents. It re-orders pages by doubt and never clears one.
 
 Further reading: [architecture](docs/architecture.md),
 [writing an adapter](docs/writing-an-adapter.md), and a

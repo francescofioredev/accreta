@@ -48,6 +48,17 @@ export interface SourceAdapter {
    */
   knowsRevision?(revision: string): Promise<boolean>;
 
+  /**
+   * What the change from `revision` to now did to each locator in `path`. Optional: a source
+   * that cannot diff contents leaves it out, and drift stays per file. Throws
+   * `UnknownRevisionError` for a revision it cannot place.
+   */
+  touchedSince?(
+    revision: string,
+    path: string,
+    locators: readonly string[],
+  ): Promise<Map<string, LocatorChange>>;
+
   /** Render a citation to a location, per the configured provenance format. */
   citation(path: string, locator?: string): string;
 
@@ -70,6 +81,16 @@ export interface SourceAdapter {
    */
   pinRevision(revision: string): void;
 }
+
+/**
+ * What a change did to one cited place. `moved` means the lines are intact but renumbered, so
+ * the claim still stands and only its locator needs re-pinning.
+ */
+export type LocatorChange =
+  | { status: "touched" }
+  | { status: "untouched" }
+  | { status: "moved"; locator: string }
+  | { status: "unknown" };
 
 /**
  * What a source can say about a citation's target.

@@ -63,7 +63,9 @@ a hash of modification times and a scan. An API might answer with an ETag and a 
 feed.
 
 Drift detection — the feature the project is really about — depends only on `revision()` and
-`changedSince()`. It never learns what kind of source it is looking at.
+`changedSince()`. It never learns what kind of source it is looking at. A source that can also
+answer `touchedSince()` narrows drift from each changed file to each cited range the change
+hit ([ADR-0015](adr/0015-drift-at-line-granularity.md)).
 
 > **The invariant**: nothing in `packages/core` may branch on adapter identity. An
 > `if (adapter === 'fs')` in the core means the interface is missing something. Extend the

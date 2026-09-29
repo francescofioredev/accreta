@@ -6,6 +6,7 @@ import {
   UNPINNED_REVISION,
   UnknownRevisionError,
   type LocationVerdict,
+  type LocatorChange,
   type SourceAdapter,
 } from "@accreta/core";
 
@@ -137,6 +138,48 @@ export class GitSource implements SourceAdapter {
   }
 
   /**
+   * What the change from `revision` to HEAD did to each cited line range, from `diff -U0`.
+   * A deleted file touches everything; a locator that is not a line range cannot be judged.
+   */
+  async touchedSince(
+    revision: string,
+    path: string,
+    locators: readonly string[],
+  ): Promise<Map<string, LocatorChange>> {
+    if (!(await this.knowsRevision(revision))) throw new UnknownRevisionError(this.id, revision);
+    const diff = await git(this.root, [
+      "diff",
+      "-U0",
+      "--no-color",
+      "--no-ext-diff",
+      revision,
+      "HEAD",
+      "--",
+      path,
+    ]);
+    const deleted = /^\+\+\+ \/dev\/null$/m.test(diff);
+    const hunks = parseHunks(diff);
+
+    const out = new Map<string, LocatorChange>();
+    for (const locator of locators) {
+      const range = parseLineLocator(locator);
+      if (!range) out.set(locator, { status: "unknown" });
+      else if (deleted || hunks.some((hunk) => touches(hunk, range[0], range[1])))
+        out.set(locator, { status: "touched" });
+      else {
+        const [start, end] = [shift(hunks, range[0]), shift(hunks, range[1])];
+        out.set(
+          locator,
+          start === range[0]
+            ? { status: "untouched" }
+            : { status: "moved", locator: start === end ? `L${start}` : `L${start}-L${end}` },
+        );
+      }
+    }
+    return out;
+  }
+
+  /**
    * Whether a citation names something that is really in this source.
    *
    * A path that climbs out of the root is refused rather than reported as an
@@ -209,4 +252,38 @@ export class GitSource implements SourceAdapter {
   pinRevision(revision: string): void {
     this.pinnedRevision = revision;
   }
+}
+
+interface Hunk {
+  oldStart: number;
+  oldLength: number;
+  newLength: number;
+}
+
+function parseHunks(diff: string): Hunk[] {
+  return [...diff.matchAll(/^@@ -(\d+)(?:,(\d+))? \+\d+(?:,(\d+))? @@/gm)].map((m) => ({
+    oldStart: Number(m[1]),
+    oldLength: m[2] === undefined ? 1 : Number(m[2]),
+    newLength: m[3] === undefined ? 1 : Number(m[3]),
+  }));
+}
+
+/**
+ * Whether a hunk changes any line of `start..end`. A pure insertion sits after `oldStart`, so it
+ * touches a range only when it lands inside it: the rule behind 0 wrong clears in 60 (#108).
+ */
+function touches(hunk: Hunk, start: number, end: number): boolean {
+  return hunk.oldLength === 0
+    ? start <= hunk.oldStart && hunk.oldStart < end
+    : hunk.oldStart <= end && hunk.oldStart + hunk.oldLength - 1 >= start;
+}
+
+/** Where an untouched line is now: every hunk wholly above it shifts it by its net growth. */
+function shift(hunks: Hunk[], line: number): number {
+  let offset = 0;
+  for (const hunk of hunks) {
+    const last = hunk.oldLength === 0 ? hunk.oldStart : hunk.oldStart + hunk.oldLength - 1;
+    if (last < line) offset += hunk.newLength - hunk.oldLength;
+  }
+  return line + offset;
 }
