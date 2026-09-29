@@ -7,14 +7,14 @@ const USAGE = `Usage: accreta mcp
 
 export async function mcp(ctx: CommandContext, args: string[]): Promise<number> {
   const [sub] = args;
-  if (sub === "--help" || sub === "-h" || sub === "help") {
+  if (sub === "help") {
     ctx.out(USAGE);
     return 0;
   }
   if (sub !== undefined) {
     ctx.err(`Unknown mcp subcommand "${sub}".\n`);
     ctx.err(USAGE);
-    return 1;
+    return 2;
   }
   // Loaded here, not at the top, so every other command skips loading the MCP SDK.
   const { serveStdio } = await import("@accreta/mcp-server");

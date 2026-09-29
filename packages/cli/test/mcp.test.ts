@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "../src/main.ts";
-import type { CommandContext } from "../src/commands/shared.ts";
+import { COMMAND_ARGS, refuseArguments, type CommandContext } from "../src/commands/shared.ts";
 
 const MAIN = join(import.meta.dir, "..", "src", "main.ts");
 const MANIFEST = (dir: string) =>
@@ -93,6 +93,53 @@ test("accreta mcp outside a knowledge base says so and fails", async () => {
 }, 15_000);
 
 test("an unknown mcp subcommand is refused rather than starting a server", async () => {
-  expect(await run(["mcp", "nonsense"], ctx())).toBe(1);
+  expect(await run(["mcp", "nonsense"], ctx())).toBe(2);
   expect(errors.join("\n")).toContain('Unknown mcp subcommand "nonsense"');
+});
+
+test("accreta mcp help prints its own usage", async () => {
+  expect(await run(["mcp", "help"], ctx())).toBe(0);
+  expect(output.join("\n")).toContain("Usage: accreta mcp");
+});
+
+/** Spawned with stdin left open, so a server that starts by mistake shows up as a hang, not a pass. */
+async function spawnMcp(...args: string[]) {
+  const proc = Bun.spawn(["bun", MAIN, "mcp", ...args], {
+    cwd: root,
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const timer = setTimeout(() => proc.kill(), 5_000);
+  const code = await proc.exited;
+  clearTimeout(timer);
+  return {
+    code,
+    stdout: await new Response(proc.stdout).text(),
+    stderr: await new Response(proc.stderr).text(),
+  };
+}
+
+test("accreta mcp --help prints usage instead of starting a server", async () => {
+  expect(await run(["init"], ctx())).toBe(0);
+  expect(await run(["reindex"], ctx())).toBe(0);
+  const { code, stdout, stderr } = await spawnMcp("--help");
+  expect(code).toBe(0);
+  expect(stdout).toContain("Usage: accreta");
+  expect(stderr).not.toContain("MCP server ready");
+}, 15_000);
+
+test("a flag mcp does not declare is refused before a server starts", async () => {
+  expect(await run(["init"], ctx())).toBe(0);
+  expect(await run(["reindex"], ctx())).toBe(0);
+  const { code, stderr } = await spawnMcp("--json");
+  expect(code).toBe(2);
+  expect(stderr).toContain("mcp does not take --json.");
+}, 15_000);
+
+test("every flag mcp declares is accepted", () => {
+  for (const flag of COMMAND_ARGS.mcp!.flags) {
+    const parsed = { positional: [], flags: [flag], afterEndOfOptions: [], problems: [] };
+    expect(`${flag}: ${refuseArguments("mcp", parsed)}`).toBe(`${flag}: null`);
+  }
 });

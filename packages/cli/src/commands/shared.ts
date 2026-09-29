@@ -63,6 +63,7 @@ export const COMMAND_ARGS: Readonly<Record<string, CommandArgs>> = {
   show: { flags: ["--json"], maxPositional: 1 },
   consumers: { flags: ["--inline", "--kind", "--json"], maxPositional: 1 },
   canonical: { flags: ["--json"], maxPositional: Infinity },
+  mcp: { flags: [], maxPositional: 1 },
 };
 
 /**
