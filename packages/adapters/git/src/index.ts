@@ -33,7 +33,8 @@ async function git(root: string, args: string[]): Promise<string> {
   const proc = Bun.spawn(["git", ...args], {
     cwd: root,
     // accreta only reads; without this `status` rewrites .git/index and a user's commit can hit index.lock.
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    // GIT_DIFF_OPTS would override the -U0 that hunk parsing depends on.
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_DIFF_OPTS: undefined },
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -134,10 +135,11 @@ export class GitSource implements SourceAdapter {
       throw new UnknownRevisionError(this.id, revision);
     }
 
-    const args = ["diff", "--name-only", revision, "HEAD"];
+    // Citations name a renamed file's old path; -z stops git quoting a non-ASCII one.
+    const args = ["diff", "--name-only", "-z", "--no-renames", revision, "HEAD"];
     if (this.paths.length > 0) args.push("--", ...this.paths);
     const out = await git(this.root, args);
-    return out.split("\n").filter(Boolean).toSorted();
+    return out.split("\0").filter(Boolean).toSorted();
   }
 
   /**
@@ -150,23 +152,40 @@ export class GitSource implements SourceAdapter {
     locators: readonly string[],
   ): Promise<Map<string, LocatorChange>> {
     if (!(await this.knowsRevision(revision))) throw new UnknownRevisionError(this.id, revision);
+    const out = new Map<string, LocatorChange>();
+    const ranges = locators.map((locator) => [locator, parseLineLocator(locator)] as const);
+    // Only a line range is judged from the diff, and a large file's diff is expensive.
+    if (ranges.every(([, range]) => !range)) {
+      for (const locator of locators) out.set(locator, { status: "unknown" });
+      return out;
+    }
+
     const diff = await git(this.root, [
+      "--literal-pathspecs",
       "diff",
       "-U0",
+      // The hunks must count the lines on disk, whatever the user's diff config says.
+      "--inter-hunk-context=0",
+      "--diff-algorithm=myers",
+      "--indent-heuristic",
+      "--no-renames",
       "--no-color",
       "--no-ext-diff",
+      "--no-textconv",
+      // A `-diff` attribute or a NUL byte would print "Binary files differ" and no hunks.
+      "--text",
       revision,
       "HEAD",
       "--",
       path,
     ]);
     const deleted = /^\+\+\+ \/dev\/null$/m.test(diff);
+    // A filter or encoding means the blob's lines are not the lines on disk that `locate` counts.
+    const unreadable = diff !== "" && !deleted && (await this.convertedOnCheckout(path));
     const hunks = parseHunks(diff);
 
-    const out = new Map<string, LocatorChange>();
-    for (const locator of locators) {
-      const range = parseLineLocator(locator);
-      if (!range) out.set(locator, { status: "unknown" });
+    for (const [locator, range] of ranges) {
+      if (!range || unreadable) out.set(locator, { status: "unknown" });
       else if (deleted || hunks.some((hunk) => touches(hunk, range[0], range[1])))
         out.set(locator, { status: "touched" });
       else {
@@ -180,6 +199,22 @@ export class GitSource implements SourceAdapter {
       }
     }
     return out;
+  }
+
+  private async convertedOnCheckout(path: string): Promise<boolean> {
+    const out = await git(this.root, [
+      "check-attr",
+      "-z",
+      "filter",
+      "working-tree-encoding",
+      "--",
+      path,
+    ]);
+    const fields = out.split("\0");
+    for (let i = 2; i < fields.length; i += 3) {
+      if (fields[i] !== "unspecified" && fields[i] !== "unset") return true;
+    }
+    return false;
   }
 
   /**
