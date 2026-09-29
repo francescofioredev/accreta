@@ -52,3 +52,4 @@ export type { CanonicalMatch, PageRecord, Relation } from "./query/page.ts";
 export { findCanonical, findRelated, getPage } from "./query/page.ts";
 export type { LintFinding, LintReport } from "./query/lint.ts";
 export { lint, lintCitations } from "./query/lint.ts";
+export { countPagesCiting } from "./query/citing.ts";

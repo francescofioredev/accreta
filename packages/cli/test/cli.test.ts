@@ -301,7 +301,9 @@ describe("accreta drift", () => {
     await cli("reindex");
     output = [];
 
-    await expect(cli("drift")).rejects.toThrow(/declares no `scope`/);
+    expect(await cli("drift")).toBe(1);
+    expect(stdout()).toContain("sources/design-docs.yaml — did not load");
+    expect(stdout()).toContain("declares no `scope`");
   });
 
   test("with no sources declared it says so rather than failing", async () => {

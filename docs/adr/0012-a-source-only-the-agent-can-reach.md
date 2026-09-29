@@ -116,6 +116,8 @@ tells the reader their recorded revision is gone. The report would be smaller an
 - A delegated source with an empty `scope` fails at construction. It is the one place accreta
   validates an adapter option, and it is validated because an empty scope tells the agent to
   check either nothing or everything.
+  _Amended 2026-09-29 (#126): the refusal no longer stops the other sources. It is reported
+  against the declaration's file, and `drift` fails on it._
 - Gmail is now a declaration away. One thing to write down when it arrives: a mail message is
   immutable, so what changes is not a cited claim but that the thread continued. The scope
   prose has to tell the agent to look for new messages rather than for edits to a cited one.

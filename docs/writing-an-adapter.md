@@ -171,7 +171,10 @@ const httpKind: SourceKind = {
 
 Everything besides `id` and `type` reaches you untouched in `d.options`. The core does not
 validate them — validating them would require knowing what your adapter needs — so your
-`create` and your `preflight` are where a bad option is caught.
+`create` and your `preflight` are where a bad option is caught. When `create` throws, the other
+sources still load: `lint` reports the declaration's file as an `unloaded-source` finding with
+the first line of your message, and `drift` prints it and fails, as it does for a revision it
+cannot place. So make that first line name the option that is wrong.
 
 `template` is what `accreta source add` writes. Put the adapter's sharp edges in its comments;
 that file is where somebody meets them.

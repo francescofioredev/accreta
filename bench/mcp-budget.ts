@@ -148,6 +148,7 @@ export async function measure(size: number): Promise<Row> {
         config,
         root: corpus.root,
         sources: new Map(),
+        unloadedSources: [],
         writesEnabled: false,
       };
 

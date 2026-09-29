@@ -20,6 +20,7 @@ beforeEach(() => {
     config: DEFAULT_CONFIG,
     root,
     sources: new Map(),
+    unloadedSources: [],
     writesEnabled: false,
   };
 });

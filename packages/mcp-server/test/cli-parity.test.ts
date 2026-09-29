@@ -166,6 +166,7 @@ beforeAll(async () => {
     "knowledge_base: knowledge\npage_types: [concept, note]\nlink_fields: [related]\n",
   );
   write("sources/docs.yaml", "id: docs\ntype: fs\nroot: src-docs\n");
+  write("sources/typo.yaml", "id: typo\ntype: fss\n");
   write("src-docs/forcing.md", "one\ntwo\nthree\n");
   write(
     "knowledge/concepts/forcing.md",
@@ -258,6 +259,7 @@ describe("--json matches the MCP tool field for field", () => {
     const lint = JSON.parse((await cli(["lint", "--json"])).stdout);
     expect(lint.count).toBeGreaterThan(0);
     expect(lint.citations_checked).toBeGreaterThan(0);
+    expect(lint.findings.map((f: { kind: string }) => f.kind)).toContain("unloaded-source");
   });
 });
 

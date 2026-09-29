@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { checkConfig, compileCitationTemplate, DEFAULT_CONFIG } from "@accreta/core";
-import { KNOWN_TYPES, kindFor, readDeclarations } from "@accreta/adapters";
+import { KNOWN_TYPES, kindFor, readDeclarationFiles } from "@accreta/adapters";
 import { CONFIG_FILENAME, findWorkspace } from "../workspace.ts";
 import { reportPreflight, type CommandContext } from "./shared.ts";
 import { compareVersions, findInstalledSkills, SKILL_NAME } from "./skill-floor.ts";
@@ -45,11 +45,18 @@ export async function doctor(ctx: CommandContext, version: string): Promise<numb
       : "  missing: run `accreta reindex`",
   );
 
-  const declarations = readDeclarations(workspace.root);
+  const declarations = readDeclarationFiles(workspace.root);
   ctx.out(`\nsources (${declarations.length})`);
   if (declarations.length === 0) ctx.out("  none declared in sources/");
 
-  for (const declaration of declarations) {
+  for (const entry of declarations) {
+    if ("error" in entry) {
+      ctx.out(`  ${entry.file}`);
+      ctx.out(`    no: not a source declaration — ${entry.error}`);
+      exitCode = 1;
+      continue;
+    }
+    const { declaration } = entry;
     ctx.out(`  ${declaration.id} — ${declaration.type}`);
     const kind = kindFor(declaration.type);
     if (!kind) {

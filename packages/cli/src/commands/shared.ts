@@ -1,6 +1,10 @@
 import { existsSync } from "node:fs";
 import { openIndex, type SourceAdapter } from "@accreta/core";
-import { loadSources as loadDeclaredSources, type Preflight } from "@accreta/adapters";
+import {
+  loadSources as loadDeclaredSources,
+  type Preflight,
+  type UnloadedSource,
+} from "@accreta/adapters";
 import { findWorkspace, type Workspace } from "../workspace.ts";
 
 export interface CommandContext {
@@ -10,13 +14,15 @@ export interface CommandContext {
 }
 
 /** Load every `sources/*.yaml` declaration in the workspace. */
-export function loadSources(workspace: Workspace): SourceAdapter[] {
-  return [
-    ...loadDeclaredSources({
-      root: workspace.root,
-      citationFormat: workspace.config.provenanceFormat,
-    }).values(),
-  ];
+export function loadSources(workspace: Workspace): {
+  sources: SourceAdapter[];
+  unloaded: UnloadedSource[];
+} {
+  const loaded = loadDeclaredSources({
+    root: workspace.root,
+    citationFormat: workspace.config.provenanceFormat,
+  });
+  return { sources: [...loaded.sources.values()], unloaded: loaded.unloaded };
 }
 
 export function withIndex<T>(

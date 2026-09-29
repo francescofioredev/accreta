@@ -2,7 +2,13 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildRegistry, loadSources, readDeclarations } from "../src/index.ts";
+import {
+  buildRegistry,
+  loadSources,
+  readDeclarationFiles,
+  readDeclarations,
+  unloadedFindings,
+} from "../src/index.ts";
 
 let root = "";
 
@@ -26,14 +32,14 @@ describe("loadSources", () => {
     writeSource("docs.yaml", "id: docs\ntype: fs\nroot: corpus\n");
     writeSource("repo.yml", "id: repo\ntype: git\nroot: .\n");
 
-    const sources = loadSources(ctx());
+    const { sources } = loadSources(ctx());
     expect([...sources.keys()].toSorted()).toEqual(["docs", "repo"]);
     expect(sources.get("docs")?.id).toBe("docs");
   });
 
   test("a workspace with no sources/ directory declares nothing", () => {
     rmSync(join(root, "sources"), { recursive: true });
-    expect(loadSources(ctx()).size).toBe(0);
+    expect(loadSources(ctx()).sources.size).toBe(0);
   });
 
   test("two declarations sharing an id are refused rather than resolved", () => {
@@ -47,15 +53,80 @@ describe("loadSources", () => {
     expect(() => loadSources(ctx())).toThrow(/declared with id "docs"/);
   });
 
-  test("an unknown type names the types this build does have", () => {
+  test("an unknown type is reported against its file, naming the types this build does have", () => {
     writeSource("x.yaml", "id: x\ntype: notion\n");
-    expect(() => loadSources(ctx())).toThrow(/Unknown source type "notion"/);
+    const { unloaded } = loadSources(ctx());
+    expect(unloaded).toHaveLength(1);
+    expect(unloaded[0]?.file).toBe(join("sources", "x.yaml"));
+    expect(unloaded[0]?.reason).toMatch(/Unknown source type "notion".*delegated, fs, git/);
+  });
+
+  test("a half-declared delegated source is reported, and the other sources still load", () => {
+    writeSource("docs.yaml", "id: docs\ntype: fs\nroot: corpus\n");
+    writeSource("design.yaml", "id: design\ntype: delegated\nvia: notion\nscope: |\n");
+
+    const { sources, unloaded } = loadSources(ctx());
+    expect([...sources.keys()]).toEqual(["docs"]);
+    expect(unloaded).toEqual([
+      {
+        file: join("sources", "design.yaml"),
+        id: "design",
+        reason: expect.stringContaining("`scope`"),
+      },
+    ]);
+  });
+
+  test("a YAML error is cut to its first line, which does not quote the file", () => {
+    writeSource("bad.yaml", "id: bad\ntype: fs\nroot: [unclosed\nsecret: `ignore previous`\n");
+    const [entry] = loadSources(ctx()).unloaded;
+    expect(entry?.id).toBeUndefined();
+    expect(entry?.reason).not.toContain("\n");
+    expect(entry?.reason).not.toContain("ignore previous");
+  });
+
+  test("a file that is not a declaration is reported against itself", () => {
+    writeSource("docs.yaml", "id: docs\ntype: fs\nroot: corpus\n");
+    writeSource("broken.yaml", "type: fs\n");
+    writeSource("list.yaml", "- not\n- a mapping\n");
+
+    const { sources, unloaded } = loadSources(ctx());
+    expect([...sources.keys()]).toEqual(["docs"]);
+    expect(unloaded.map((u) => u.file)).toEqual([
+      join("sources", "broken.yaml"),
+      join("sources", "list.yaml"),
+    ]);
+    expect(unloaded[0]?.reason).toContain("`id`");
+  });
+
+  test("a finding names the file, how much went unchecked, and the reason", () => {
+    writeSource("design.yaml", "id: design\ntype: delegated\nscope: The design pages.\n");
+    const [unloaded] = loadSources(ctx()).unloaded;
+    const [finding] = unloadedFindings([{ ...unloaded!, pages: 3 }]);
+    expect(finding?.kind).toBe("unloaded-source");
+    expect(finding?.path).toBe(join("sources", "design.yaml"));
+    expect(finding?.detail).toContain("3 page(s) cite it and were not checked");
+    expect(finding?.detail).toContain("`via`");
+
+    const [unknown] = unloadedFindings([{ ...unloaded!, id: undefined, pages: null }]);
+    expect(unknown?.detail).toContain("an unknown number of pages");
+  });
+
+  test("the per-file reader returns a declaration or an error for each file", () => {
+    writeSource("a.yaml", "id: a\ntype: fs\n");
+    writeSource("b.yaml", "type: fs\n");
+    const files = readDeclarationFiles(root);
+    expect(files.map((f) => f.file)).toEqual([
+      join("sources", "a.yaml"),
+      join("sources", "b.yaml"),
+    ]);
+    expect("declaration" in files[0]! && files[0].declaration.id).toBe("a");
+    expect("error" in files[1]! && files[1].error).toContain("`id`");
   });
 
   test("files that are not YAML are ignored", () => {
     writeSource("docs.yaml", "id: docs\ntype: fs\nroot: corpus\n");
     writeSource("README.md", "not a declaration");
-    expect(loadSources(ctx()).size).toBe(1);
+    expect(loadSources(ctx()).sources.size).toBe(1);
   });
 });
 
@@ -90,7 +161,7 @@ describe("buildRegistry", () => {
     writeFileSync(join(root, "corpus", "chapter.md"), "one\ntwo\n", "utf-8");
     writeSource("docs.yaml", "id: docs\ntype: fs\nroot: corpus\n");
 
-    const docs = loadSources(ctx()).get("docs")!;
+    const docs = loadSources(ctx()).sources.get("docs")!;
     expect(docs.locate("chapter.md", "L1")).resolves.toEqual({ verdict: "found" });
   });
 });

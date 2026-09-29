@@ -19,7 +19,7 @@ inputs:
     description: Post a comment even when nothing is new. An existing comment is always updated.
     default: "false"
   fail-on-drift:
-    description: Fail the step when a page is newly in doubt, or newly at a revision nobody can place.
+    description: Fail the step when a page is newly in doubt, newly at a revision nobody can place, or a source declaration does not load. An unloaded source counts even when the base branch already had it, so it fails every pull request until it is fixed.
     default: "false"
 
 outputs:
@@ -35,6 +35,9 @@ outputs:
   pages-newly-unplaceable:
     description: Unplaceable pages the base branch did not have at the same revision.
     value: ${{ steps.drift.outputs.pages-newly-unplaceable }}
+  sources-unloaded:
+    description: Source declarations that did not load, so nothing citing them was checked.
+    value: ${{ steps.drift.outputs.sources-unloaded }}
 
 runs:
   using: composite
@@ -103,7 +106,8 @@ runs:
           console.log(`pages-newly-in-doubt=${r.pages_newly_in_doubt}`);
           console.log(`pages-unplaceable=${r.pages_unplaceable}`);
           console.log(`pages-newly-unplaceable=${r.pages_newly_unplaceable}`);
-          console.log(`attention=${r.pages_newly_in_doubt + r.pages_newly_unplaceable}`);
+          console.log(`sources-unloaded=${r.unloaded_sources.length}`);
+          console.log(`attention=${r.pages_newly_in_doubt + r.pages_newly_unplaceable + r.unloaded_sources.length}`);
         ' "$RUNNER_TEMP/accreta-drift.json" >>"$GITHUB_OUTPUT"
 
     - name: Comment on the pull request
@@ -120,5 +124,5 @@ runs:
       if: ${{ inputs.fail-on-drift == 'true' && steps.drift.outputs.attention != '0' }}
       shell: bash
       run: |
-        echo "::error::This pull request puts pages in doubt, or at a revision nobody can place."
+        echo "::error::This pull request puts pages in doubt or at a revision nobody can place, or a source declaration did not load."
         exit 1

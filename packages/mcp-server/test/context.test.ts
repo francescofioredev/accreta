@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildIndex, DEFAULT_CONFIG, type AccretaConfig } from "@accreta/core";
 import { createContext } from "../src/context.ts";
-import { searchPagesTool } from "../src/tools.ts";
+import { checkDriftTool, lintTool, listRecentChangesTool, searchPagesTool } from "../src/tools.ts";
 
 let root = "";
 
@@ -58,6 +58,41 @@ test("a held context serves the new index after a rebuild swaps the file", () =>
   }
 
   expect(searchPagesTool(ctx, { query: "alpha" }).count).toBe(1);
+});
+
+test("a half-declared delegated source does not stop the server, and lint and drift name it", async () => {
+  mkdirSync(join(root, "sources", "docs"), { recursive: true });
+  writeFileSync(join(root, "sources", "docs", "a.md"), "one\n", "utf-8");
+  writeFileSync(join(root, "sources", "docs.yaml"), "id: docs\ntype: fs\nroot: sources/docs\n");
+  writeFileSync(
+    join(root, "sources", "design.yaml"),
+    "id: design\ntype: delegated\nvia: notion\nscope: |\n",
+  );
+  writePage("a.md", "---\ntype: note\n---\n\n# A\n");
+  reindex();
+
+  const ctx = createContext(root);
+  expect([...ctx.sources.keys()]).toEqual(["docs"]);
+
+  const file = join("sources", "design.yaml");
+  const lint = await lintTool(ctx);
+  expect(lint.findings).toContainEqual({
+    kind: "unloaded-source",
+    path: file,
+    detail: expect.stringContaining("`scope`"),
+  });
+  const drift = await checkDriftTool(ctx, {});
+  expect(drift.reports.map((r) => r.source_id)).toEqual(["docs"]);
+  expect(drift.unloaded_sources).toEqual([
+    { file, id: "design", reason: expect.stringContaining("`scope`"), pages: 0 },
+  ]);
+
+  // Asked by id, it is a declared source that did not load, not an unknown name.
+  const one = await checkDriftTool(ctx, { source: "design" });
+  expect(one.message).toStartWith(`Source "design" is declared in ${file} but did not load:`);
+  expect(one.message).toContain("`scope`");
+  const changes = await listRecentChangesTool(ctx, { source: "design", since: "r1" });
+  expect(changes.message).toBe(one.message);
 });
 
 test("a rebuild does not replace the context the server captured", () => {
