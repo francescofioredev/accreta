@@ -433,6 +433,53 @@ describe("GitSource.touchedSince", () => {
     );
     expect(result).toEqual({ "L5-L6": { status: "untouched" } });
   });
+
+  test("diff.algorithm does not change which lines a hunk touches", async () => {
+    await run(["config", "diff.algorithm", "patience"]);
+    const original = ["x", "", "z", "", "}", "", "z", "x", "z", ""];
+    const edited = ["x", "", "z", "", "", "z", "x", "}", "z", ""];
+    write("doc.md", original.join("\n") + "\n");
+    await commit("first");
+    const from = await source().revision();
+    write("doc.md", edited.join("\n") + "\n");
+    await commit("second");
+    // Myers deletes line 5; patience keeps it and reports it moved to L8.
+    expect(Object.fromEntries(await source().touchedSince(from, "doc.md", ["L5"]))).toEqual({
+      L5: { status: "touched" },
+    });
+  });
+
+  test("GIT_DIFF_OPTS does not widen the hunks over untouched lines", async () => {
+    const saved = process.env.GIT_DIFF_OPTS;
+    process.env.GIT_DIFF_OPTS = "-u3";
+    try {
+      const result = await after(() => write("doc.md", lines(20, { 8: "changed" })), ["L5-L6"]);
+      expect(result).toEqual({ "L5-L6": { status: "untouched" } });
+    } finally {
+      if (saved === undefined) delete process.env.GIT_DIFF_OPTS;
+      else process.env.GIT_DIFF_OPTS = saved;
+    }
+  });
+
+  test("a path is not read as a glob", async () => {
+    write("app/[slug]/page.md", lines(20));
+    write("app/s/page.md", lines(20));
+    await commit("first");
+    const from = await source().revision();
+    write("app/s/page.md", "new a\nnew b\n" + lines(20));
+    await commit("second");
+    const result = await source().touchedSince(from, "app/[slug]/page.md", ["L8-L9"]);
+    expect(Object.fromEntries(result)).toEqual({ "L8-L9": { status: "untouched" } });
+  });
+
+  test("no diff is run when no locator is a line range", async () => {
+    write("doc.md", lines(3));
+    await commit("first");
+    const from = await source().revision();
+    // A path git refuses to diff proves the diff was skipped rather than answered.
+    const result = await source().touchedSince(from, "../outside.md", ["block-a1"]);
+    expect(Object.fromEntries(result)).toEqual({ "block-a1": { status: "unknown" } });
+  });
 });
 
 describe("GitSource renames", () => {
@@ -445,7 +492,7 @@ describe("GitSource renames", () => {
     expect(await source().changedSince(from)).toEqual(["docs/a.md", "docs/a2.md"]);
   });
 
-  test("even with diff.renames set in the user's config", async () => {
+  test("diff.renames=copies in the user's config does not pair the rename back up", async () => {
     write("docs/a.md", lines(12));
     await commit("first");
     const from = await source().revision();
@@ -476,14 +523,14 @@ describe("drift over GitSource names the page whose cited lines changed", () => 
     rmSync(kb, { recursive: true, force: true });
   });
 
-  /** Cite `path#L5-L8` at HEAD, commit `change`, and rank the citing page as drift does. */
-  async function rankAfter(path: string, change: () => void | Promise<void>) {
+  /** Cite `path#locator` at HEAD, commit `change`, and rank the citing page as drift does. */
+  async function rankAfter(path: string, change: () => void | Promise<void>, locator = "L5-L8") {
     const git = source();
     const from = await git.revision();
     mkdirSync(join(kb, "knowledge"), { recursive: true });
     writeFileSync(
       join(kb, "knowledge", "page.md"),
-      `---\ntype: note\nsource: repo\nlast_verified_revision: ${from}\n---\n\nA claim.[^a]\n\n[^a]: repo @ ${from} · ${path}#L5-L8\n`,
+      `---\ntype: note\nsource: repo\nlast_verified_revision: ${from}\n---\n\nA claim.[^a]\n\n[^a]: repo @ ${from} · ${path}#${locator}\n`,
     );
     await change();
     await commit("second");
@@ -540,5 +587,20 @@ describe("drift over GitSource names the page whose cited lines changed", () => 
       write("docs/nodiff.md", lines(12, { 11: "changed" })),
     );
     expect(rank).toBe("untouched");
+  });
+
+  test("a file stored through a filter is not judged by its stored bytes", async () => {
+    await run(["config", "filter.gz.clean", "gzip -cn"]);
+    await run(["config", "filter.gz.smudge", "gzip -dc"]);
+    await run(["config", "diff.gz.textconv", "gzip -dc"]);
+    write(".gitattributes", "docs/gz.md filter=gz diff=gz\n");
+    write("docs/gz.md", lines(400));
+    await commit("add a filtered file");
+    const rank = await rankAfter(
+      "docs/gz.md",
+      () => write("docs/gz.md", lines(400, { 301: "changed" })),
+      "L300-L302",
+    );
+    expect(rank).toBe("changed");
   });
 });
