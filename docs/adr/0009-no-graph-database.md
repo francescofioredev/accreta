@@ -1,6 +1,6 @@
 # ADR-0009: No graph database; SQLite serves every traversal a knowledge base needs
 
-Status: proposed
+Status: accepted
 Date: 2026-08-10
 
 ## Context

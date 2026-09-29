@@ -1,6 +1,6 @@
 # ADR-0008: The rebuild is the binding constraint, and the knee is at 15,000 pages
 
-Status: proposed
+Status: accepted
 Date: 2026-08-10
 
 ## Context
