@@ -205,7 +205,7 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
     case "source":
       if (positional[0] !== "add") {
         ctx.err("Usage: accreta source add <type> <id> [--set key=value]");
-        return 1;
+        return 2;
       }
       return sourceAdd(ctx, positional[1] ?? "", positional[2] ?? "", set);
     case "search":

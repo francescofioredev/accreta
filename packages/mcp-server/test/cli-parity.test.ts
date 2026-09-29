@@ -110,6 +110,7 @@ const REFUSED: { argv: string[]; says: string }[] = [
   { argv: ["consumers", "concepts/forcing", "--kind"], says: "--kind needs a value" },
   { argv: ["reindex", "--json"], says: "reindex does not take --json" },
   { argv: ["search"], says: "Usage" },
+  { argv: ["source", "remove", "docs"], says: "Usage: accreta source add" },
 ];
 
 let root = "";
