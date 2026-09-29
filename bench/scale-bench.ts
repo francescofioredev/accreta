@@ -39,6 +39,9 @@ const SIZES = ((): number[] => {
   return [100, 1_000, 10_000];
 })();
 
+// A supersession chain through every page, so lint's supersession check has the deepest graph to walk.
+const SUPERSESSION = process.argv.includes("--supersession");
+
 const CONFIG_YAML = `knowledge_base: knowledge
 page_types: [note, source, concept, decision, synthesis]
 link_fields: [related, supersedes, superseded_by, discussed_in]
@@ -116,13 +119,19 @@ function generate(n: number, seed = 42): Corpus {
     // One page carries a distinctive alias, so findCanonical's alias branch is exercised
     // on a corpus where it has to scan past everything else to reach it.
     const aliases = i === Math.floor(n / 2) ? `\naliases: ["needle in the haystack"]` : "";
+    const name = (j: number) => `[[${pathOf(j).replace("knowledge/", "")}]]`;
+    // Every 100th page leaves out its reciprocal, and page 0 closes a three-page loop.
+    const supersession = !SUPERSESSION
+      ? ""
+      : (i > 0 ? `\nsupersedes: ${name(i - 1)}` : n > 2 ? `\nsupersedes: ${name(2)}` : "") +
+        (i + 1 < n && i % 100 !== 99 ? `\nsuperseded_by: ${name(i + 1)}` : "");
     const page = `---
 type: ${types[i % types.length]}
 title: Page ${i}
 source: synthetic${aliases}
 canonical_source: "synthetic:corpus/page-${i}.md#L1"
 last_verified_revision: "0000000000000000000000000000000000000000"
-related: ${related.length > 0 ? related.join(", ") : "[]"}
+related: ${related.length > 0 ? related.join(", ") : "[]"}${supersession}
 ---
 
 # Page ${i}
@@ -212,7 +221,7 @@ const mb = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)}MB`;
 const ms = (x: number) => (x < 1 ? `${x.toFixed(2)}ms` : `${x.toFixed(0)}ms`);
 
 console.log(`platform: ${process.platform} ${process.arch}, bun ${Bun.version}`);
-console.log(`sizes: ${SIZES.join(", ")}\n`);
+console.log(`sizes: ${SIZES.join(", ")}${SUPERSESSION ? ", with a supersession chain" : ""}\n`);
 
 const rows: Row[] = [];
 for (const size of SIZES) {
