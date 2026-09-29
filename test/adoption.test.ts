@@ -1,10 +1,12 @@
 import { expect, test } from "bun:test";
 import {
+  graphsByVersion,
   internalEdges,
   publishDayShare,
   reaches,
   roots,
   shortfalls,
+  shortfallsByVersion,
   sustainedRate,
   unfetchedDays,
   type Day,
@@ -158,4 +160,58 @@ test("the dependency graph is read from the manifests, not remembered here", () 
       (a, b) => a.dependent.localeCompare(b.dependent) || a.dependency.localeCompare(b.dependency),
     ),
   );
+});
+
+test("an edge counts only from the version that added it, so August keeps its shortfall", () => {
+  // Today's graph makes the server a dependency of the CLI; read back over August it hides core's gap.
+  const september = new Map(
+    [...august].map(([name, series]) => [name, [...series, { day: "2026-09-02", downloads: 10 }]]),
+  );
+  const versionDays = new Map([
+    ["0.1.1", "2026-08-08"],
+    ["0.1.2", "2026-08-09"],
+    ["0.2.0", "2026-09-02"],
+  ]);
+  const graphs = new Map([
+    ["0.1.1", AUGUST_EDGES],
+    ["0.1.2", AUGUST_EDGES],
+    ["0.2.0", CURRENT_EDGES],
+  ]);
+
+  const flat = new Map(
+    [...september].map(([name, series]) => [name, series.reduce((sum, d) => sum + d.downloads, 0)]),
+  );
+  expect(shortfalls(flat, CURRENT_EDGES).find((s) => s.dependency === "@accreta/core")!.slack).toBe(
+    97,
+  );
+
+  const core = shortfallsByVersion(september, graphs, versionDays).find(
+    (s) => s.dependency === "@accreta/core",
+  )!;
+  expect(core.slack).toBe(-225);
+  expect(core.requiredBy.sort()).toEqual(["@accreta/mcp-server", "accreta"]);
+});
+
+test("each version's graph comes from that version's manifests", () => {
+  const graphs = graphsByVersion(
+    new Map([
+      [
+        "accreta",
+        {
+          time: {},
+          versions: {
+            "0.1.4": { dependencies: { "@accreta/core": "0.1.4" } },
+            "0.2.0": { dependencies: { "@accreta/core": "0.2.0", "@accreta/mcp-server": "0.2.0" } },
+          },
+        },
+      ],
+      ["@accreta/core", { time: {}, versions: { "0.1.4": {}, "0.2.0": {} } }],
+      ["@accreta/mcp-server", { time: {}, versions: { "0.1.4": {}, "0.2.0": {} } }],
+    ]),
+  );
+  expect(graphs.get("0.1.4")).toEqual([{ dependent: "accreta", dependency: "@accreta/core" }]);
+  expect(graphs.get("0.2.0")).toContainEqual({
+    dependent: "accreta",
+    dependency: "@accreta/mcp-server",
+  });
 });

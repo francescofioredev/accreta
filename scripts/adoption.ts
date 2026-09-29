@@ -135,6 +135,94 @@ export function unfetchedDays(series: Map<string, Day[]>, edges: Edge[]): Unfetc
   return found.sort((a, b) => a.day.localeCompare(b.day));
 }
 
+/** The version npm served as latest on `day`; two published the same day count as the later one. */
+export function versionOn(day: string, versionDays: Map<string, string>): string | undefined {
+  let current: string | undefined;
+  for (const [version, published] of [...versionDays].sort((a, b) => a[1].localeCompare(b[1]))) {
+    if (published <= day) current = version;
+  }
+  return current;
+}
+
+/** Each version's slice of the series: the days on which it was the latest. */
+export function splitByVersion(
+  series: Map<string, Day[]>,
+  versionDays: Map<string, string>,
+): Map<string, Map<string, Day[]>> {
+  const parts = new Map<string, Map<string, Day[]>>();
+  for (const [name, days] of series) {
+    for (const d of days) {
+      const version = versionOn(d.day, versionDays);
+      if (version === undefined) continue;
+      const part = parts.get(version) ?? new Map<string, Day[]>();
+      part.set(name, [...(part.get(name) ?? []), d]);
+      parts.set(version, part);
+    }
+  }
+  return parts;
+}
+
+/** Shortfalls with each day read through the graph of the version live that day. */
+export function shortfallsByVersion(
+  series: Map<string, Day[]>,
+  graphs: Map<string, Edge[]>,
+  versionDays: Map<string, string>,
+): Shortfall[] {
+  const merged = new Map<string, Shortfall>();
+  for (const [version, part] of splitByVersion(series, versionDays)) {
+    const totals = new Map(
+      [...part].map(([name, days]) => [name, days.reduce((sum, d) => sum + d.downloads, 0)]),
+    );
+    for (const s of shortfalls(totals, graphs.get(version) ?? [])) {
+      const before = merged.get(s.dependency);
+      if (!before) {
+        merged.set(s.dependency, s);
+        continue;
+      }
+      const required = before.required + s.required;
+      const recorded = before.recorded + s.recorded;
+      merged.set(s.dependency, {
+        dependency: s.dependency,
+        requiredBy: [...new Set([...before.requiredBy, ...s.requiredBy])],
+        required,
+        recorded,
+        slack: recorded - required,
+      });
+    }
+  }
+  return [...merged.values()];
+}
+
+export function unfetchedDaysByVersion(
+  series: Map<string, Day[]>,
+  graphs: Map<string, Edge[]>,
+  versionDays: Map<string, string>,
+): UnfetchedDay[] {
+  return [...splitByVersion(series, versionDays)]
+    .flatMap(([version, part]) => unfetchedDays(part, graphs.get(version) ?? []))
+    .sort((a, b) => a.day.localeCompare(b.day));
+}
+
+export interface Packument {
+  time: Record<string, string>;
+  versions: Record<string, { dependencies?: Record<string, string> }>;
+}
+
+/** Each version's internal graph, as that version's published manifests declared it. */
+export function graphsByVersion(packuments: Map<string, Packument>): Map<string, Edge[]> {
+  const graphs = new Map<string, Edge[]>();
+  for (const [dependent, packument] of packuments) {
+    for (const [version, manifest] of Object.entries(packument.versions)) {
+      const edges = graphs.get(version) ?? [];
+      for (const dependency of Object.keys(manifest.dependencies ?? {})) {
+        if (packuments.has(dependency)) edges.push({ dependent, dependency });
+      }
+      graphs.set(version, edges);
+    }
+  }
+  return graphs;
+}
+
 export function publishDayShare(
   series: Day[],
   publishDays: Set<string>,
@@ -202,11 +290,14 @@ async function fetchRange(name: string, from: string, to: string): Promise<Day[]
   return body.downloads as Day[];
 }
 
+async function fetchPackument(name: string): Promise<Packument> {
+  return json(`https://registry.npmjs.org/${encode(name)}`);
+}
+
 /** Publish days, derived from the registry rather than remembered, one per version. */
-async function fetchPublishDays(name: string): Promise<Map<string, string>> {
-  const { time } = await json(`https://registry.npmjs.org/${encode(name)}`);
+function publishDaysOf({ time }: Packument): Map<string, string> {
   const versions = new Map<string, string>();
-  for (const [version, stamp] of Object.entries(time as Record<string, string>)) {
+  for (const [version, stamp] of Object.entries(time)) {
     if (version === "created" || version === "modified") continue;
     versions.set(version, stamp.slice(0, 10));
   }
@@ -270,9 +361,12 @@ function today(): string {
 
 async function main() {
   const names = PUBLISHABLE.map((dir) => manifestOf(dir).name);
-  const edges = internalEdges();
+  const packuments = new Map(
+    await Promise.all(names.map(async (name) => [name, await fetchPackument(name)] as const)),
+  );
+  const graphs = graphsByVersion(packuments);
 
-  const versionDays = await fetchPublishDays(names[0]!);
+  const versionDays = publishDaysOf(packuments.get(names[0]!)!);
   const publishDays = new Set(versionDays.values());
   const from = [...publishDays].sort()[0]!;
   const to = today();
@@ -331,14 +425,16 @@ async function main() {
   }
 
   console.log("\nWHAT INSTALLS WOULD REQUIRE");
-  for (const s of shortfalls(totals, edges)) {
+  for (const s of shortfallsByVersion(series, graphs, versionDays)) {
     console.log(
       `  ${short(s.dependency).padEnd(14)} >= ${num(s.required).padStart(6)} (${s.requiredBy.map(short).join(" + ")}), recorded ${num(s.recorded).padStart(6)}   ${s.slack >= 0 ? "ok" : num(s.slack)}`,
     );
   }
   console.log("  A negative figure is traffic that did not come from `npm install`.");
 
-  const unfetched = unfetchedDays(series, edges).filter((u) => u.day <= counted);
+  const unfetched = unfetchedDaysByVersion(series, graphs, versionDays).filter(
+    (u) => u.day <= counted,
+  );
   console.log(
     `\nDAYS A DEPENDENCY WENT UNFETCHED  (${unfetched.length}; a warm cache explains one)`,
   );
