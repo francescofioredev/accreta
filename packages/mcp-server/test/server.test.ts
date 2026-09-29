@@ -79,3 +79,31 @@ test("the provenance block survives a real tool call", async () => {
     await client.close();
   }
 });
+
+// Only the parenthesised field list counts: "type", "source" and "aliases" appear elsewhere for other reasons.
+test("search_pages names every column the FTS index searches", async () => {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "description-probe", version: "0.0.0" });
+
+  await Promise.all([createServer(ctx).connect(serverTransport), client.connect(clientTransport)]);
+
+  try {
+    const { sql } = ctx.db
+      .query("SELECT sql FROM sqlite_master WHERE name = 'pages_fts'")
+      .get() as { sql: string };
+    const searched = sql
+      .slice(sql.indexOf("(") + 1, sql.lastIndexOf(")"))
+      .split(",")
+      .map((column) => column.trim())
+      .filter((column) => !column.includes("=") && !/\bUNINDEXED\b/i.test(column));
+    expect(searched.length).toBeGreaterThan(0);
+
+    const { tools } = await client.listTools();
+    const description = tools.find((tool) => tool.name === "search_pages")?.description ?? "";
+    const fields = description.match(/\(([^)]*)\)/)?.[1];
+    expect(fields).toBeDefined();
+    for (const column of searched) expect(fields).toContain(column);
+  } finally {
+    await client.close();
+  }
+});
