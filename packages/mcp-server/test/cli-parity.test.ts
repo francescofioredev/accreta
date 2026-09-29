@@ -291,3 +291,91 @@ describe("an argument a command cannot honour is refused, not ignored", () => {
     });
   }
 });
+
+// Past one page the CLI still prints everything; the MCP tool returns the first page of the same list.
+describe("past one page, MCP returns the head of the CLI's list", () => {
+  const PAGES = 60;
+  let bigRoot = "";
+  let bigCtx: ToolContext;
+  let bigClient: Client;
+
+  async function bigCli(argv: string[]) {
+    const out: string[] = [];
+    const code = await run(argv, { cwd: bigRoot, out: (line) => out.push(line), err: () => {} });
+    return { code, json: JSON.parse(out.join("\n")) as Record<string, unknown> };
+  }
+
+  async function bigMcp(tool: string, args: Record<string, unknown>) {
+    const result = (await bigClient.callTool({ name: tool, arguments: args })) as {
+      content: { text: string }[];
+    };
+    return JSON.parse(result.content[0]?.text ?? "") as Record<string, unknown>;
+  }
+
+  beforeAll(async () => {
+    bigRoot = mkdtempSync(join(tmpdir(), "accreta-parity-big-"));
+    const put = (path: string, contents: string) => {
+      mkdirSync(join(bigRoot, path, ".."), { recursive: true });
+      writeFileSync(join(bigRoot, path), contents, "utf-8");
+    };
+    put(
+      "accreta.config.yaml",
+      "knowledge_base: knowledge\npage_types: [note]\nlink_fields: [related]\n",
+    );
+    put("knowledge/hub.md", "---\ntype: note\n---\n\n# Hub\n");
+    for (let i = 0; i < PAGES; i++) {
+      put(
+        `knowledge/p${i}.md`,
+        `---\ntype: note\naliases: ["everyone"]\nrelated: [[hub]]\n---\n\n# P${i}\n`,
+      );
+    }
+    expect(await run(["reindex"], { cwd: bigRoot, out: () => {}, err: () => {} })).toBe(0);
+
+    bigCtx = createContext(bigRoot);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    bigClient = new Client({ name: "parity-big-probe", version: "0.0.0" });
+    await Promise.all([
+      createServer(bigCtx).connect(serverTransport),
+      bigClient.connect(clientTransport),
+    ]);
+  });
+
+  afterAll(async () => {
+    await bigClient?.close();
+    bigCtx?.db.close();
+    rmSync(bigRoot, { recursive: true, force: true });
+  });
+
+  const cases = [
+    {
+      tool: "find_consumers",
+      args: { target: "hub" },
+      argv: ["consumers", "hub"],
+      list: "results",
+    },
+    {
+      tool: "find_canonical",
+      args: { term: "everyone" },
+      argv: ["canonical", "everyone"],
+      list: "results",
+    },
+    { tool: "lint_knowledge_base", args: {}, argv: ["lint"], list: "findings" },
+  ];
+  for (const c of cases) {
+    test(`${c.tool}: first 50 of ${c.list}, the same count, nextCursor on MCP only`, async () => {
+      const fromCli = (await bigCli([...c.argv, "--json"])).json;
+      const fromMcp = await bigMcp(c.tool, c.args);
+      const all = fromCli[c.list] as unknown[];
+      expect(all.length).toBeGreaterThan(50);
+      expect(fromCli.count).toBe(all.length);
+
+      expect(fromMcp[c.list]).toEqual(all.slice(0, 50));
+      expect(fromMcp.count).toBe(fromCli.count);
+      expect(typeof fromMcp.nextCursor).toBe("string");
+      expect(fromCli).not.toHaveProperty("nextCursor");
+
+      const { nextCursor: _, ...mcpRest } = fromMcp;
+      expect(mcpRest).toStrictEqual({ ...fromCli, [c.list]: all.slice(0, 50) });
+    });
+  }
+});

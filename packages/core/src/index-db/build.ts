@@ -278,6 +278,8 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
     }
 
     upsertMeta.run({ $key: "last_reindex_at", $value: new Date().toISOString() });
+    // Unique per build, unlike a millisecond timestamp; paging cursors bind to it.
+    upsertMeta.run({ $key: "build_id", $value: randomUUID() });
     upsertMeta.run({ $key: "page_count", $value: String(pages) });
     upsertMeta.run({ $key: "max_mtime", $value: String(Math.floor(maxMtime)) });
     upsertMeta.run({ $key: "knowledge_base", $value: config.knowledgeBase });

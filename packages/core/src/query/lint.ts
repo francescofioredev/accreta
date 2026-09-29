@@ -9,22 +9,29 @@ import {
   type LocationVerdict,
   type SourceAdapter,
 } from "../source/adapter.ts";
+import { paginate, type PageInfo, type PageRequest } from "./paging.ts";
+
+export const LINT_FINDING_KINDS = [
+  "broken-link",
+  "unknown-page-type",
+  "missing-provenance",
+  "unverified-page",
+  "dangling-link",
+  "unparseable-frontmatter",
+  "unparseable-citation",
+  "citation-path-missing",
+  "citation-locator-missing",
+  "citation-unpinned",
+  "citation-revision-unknown",
+  "duplicate-footnote",
+  "unreadable-provenance-format",
+  "unloaded-source",
+] as const;
+
+export type LintFindingKind = (typeof LINT_FINDING_KINDS)[number];
 
 export interface LintFinding {
-  kind:
-    | "broken-link"
-    | "unknown-page-type"
-    | "missing-provenance"
-    | "unverified-page"
-    | "dangling-link"
-    | "unparseable-frontmatter"
-    | "unparseable-citation"
-    | "citation-path-missing"
-    | "citation-locator-missing"
-    | "citation-unpinned"
-    | "citation-revision-unknown"
-    | "duplicate-footnote"
-    | "unreadable-provenance-format";
+  kind: LintFindingKind;
   path: string;
   detail: string;
 }
@@ -77,7 +84,9 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
 
   // Links the indexer could not resolve to a path inside the knowledge base.
   const broken = db
-    .query(`SELECT src_path, target, kind, reason FROM broken_links ORDER BY src_path, target`)
+    .query(
+      `SELECT src_path, target, kind, reason FROM broken_links ORDER BY src_path, target, kind`,
+    )
     .all() as BrokenRow[];
   for (const row of broken) {
     findings.push({
@@ -96,7 +105,7 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
        FROM links l
        LEFT JOIN pages p ON p.path = l.dst_path
        WHERE p.path IS NULL
-       ORDER BY l.src_path, l.dst_path`,
+       ORDER BY l.src_path, l.dst_path, l.kind`,
     )
     .all() as { src_path: string; target: string; kind: string }[];
   for (const row of dangling) {
@@ -383,5 +392,43 @@ export async function lintCitations(
     citationsChecked,
     citationsUnchecked: uncheckedReasons.reduce((sum, r) => sum + r.citations, 0),
     uncheckedReasons,
+  };
+}
+
+/**
+ * `lint`, then `sourceFindings`, then `lintCitations`, filtered to `kinds` and paged together.
+ * The citation counts and reasons stay whole-pass values either way.
+ */
+export async function lintKnowledgeBase(
+  db: Database,
+  config: AccretaConfig,
+  sources: Map<string, SourceAdapter>,
+  options: {
+    page?: PageRequest;
+    kinds?: readonly LintFindingKind[];
+    /** Findings about the sources themselves, such as one that did not load; only the caller knows them. */
+    sourceFindings?: readonly LintFinding[];
+  } = {},
+): Promise<LintReport & PageInfo> {
+  const report = lint(db, config);
+  const citations = await lintCitations(db, sources);
+  const kinds = options.kinds && options.kinds.length > 0 ? new Set(options.kinds) : null;
+  const findings = [
+    ...report.findings,
+    ...(options.sourceFindings ?? []),
+    ...citations.findings,
+  ].filter((finding) => !kinds || kinds.has(finding.kind));
+  const scope = `lint\0${kinds ? [...kinds].toSorted().join(",") : ""}`;
+  const { items, total, nextCursor } = options.page
+    ? paginate(findings, options.page, scope)
+    : { items: findings, total: findings.length, nextCursor: undefined };
+  return {
+    findings: items,
+    total,
+    nextCursor,
+    pagesChecked: report.pagesChecked,
+    citationsChecked: citations.citationsChecked,
+    citationsUnchecked: citations.citationsUnchecked,
+    uncheckedReasons: citations.uncheckedReasons,
   };
 }

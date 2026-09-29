@@ -60,9 +60,11 @@ The 100,000-page case takes about twelve minutes, most of it in corpus generatio
 # MCP response budget
 
 The consumer of the MCP server is a language model with a finite context window, so every
-token a tool returns is a token unavailable for reasoning. Only `search_pages` bounds its
-response. `get_page` returns a whole body, and `find_consumers`, `find_canonical`,
-`check_drift` and `lint_knowledge_base` return everything they find.
+token a tool returns is a token unavailable for reasoning. `find_consumers`, `find_canonical`
+and `lint_knowledge_base` return one page of at most 50 results, with the untruncated `count`
+and a `nextCursor` (ADR-0007). `search_pages` returns at most 50 results, and its `count` is
+the number returned. `get_page` returns a whole body, and `check_drift` still returns
+everything it finds.
 
 Whether that matters is not a matter of opinion. `mcp-budget.ts` serialises each tool's
 response exactly as the server does — `JSON.stringify(value, null, 2)`, whitespace included —

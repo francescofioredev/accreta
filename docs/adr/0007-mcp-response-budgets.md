@@ -113,3 +113,35 @@ session, bounded versus unbounded, on the same seeded corpus.
   the `get_page` figure is not mistaken for a finding again.
 - None of this bounds what an agent spends _reading sources_, which dominates the token bill and
   happens through the agent's own file tools, entirely outside accreta's view.
+
+## Implemented as (2026-09-29, #47)
+
+`lint_knowledge_base`, `find_consumers` and `find_canonical` take `limit` (default 50, at most 50)
+and `cursor`. They differ from the Decision above in these ways:
+
+- **`count`, not `total`.** The three tools already returned `count`, and it is kept as the
+  untruncated total, as F-AIE-04 asked. Renaming it would change a field consumers already read.
+  `search_pages` is not changed yet: it still defaults to 20 results, has no cursor, and its
+  `count` is the page length. [#183](https://github.com/francescofioredev/accreta/issues/183)
+  aligns it.
+- **`nextCursor`.** The name MCP gives the field in its own paginated list results. It is absent
+  on the last page.
+- **A cursor is refused once its results change.** An offset replayed over a changed list would
+  skip or repeat results without saying so. Lint binds its cursor to the content of the findings,
+  so a changed finding invalidates it even without a reindex. `find_consumers` binds its cursor
+  to a random `build_id` the indexer writes to `meta`, so any rebuild invalidates it. An index
+  built before `build_id` existed falls back to `last_reindex_at`; an index recording neither
+  refuses every cursor.
+  `find_canonical` binds to its matches. A refused cursor is an error that says to start over.
+- **The kind filter.** `lint_knowledge_base` takes `kinds`, validated against the finding kinds
+  that exist, so a misspelt kind is an error rather than an empty, clean-looking report. An empty
+  list is refused too, rather than read as every kind. The filter applies before paging, so
+  `count` is the filtered total. `pages_checked`, `citations_checked`, `citations_unchecked` and
+  `unchecked_reasons` stay whole-pass values under a filter. `unloaded-source` findings, which
+  the caller supplies because only it loaded the sources, are paged and filtered with the rest.
+- **The CLI returns everything for now.** Core calls without a page return the whole list, and
+  `accreta lint`, `consumers` and `canonical` make those calls. CLI paging belongs to the CLI
+  lane.
+
+Measured by `bench/mcp-budget.ts` at 1,000 pages: `lint_knowledge_base` went from 159.6KB to
+8.4KB and `find_consumers` from 157.3KB to 8.2KB. Both are the same at 100 pages.
