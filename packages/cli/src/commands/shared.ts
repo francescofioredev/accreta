@@ -35,6 +35,56 @@ export function withIndex<T>(
   }
 }
 
+export interface ParsedArgs {
+  positional: string[];
+  /** Every flag given, `-t` normalized to `--type`. */
+  flags: string[];
+  problems: string[];
+}
+
+interface CommandArgs {
+  flags: readonly string[];
+  maxPositional: number;
+  /** Flags another issue will add, and which one. */
+  pending?: Readonly<Record<string, string>>;
+}
+
+/** What each command accepts. A flag it would otherwise ignore is refused instead. */
+export const COMMAND_ARGS: Readonly<Record<string, CommandArgs>> = {
+  init: { flags: ["--preset", "--agent-file"], maxPositional: 0 },
+  reindex: { flags: [], maxPositional: 0 },
+  lint: { flags: ["--json"], maxPositional: 0 },
+  drift: { flags: ["--strict"], maxPositional: 0, pending: { "--json": "#135" } },
+  doctor: { flags: [], maxPositional: 0 },
+  source: { flags: ["--set"], maxPositional: 3 },
+  search: { flags: ["--type", "--source", "--limit", "--json"], maxPositional: Infinity },
+  show: { flags: ["--json"], maxPositional: 1 },
+  consumers: { flags: ["--inline", "--kind", "--json"], maxPositional: 1 },
+  canonical: { flags: ["--json"], maxPositional: Infinity },
+};
+
+/**
+ * Why these arguments cannot run, or null. The caller exits 2 on a refusal: 1 already means
+ * "found something" for lint and drift, and an ignored flag must never look like an answer.
+ */
+export function refuseArguments(command: string | undefined, args: ParsedArgs): string | null {
+  const spec = command === undefined ? undefined : COMMAND_ARGS[command];
+  if (!spec) return null;
+  if (args.problems.length > 0) return args.problems[0]!;
+  for (const flag of args.flags) {
+    if (spec.flags.includes(flag)) continue;
+    const issue = spec.pending?.[flag];
+    return issue
+      ? `${command} has no ${flag} yet (${issue}).`
+      : `${command} does not take ${flag}.`;
+  }
+  if (args.positional.length > spec.maxPositional) {
+    const extra = args.positional.slice(spec.maxPositional).join(" ");
+    return `${command} does not take "${extra}".`;
+  }
+  return null;
+}
+
 // `--json` shapes copy the MCP tools' (neither package depends on the other);
 // mcp-server/test/cli-parity.test.ts compares them field for field.
 export function printJson(ctx: CommandContext, value: unknown): void {

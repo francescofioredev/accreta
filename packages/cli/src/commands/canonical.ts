@@ -10,7 +10,7 @@ export function canonical(
 ): number {
   if (!term) {
     ctx.err("Usage: accreta canonical <term> [--json]");
-    return 1;
+    return 2;
   }
   return withIndex(ctx, (db, workspace) => {
     const matches = findCanonical(db, term, workspace.config);

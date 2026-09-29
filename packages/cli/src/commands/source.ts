@@ -18,7 +18,7 @@ export async function sourceAdd(
   if (!type || !id) {
     ctx.err("Usage: accreta source add <type> <id> [--set key=value]");
     ctx.err(`Types: ${KNOWN_TYPES.join(", ")}`);
-    return 1;
+    return 2;
   }
 
   const kind = kindFor(type);

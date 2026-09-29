@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { readFileSync } from "node:fs";
 
-import type { CommandContext } from "./commands/shared.ts";
+import { refuseArguments, type CommandContext, type ParsedArgs } from "./commands/shared.ts";
 import { canonical } from "./commands/canonical.ts";
 import { consumers } from "./commands/consumers.ts";
 import { doctor } from "./commands/doctor.ts";
@@ -29,7 +29,8 @@ Usage: accreta <command> [arguments]
   search <query>           Full-text search (--type <type>, repeatable; --source <id>;
                            --limit <n>, 1-50, default 20)
   show <path|wikilink>     Print a page
-  consumers <path>         What links to this page, and what it links to (--inline)
+  consumers <path>         What links to this page, and what it links to (--inline;
+                           --kind <field>, repeatable)
   canonical <term>         Resolve a term to the page that defines it
 
   --json                   On lint, search, show, consumers and canonical: print the
@@ -54,9 +55,9 @@ const VERSION = (
 ).version;
 
 /** Collect repeated `--type x` flags, returning them with the positional rest. */
-function parseArgs(argv: string[]): {
-  positional: string[];
+function parseArgs(argv: string[]): ParsedArgs & {
   types: string[];
+  kinds: string[];
   includeInline: boolean;
   strict: boolean;
   json: boolean;
@@ -67,7 +68,10 @@ function parseArgs(argv: string[]): {
   agentFile?: string;
 } {
   const positional: string[] = [];
+  const flags: string[] = [];
+  const problems: string[] = [];
   const types: string[] = [];
+  const kinds: string[] = [];
   let includeInline = false;
   let strict = false;
   let json = false;
@@ -77,57 +81,105 @@ function parseArgs(argv: string[]): {
   let preset: string | undefined;
   let agentFile: string | undefined;
   for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
+    let arg = argv[i];
+    let inline: string | undefined;
+    if (arg?.startsWith("--") && arg.includes("=")) {
+      inline = arg.slice(arg.indexOf("=") + 1);
+      arg = arg.slice(0, arg.indexOf("="));
+    }
+    const name = arg;
+    // Never swallow the next flag as a value: `--source --json` once searched source "--json".
+    const value = (): string | undefined => {
+      const next = inline ?? argv[i + 1];
+      if (next === undefined || next === "" || next.startsWith("--")) {
+        problems.push(`${name} needs a value.`);
+        return undefined;
+      }
+      if (inline === undefined) i++;
+      return next;
+    };
+    const flag = (): boolean => {
+      if (inline !== undefined) problems.push(`${name} takes no value.`);
+      return true;
+    };
+    if (arg?.startsWith("-") && arg !== "-") flags.push(arg === "-t" ? "--type" : arg);
+
     if (arg === "--type" || arg === "-t") {
-      const value = argv[++i];
-      if (value) types.push(value);
+      const type = value();
+      if (type) types.push(type);
+      continue;
+    }
+    if (arg === "--kind") {
+      const kind = value();
+      if (kind) kinds.push(kind);
       continue;
     }
     if (arg === "--inline") {
-      includeInline = true;
+      includeInline = flag();
       continue;
     }
     if (arg === "--strict") {
-      strict = true;
+      strict = flag();
       continue;
     }
     if (arg === "--json") {
-      json = true;
+      json = flag();
       continue;
     }
     if (arg === "--limit") {
-      limit = argv[++i];
+      limit = value();
       continue;
     }
     if (arg === "--source") {
-      source = argv[++i];
+      source = value();
       continue;
     }
     if (arg === "--set") {
       // `key=value`, kept as written: the CLI knows no more about a source's
       // options than the core does.
-      const pair = argv[++i] ?? "";
+      const pair = value() ?? "";
       const at = pair.indexOf("=");
       if (at > 0) set[pair.slice(0, at)] = pair.slice(at + 1);
       continue;
     }
     if (arg === "--preset") {
-      preset = argv[++i];
+      preset = value();
       continue;
     }
     if (arg === "--agent-file") {
-      agentFile = argv[++i];
+      agentFile = value();
       continue;
     }
-    if (arg !== undefined) positional.push(arg);
+    if (arg !== undefined && !arg.startsWith("-")) positional.push(arg);
   }
-  return { positional, types, includeInline, strict, json, limit, source, set, preset, agentFile };
+  return {
+    positional,
+    flags,
+    problems,
+    types,
+    kinds,
+    includeInline,
+    strict,
+    json,
+    limit,
+    source,
+    set,
+    preset,
+    agentFile,
+  };
 }
 
 export async function run(argv: string[], ctx: CommandContext): Promise<number> {
   const [command, ...rest] = argv;
-  const { positional, types, includeInline, strict, json, limit, source, set, preset, agentFile } =
-    parseArgs(rest);
+  const parsed = parseArgs(rest);
+  const { positional, types, kinds, includeInline, strict, json, limit, source, set } = parsed;
+  const { preset, agentFile } = parsed;
+
+  const refusal = refuseArguments(command, parsed);
+  if (refusal) {
+    ctx.err(refusal);
+    return 2;
+  }
 
   switch (command) {
     case undefined:
@@ -166,7 +218,11 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
     case "show":
       return show(ctx, positional[0] ?? "", { json });
     case "consumers":
-      return consumers(ctx, positional[0] ?? "", { includeInline, json });
+      return consumers(ctx, positional[0] ?? "", {
+        includeInline,
+        kinds: kinds.length > 0 ? kinds : undefined,
+        json,
+      });
     case "canonical":
       return canonical(ctx, positional.join(" "), { json });
     default:

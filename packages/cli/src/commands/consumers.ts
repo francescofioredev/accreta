@@ -6,14 +6,15 @@ const TITLE_FIELDS = ["results[].title"] as const;
 export function consumers(
   ctx: CommandContext,
   target: string,
-  options: { includeInline?: boolean; json?: boolean } = {},
+  options: { includeInline?: boolean; kinds?: string[]; json?: boolean } = {},
 ): number {
   if (!target) {
-    ctx.err("Usage: accreta consumers <path-or-wikilink> [--inline] [--json]");
-    return 1;
+    ctx.err("Usage: accreta consumers <path-or-wikilink> [--inline] [--kind <field>] [--json]");
+    return 2;
   }
   return withIndex(ctx, (db, workspace) => {
     const result = findRelated(db, target, workspace.config, {
+      kinds: options.kinds,
       includeInline: options.includeInline,
     });
     if (options.json) {

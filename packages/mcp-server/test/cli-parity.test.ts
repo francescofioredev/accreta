@@ -34,38 +34,82 @@ interface Case {
   tool: string;
   args: Record<string, unknown>;
   argv: string[];
+  code: number;
 }
 
 const CASES: Case[] = [
-  { tool: "search_pages", args: { query: "tropopause" }, argv: ["search", "tropopause"] },
-  { tool: "search_pages", args: { query: "RF" }, argv: ["search", "RF"] },
+  { tool: "search_pages", args: { query: "tropopause" }, argv: ["search", "tropopause"], code: 0 },
+  { tool: "search_pages", args: { query: "RF" }, argv: ["search", "RF"], code: 0 },
   {
     tool: "search_pages",
     args: { query: "flux", types: ["concept"], source: "docs", limit: 1 },
     argv: ["search", "flux", "--type", "concept", "--source", "docs", "--limit", "1"],
+    code: 0,
   },
   {
     tool: "search_pages",
     args: { query: "flux", limit: 1 },
-    argv: ["search", "flux", "--limit", "1"],
+    argv: ["search", "flux", "--limit=1"],
+    code: 0,
   },
-  { tool: "search_pages", args: { query: "nothingmatches" }, argv: ["search", "nothingmatches"] },
-  { tool: "get_page", args: { path: "concepts/forcing" }, argv: ["show", "concepts/forcing"] },
-  { tool: "get_page", args: { path: "concepts/nothing" }, argv: ["show", "concepts/nothing"] },
+  {
+    tool: "search_pages",
+    args: { query: "nothingmatches" },
+    argv: ["search", "nothingmatches"],
+    code: 0,
+  },
+  {
+    tool: "get_page",
+    args: { path: "concepts/forcing" },
+    argv: ["show", "concepts/forcing"],
+    code: 0,
+  },
+  {
+    tool: "get_page",
+    args: { path: "concepts/nothing" },
+    argv: ["show", "concepts/nothing"],
+    code: 1,
+  },
   {
     tool: "find_consumers",
     args: { target: "concepts/forcing" },
     argv: ["consumers", "concepts/forcing"],
+    code: 0,
   },
   {
     tool: "find_consumers",
     args: { target: "concepts/forcing", include_inline: true },
     argv: ["consumers", "concepts/forcing", "--inline"],
+    code: 0,
   },
-  { tool: "find_consumers", args: { target: "missing" }, argv: ["consumers", "missing"] },
-  { tool: "find_canonical", args: { term: "RF" }, argv: ["canonical", "RF"] },
-  { tool: "find_canonical", args: { term: "nothing" }, argv: ["canonical", "nothing"] },
-  { tool: "lint_knowledge_base", args: {}, argv: ["lint"] },
+  {
+    tool: "find_consumers",
+    args: { target: "concepts/forcing", include_inline: true, kinds: ["related"] },
+    argv: ["consumers", "concepts/forcing", "--inline", "--kind", "related"],
+    code: 0,
+  },
+  { tool: "find_consumers", args: { target: "missing" }, argv: ["consumers", "missing"], code: 0 },
+  { tool: "find_canonical", args: { term: "RF" }, argv: ["canonical", "RF"], code: 0 },
+  { tool: "find_canonical", args: { term: "nothing" }, argv: ["canonical", "nothing"], code: 0 },
+  { tool: "lint_knowledge_base", args: {}, argv: ["lint"], code: 1 },
+];
+
+// Each would once have been ignored or misread, and answered as if it had run.
+const REFUSED: { argv: string[]; says: string }[] = [
+  { argv: ["search", "flux", "--source", "--json"], says: "--source needs a value" },
+  { argv: ["search", "flux", "--limit"], says: "--limit needs a value" },
+  { argv: ["search", "flux", "--limit="], says: "--limit needs a value" },
+  { argv: ["search", "flux", "--limit", "51"], says: "--limit" },
+  { argv: ["search", "flux", "--bogus"], says: "search does not take --bogus" },
+  { argv: ["lint", "--json=yes"], says: "--json takes no value" },
+  { argv: ["drift", "--json"], says: "drift has no --json yet (#135)" },
+  { argv: ["drift", "--source", "nope"], says: "drift does not take --source" },
+  { argv: ["canonical", "RF", "--limit", "1"], says: "canonical does not take --limit" },
+  { argv: ["show", "concepts/forcing", "--source", "docs"], says: "show does not take --source" },
+  { argv: ["show", "concepts/forcing", "notes/b"], says: 'show does not take "notes/b"' },
+  { argv: ["consumers", "concepts/forcing", "--kind"], says: "--kind needs a value" },
+  { argv: ["reindex", "--json"], says: "reindex does not take --json" },
+  { argv: ["search"], says: "Usage" },
 ];
 
 let root = "";
@@ -112,7 +156,8 @@ beforeAll(async () => {
   write(
     "knowledge/concepts/forcing.md",
     "---\ntype: concept\nsource: docs\naliases: [RF, radiative forcing]\n" +
-      'canonical_source: "docs:forcing.md#L2"\nlast_verified_revision: r1\n---\n\n' +
+      'canonical_source: "docs:forcing.md#L2"\nlast_verified_revision: r1\n' +
+      "related: [[notes/odd]]\n---\n\n" +
       "# Radiative forcing\n\nTropopause flux.\n",
   );
   write(
@@ -172,6 +217,7 @@ describe("--json matches the MCP tool field for field", () => {
     test(`${c.argv.join(" ")} --json = ${c.tool} ${JSON.stringify(c.args)}`, async () => {
       const [fromCli, fromMcp] = [await cli([...c.argv, "--json"]), await mcp(c.tool, c.args)];
       expect(fromMcp.isError).toBe(false);
+      expect(fromCli.code).toBe(c.code);
       expect(JSON.parse(fromCli.stdout)).toStrictEqual(JSON.parse(fromMcp.text));
     });
   }
@@ -182,20 +228,29 @@ describe("--json matches the MCP tool field for field", () => {
     expect(search.results[0].matched_aliases).toEqual(["RF"]);
     const unlimited = JSON.parse((await cli(["search", "flux", "--json"])).stdout);
     expect(unlimited.count).toBeGreaterThan(1);
+    const consumers = JSON.parse((await cli(["consumers", "concepts/forcing", "--json"])).stdout);
+    const directions = consumers.results.map((r: { direction: string }) => r.direction);
+    expect(directions).toContain("inbound");
+    expect(directions).toContain("outbound");
     const lint = JSON.parse((await cli(["lint", "--json"])).stdout);
     expect(lint.count).toBeGreaterThan(0);
     expect(lint.citations_checked).toBeGreaterThan(0);
   });
 });
 
-describe("--limit is bounded where the MCP schema bounds it", () => {
-  for (const limit of ["0", "51", "2.5"]) {
-    test(`--limit ${limit} is refused by both`, async () => {
-      const fromCli = await cli(["search", "flux", "--limit", limit, "--json"]);
-      const fromMcp = await mcp("search_pages", { query: "flux", limit: Number(limit) });
-      expect(fromCli.code).toBe(1);
-      expect(fromCli.stderr).toContain("--limit");
-      expect(fromMcp.isError).toBe(true);
+describe("an argument a command cannot honour is refused, not ignored", () => {
+  for (const r of REFUSED) {
+    test(`${r.argv.join(" ")} exits 2`, async () => {
+      const { code, stdout, stderr } = await cli(r.argv);
+      expect(code).toBe(2);
+      expect(stderr).toContain(r.says);
+      expect(stdout).toBe("");
+    });
+  }
+
+  for (const limit of [0, 51, 2.5]) {
+    test(`search_pages refuses limit ${limit} too`, async () => {
+      expect((await mcp("search_pages", { query: "flux", limit })).isError).toBe(true);
     });
   }
 });

@@ -16,12 +16,12 @@ export interface SearchOptions {
 export function search(ctx: CommandContext, query: string, options: SearchOptions = {}): number {
   if (!query) {
     ctx.err("Usage: accreta search <query> [--type <type>] [--source <id>] [--limit <n>] [--json]");
-    return 1;
+    return 2;
   }
   const limit = parseLimit(options.limit, MAX_LIMIT);
   if (limit === null) {
     ctx.err(`--limit takes a whole number from 1 to ${MAX_LIMIT}.`);
-    return 1;
+    return 2;
   }
   return withIndex(ctx, (db, workspace) => {
     const hits = searchPages(db, { query, types: options.types, source: options.source, limit });

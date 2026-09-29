@@ -10,7 +10,7 @@ export function show(
 ): number {
   if (!target) {
     ctx.err("Usage: accreta show <path-or-wikilink> [--json]");
-    return 1;
+    return 2;
   }
   return withIndex(ctx, (db, workspace) => {
     const page = getPage(db, target, workspace.config);
