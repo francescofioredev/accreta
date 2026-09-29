@@ -103,7 +103,7 @@ runs:
           console.log(`pages-newly-in-doubt=${r.pages_newly_in_doubt}`);
           console.log(`pages-unplaceable=${r.pages_unplaceable}`);
           console.log(`pages-newly-unplaceable=${r.pages_newly_unplaceable}`);
-          console.log(`attention=${r.pages_newly_in_doubt + r.pages_newly_unplaceable}`);
+          console.log(`attention=${r.pages_newly_in_doubt + r.pages_newly_unplaceable + r.unloaded_sources.length}`);
         ' "$RUNNER_TEMP/accreta-drift.json" >>"$GITHUB_OUTPUT"
 
     - name: Comment on the pull request

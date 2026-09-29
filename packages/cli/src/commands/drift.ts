@@ -10,6 +10,7 @@ import {
   type StaleRevision,
   type UnresolvableRevision,
 } from "@accreta/core";
+import { countUnchecked, uncheckedPages, type UncheckedSource } from "@accreta/adapters";
 import { findWorkspace } from "../workspace.ts";
 import { loadSources, type CommandContext } from "./shared.ts";
 
@@ -74,30 +75,26 @@ export async function drift(
     return 2;
   }
 
-  const { sources, unloaded } = loadSources(workspace);
+  const loaded = loadSources(workspace);
   const reports: DriftReport[] = [];
-  if (sources.length > 0) {
+  let unloaded: UncheckedSource[] = [];
+  if (loaded.sources.length > 0 || loaded.unloaded.length > 0) {
     const db = openIndex(workspace.indexPath, { readonly: true });
     try {
-      for (const adapter of sources) reports.push(await detectDrift(db, adapter));
+      for (const adapter of loaded.sources) reports.push(await detectDrift(db, adapter));
+      unloaded = countUnchecked(db, loaded.unloaded);
     } finally {
       db.close();
     }
   }
 
-  const notLoaded = unloaded.length > 0 ? { unloaded_sources: unloaded } : {};
   if (options.format === "json") {
-    ctx.out(JSON.stringify({ ...toJson(reports, base), ...notLoaded }, null, 2));
+    ctx.out(JSON.stringify(toJson(reports, base, unloaded), null, 2));
   } else if (options.format === "github") {
-    const lines = unloaded.map(
-      (u) => `${code(u.file)} was not loaded, so not checked: ${u.reason}`,
-    );
-    const body =
-      reports.length > 0 || lines.length === 0 ? toGithub(reports, base) : "### accreta drift";
-    ctx.out([body, ...lines].join("\n\n"));
+    ctx.out(toGithub(reports, base, GITHUB_BODY_LIMIT, unloaded));
   } else {
     for (const source of unloaded) {
-      ctx.out(`${source.file} — not loaded, so not checked`);
+      ctx.out(`${source.file} — did not load, so ${uncheckedPages(source.pages)}`);
       ctx.out(`  ${source.reason}`);
     }
     if (reports.length === 0 && unloaded.length === 0) {
@@ -105,8 +102,8 @@ export async function drift(
     } else for (const report of reports) printText(ctx, report);
   }
 
-  // Unchecked rather than wrong, like a delegated source: only --strict fails on it.
-  const failed = reports.some((report) => fails(report, strict)) || (strict && unloaded.length > 0);
+  // "I cannot tell", like `unresolvable`: a typo in `type` must not turn a failing run green.
+  const failed = reports.some((report) => fails(report, strict)) || unloaded.length > 0;
   return failed ? 1 : 0;
 }
 
@@ -256,6 +253,8 @@ interface DriftJson {
   /** Unplaceable pages the base report did not have at the same revision; all of them without one. */
   pages_newly_unplaceable: number;
   sources: SourceVerdict[];
+  /** Declarations that did not build; nothing citing them was checked. */
+  unloaded_sources: UncheckedSource[];
 }
 
 /** Keys of what a base report already had in doubt or could not place. */
@@ -301,7 +300,11 @@ const isNew = (page: DoubtedPage) =>
   page.citations === null ? !page.on_base : page.citations.some((c) => !c.on_base);
 
 /** Only pages whose cited lines changed are named; untouched ones are counted, never listed. */
-function toJson(reports: DriftReport[], base?: BaseKeys): DriftJson {
+function toJson(
+  reports: DriftReport[],
+  base?: BaseKeys,
+  unloaded: UncheckedSource[] = [],
+): DriftJson {
   const sources = reports.map((report) => verdict(report, base));
   const doubted = sources.flatMap((source) => source.in_doubt);
   const unplaced = sources.flatMap((source) =>
@@ -315,6 +318,7 @@ function toJson(reports: DriftReport[], base?: BaseKeys): DriftJson {
     pages_unplaceable: unplaced.length,
     pages_newly_unplaceable: unplaced.filter((key) => !base?.has(key)).length,
     sources,
+    unloaded_sources: unloaded,
   };
 }
 
@@ -414,10 +418,18 @@ export function toGithub(
   reports: DriftReport[],
   base?: BaseKeys,
   limit = GITHUB_BODY_LIMIT,
+  unloaded: UncheckedSource[] = [],
 ): string {
-  const json = toJson(reports, base);
+  const json = toJson(reports, base, unloaded);
   const lines: Line[] = [{ text: "### accreta drift" }, { text: "" }];
   const text = (...values: string[]) => lines.push(...values.map((value) => ({ text: value })));
+  // Before the headline, so the counts-only fallback comment still carries them.
+  for (const source of unloaded) {
+    text(
+      `- ${code(source.file)} did not load, so ${uncheckedPages(source.pages)}: ${code(source.reason)}`,
+    );
+  }
+  if (unloaded.length > 0) text("");
   let groups = 0;
   const table = (header: string[], values: string[], row: (index: number) => 0 | 1 = () => 1) => {
     const group = groups++;
@@ -426,7 +438,7 @@ export function toGithub(
   };
   const HEADER = ["", "| Page | Cited lines | Lines as of | Change |", "|---|---|---|---|"];
 
-  if (json.sources.length === 0) {
+  if (json.sources.length === 0 && unloaded.length === 0) {
     text("No sources declared in `sources/`. Nothing to check.");
     return fit(lines, limit);
   }
@@ -526,6 +538,15 @@ export function toGithub(
 }
 
 function headline(json: DriftJson, compared: boolean): string {
+  const n = json.unloaded_sources.length;
+  if (n === 0) return pagesHeadline(json, compared);
+  return (
+    `**${n} source declaration(s) did not load; pages citing them were not checked.** ` +
+    pagesHeadline(json, compared)
+  );
+}
+
+function pagesHeadline(json: DriftJson, compared: boolean): string {
   const n = compared ? json.pages_newly_in_doubt : json.pages_in_doubt;
   const plural = n === 1 ? "page" : "pages";
   if (n > 0) {

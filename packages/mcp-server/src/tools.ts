@@ -20,7 +20,7 @@ import {
   type SearchHit,
   type SourceAdapter,
 } from "@accreta/core";
-import { unloadedFindings, type UnloadedSource } from "@accreta/adapters";
+import { countUnchecked, unloadedFindings, type UnloadedSource } from "@accreta/adapters";
 
 export interface ToolContext {
   db: Database;
@@ -28,7 +28,7 @@ export interface ToolContext {
   root: string;
   sources: Map<string, SourceAdapter>;
   /** Declarations that did not build; reported by lint and drift instead of stopping the server. */
-  unloadedSources?: UnloadedSource[];
+  unloadedSources: UnloadedSource[];
   /** Whether write tools are permitted. Off unless ACCRETA_ALLOW_WRITES is set. */
   writesEnabled: boolean;
 }
@@ -194,30 +194,39 @@ export function findCanonicalTool(ctx: ToolContext, input: { term: string }) {
   };
 }
 
-// No provenance block on this tool or the next: revisions and source paths come
-// from the adapter, not from anyone's page prose.
+// No provenance block on this tool or the next: nothing here is page prose. Revisions and
+// paths come from the adapter; `unloaded_sources` quotes sources/*.yaml, one line per file.
 export async function checkDriftTool(ctx: ToolContext, input: { source?: string }) {
+  // Pinned once: the context reopens the index when a rebuild swaps it, and
+  // this loop spans awaits. Re-reading it per adapter could draw one report
+  // from two different indexes.
+  const db = ctx.db;
+  const broken = input.source && ctx.unloadedSources.find((u) => u.id === input.source);
+  if (broken) {
+    return {
+      message: `Source "${broken.id}" is declared in ${broken.file} but did not load: ${broken.reason}`,
+      reports: [],
+      unloaded_sources: countUnchecked(db, [broken]),
+    };
+  }
+
   const adapters = input.source
     ? [ctx.sources.get(input.source)].filter((a): a is SourceAdapter => Boolean(a))
     : [...ctx.sources.values()];
-  const unloaded = ctx.unloadedSources?.length ? { unloaded_sources: ctx.unloadedSources } : {};
+  const unloaded_sources = countUnchecked(db, ctx.unloadedSources);
 
   if (adapters.length === 0) {
     return {
       message: input.source
         ? `No source named "${input.source}". Known: ${[...ctx.sources.keys()].join(", ") || "none"}.`
-        : unloaded.unloaded_sources
+        : unloaded_sources.length > 0
           ? "No declared source loaded; see unloaded_sources."
           : "No sources are declared.",
       reports: [],
-      ...unloaded,
+      unloaded_sources,
     };
   }
 
-  // Pinned once: the context reopens the index when a rebuild swaps it, and
-  // this loop spans awaits. Re-reading it per adapter could draw one report
-  // from two different indexes.
-  const db = ctx.db;
   const reports = [];
   for (const adapter of adapters) {
     reports.push(await detectDrift(db, adapter));
@@ -276,7 +285,7 @@ export async function checkDriftTool(ctx: ToolContext, input: { source?: string 
         pending: report.delegated.pending,
       },
     })),
-    ...unloaded,
+    unloaded_sources,
   };
 }
 
@@ -327,7 +336,7 @@ export async function lintTool(ctx: ToolContext) {
   const citations = await lintCitations(db, ctx.sources);
   const findings = [
     ...report.findings,
-    ...unloadedFindings(ctx.unloadedSources ?? []),
+    ...unloadedFindings(countUnchecked(db, ctx.unloadedSources)),
     ...citations.findings,
   ];
   return {

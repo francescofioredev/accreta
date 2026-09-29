@@ -1,6 +1,13 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseSourceDeclaration, SourceRegistry, type SourceAdapter } from "@accreta/core";
+import {
+  countPagesOfSource,
+  parseSourceDeclaration,
+  SourceRegistry,
+  type Database,
+  type SourceAdapter,
+  type SourceDeclaration,
+} from "@accreta/core";
 import { KINDS, type SourceContext } from "./kinds.ts";
 
 export type { AgentAccess, Preflight, SourceContext, SourceKind } from "./kinds.ts";
@@ -41,10 +48,27 @@ export function readDeclarations(root: string) {
   );
 }
 
+/** One `sources/*.yaml` file, relative to the workspace root: its declaration, or why it is not one. */
+export type DeclarationFile =
+  { file: string; declaration: SourceDeclaration } | { file: string; error: string };
+
+/** Every declaration file, each read on its own so a bad one is reported against itself. */
+export function readDeclarationFiles(root: string): DeclarationFile[] {
+  return declarationFiles(root).map((file) => {
+    try {
+      return { file, declaration: parseSourceDeclaration(readFileSync(join(root, file), "utf-8")) };
+    } catch (error) {
+      return { file, error: firstLine(error) };
+    }
+  });
+}
+
 /** A declaration in `sources/` that did not become an adapter. */
 export interface UnloadedSource {
   /** Relative to the workspace root: the file somebody has to open. */
   file: string;
+  /** Absent when the file did not parse far enough to name one. */
+  id?: string;
   reason: string;
 }
 
@@ -65,14 +89,12 @@ export function loadSources(ctx: SourceContext): LoadedSources {
   const unloaded: UnloadedSource[] = [];
   const seen = new Set<string>();
 
-  for (const file of declarationFiles(ctx.root)) {
-    let declaration;
-    try {
-      declaration = parseSourceDeclaration(readFileSync(join(ctx.root, file), "utf-8"));
-    } catch (error) {
-      unloaded.push({ file, reason: messageOf(error) });
+  for (const entry of readDeclarationFiles(ctx.root)) {
+    if ("error" in entry) {
+      unloaded.push({ file: entry.file, reason: entry.error });
       continue;
     }
+    const { file, declaration } = entry;
     if (seen.has(declaration.id)) {
       throw new Error(
         `Two sources in sources/ are declared with id "${declaration.id}". ` +
@@ -83,19 +105,44 @@ export function loadSources(ctx: SourceContext): LoadedSources {
     try {
       sources.set(declaration.id, registry.create(declaration));
     } catch (error) {
-      unloaded.push({ file, reason: messageOf(error) });
+      unloaded.push({ file, id: declaration.id, reason: firstLine(error) });
     }
   }
   return { sources, unloaded };
 }
 
-/** The same finding for the CLI and the MCP server, so they cannot word it differently. */
-export function unloadedFindings(unloaded: readonly UnloadedSource[]) {
+/** An unloaded source and the pages naming it; `pages` is null when there is no id to count by. */
+export interface UncheckedSource extends UnloadedSource {
+  pages: number | null;
+}
+
+/** Size what went unchecked, as lint does for a delegated source, rather than just flag it. */
+export function countUnchecked(
+  db: Database,
+  unloaded: readonly UnloadedSource[],
+): UncheckedSource[] {
   return unloaded.map((source) => ({
-    kind: "unloaded-source" as const,
-    path: source.file,
-    detail: `not loaded, so nothing citing it was checked: ${source.reason}`,
+    ...source,
+    pages: source.id === undefined ? null : countPagesOfSource(db, source.id),
   }));
 }
 
-const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
+export const uncheckedPages = (pages: number | null) =>
+  pages === null
+    ? "an unknown number of pages cite it and were not checked"
+    : `${pages} page(s) cite it and were not checked`;
+
+/** The same finding for the CLI and the MCP server, so they cannot word it differently. */
+export function unloadedFindings(unchecked: readonly UncheckedSource[]) {
+  return unchecked.map((source) => ({
+    kind: "unloaded-source" as const,
+    path: source.file,
+    detail: `did not load, so ${uncheckedPages(source.pages)}: ${source.reason}`,
+  }));
+}
+
+// First line only: a YAML error quotes the file after it, and reasons reach PR comments.
+function firstLine(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.split("\n")[0]!.trim();
+}

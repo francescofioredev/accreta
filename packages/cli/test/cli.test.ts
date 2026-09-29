@@ -301,8 +301,8 @@ describe("accreta drift", () => {
     await cli("reindex");
     output = [];
 
-    expect(await cli("drift")).toBe(0);
-    expect(stdout()).toContain("sources/design-docs.yaml — not loaded");
+    expect(await cli("drift")).toBe(1);
+    expect(stdout()).toContain("sources/design-docs.yaml — did not load");
     expect(stdout()).toContain("declares no `scope`");
   });
 

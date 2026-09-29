@@ -45,6 +45,10 @@ async function workspace(): Promise<{ docs: string; revision: string }> {
     `---\ntype: note\nsource: docs\nlast_verified_revision: ${revision}\n---\n\n# A\n\n` +
       `A claim.[^c]\n\n[^c]: docs @ ${revision.slice(0, 7)} · a.md#L2\n`,
   );
+  writeFileSync(
+    join(root, "knowledge", "b.md"),
+    "---\ntype: note\nsource: design-docs\nlast_verified_revision: 2026-08-01\n---\n\n# B\n",
+  );
   await cli("reindex");
   output = [];
   return { docs, revision };
@@ -82,27 +86,79 @@ describe("one delegated source still missing its scope, next to a git source", (
     expect(stdout()).toContain("`scope`");
   });
 
-  test("drift passes on it, and --strict fails on it", async () => {
+  test("drift fails on it with the git source up to date, and says how much went unchecked", async () => {
     await workspace();
 
-    expect(await cli("drift")).toBe(0);
+    expect(await cli("drift")).toBe(1);
     expect(stdout()).toContain("up to date");
-    expect(await cli("drift", "--strict")).toBe(1);
+    expect(stdout()).toContain("1 page(s) cite it and were not checked");
   });
 
-  test("the pull request formats carry it too, so a check in CI does not drop it", async () => {
+  test("lint --json carries it as a finding on the file", async () => {
     await workspace();
 
-    expect(await cli("drift", "--json")).toBe(0);
+    expect(await cli("lint", "--json")).toBe(1);
+    const findings = JSON.parse(stdout()).findings as { kind: string; path: string }[];
+    expect(findings.filter((f) => f.kind === "unloaded-source").map((f) => f.path)).toEqual([
+      "sources/design-docs.yaml",
+    ]);
+  });
+
+  test("the pull request formats carry it, so a check in CI cannot go green on it", async () => {
+    await workspace();
+
+    expect(await cli("drift", "--json")).toBe(1);
     const report = JSON.parse(stdout());
     expect(report.sources.map((s: { source_id: string }) => s.source_id)).toEqual(["docs"]);
     expect(report.unloaded_sources).toEqual([
-      { file: "sources/design-docs.yaml", reason: expect.stringContaining("`scope`") },
+      {
+        file: "sources/design-docs.yaml",
+        id: "design-docs",
+        reason: expect.stringContaining("`scope`"),
+        pages: 1,
+      },
     ]);
 
     output = [];
-    expect(await cli("drift", "--format", "github")).toBe(0);
-    expect(stdout()).toContain("`docs` at");
-    expect(stdout()).toContain("`sources/design-docs.yaml` was not loaded");
+    expect(await cli("drift", "--format", "github")).toBe(1);
+    const out = stdout();
+    expect(out).toContain(
+      "**1 source declaration(s) did not load; pages citing them were not checked.**",
+    );
+    // Above the headline, so the counts-only comment keeps it.
+    const line = out.indexOf("- `sources/design-docs.yaml` did not load, so 1 page(s)");
+    expect(line).toBeGreaterThan(-1);
+    expect(line).toBeLessThan(out.indexOf("**"));
+    expect(out).toContain("`docs` at");
+  });
+});
+
+describe("a declaration that cannot build at all", () => {
+  test("a typo in `type` fails drift, as it did when it threw", async () => {
+    await workspace();
+    writeFileSync(join(root, "sources", "docs.yaml"), "id: docs\ntype: fss\nroot: sources/docs\n");
+
+    expect(await cli("drift")).toBe(1);
+    expect(stdout()).toContain("sources/docs.yaml — did not load, so 1 page(s) cite it");
+    expect(stdout()).toContain('Unknown source type "fss"');
+  });
+
+  test("the github format puts the reason in a code span, whatever the declaration says", async () => {
+    await workspace();
+    writeFileSync(join(root, "sources", "docs.yaml"), 'id: "<img src=x>"\ntype: fss\n');
+
+    expect(await cli("drift", "--format", "github")).toBe(1);
+    expect(stdout()).toContain('`Unknown source type "fss" for source "<img src=x>".');
+    expect(stdout()).not.toMatch(/[^`"]<img/);
+  });
+
+  test("doctor names a malformed file and carries on", async () => {
+    await workspace();
+    writeFileSync(join(root, "sources", "broken.yaml"), "type: fs\n");
+
+    expect(await cli("doctor")).toBe(1);
+    expect(stdout()).toContain("sources/broken.yaml");
+    expect(stdout()).toContain("`id`");
+    expect(stdout()).toContain("docs — git");
   });
 });

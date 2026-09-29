@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { lint, lintCitations, openIndex } from "@accreta/core";
-import { unloadedFindings } from "@accreta/adapters";
+import { countUnchecked, unloadedFindings } from "@accreta/adapters";
 import { findWorkspace } from "../workspace.ts";
 import { loadSources, printJson, provenance, type CommandContext } from "./shared.ts";
 
@@ -32,7 +32,7 @@ export async function runLint(
     const citations = await lintCitations(db, sources);
     const findings = [
       ...report.findings,
-      ...unloadedFindings(loaded.unloaded),
+      ...unloadedFindings(countUnchecked(db, loaded.unloaded)),
       ...citations.findings,
     ];
 

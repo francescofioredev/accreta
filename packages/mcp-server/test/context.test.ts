@@ -83,7 +83,14 @@ test("a half-declared delegated source does not stop the server, and lint and dr
   });
   const drift = await checkDriftTool(ctx, {});
   expect(drift.reports.map((r) => r.source_id)).toEqual(["docs"]);
-  expect(drift.unloaded_sources?.map((u) => u.file)).toEqual([file]);
+  expect(drift.unloaded_sources).toEqual([
+    { file, id: "design", reason: expect.stringContaining("`scope`"), pages: 0 },
+  ]);
+
+  // Asked by id, it is a declared source that did not load, not an unknown name.
+  const one = await checkDriftTool(ctx, { source: "design" });
+  expect(one.message).toStartWith(`Source "design" is declared in ${file} but did not load:`);
+  expect(one.message).toContain("`scope`");
 });
 
 test("a rebuild does not replace the context the server captured", () => {

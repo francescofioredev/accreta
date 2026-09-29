@@ -2,7 +2,13 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildRegistry, loadSources, readDeclarations, unloadedFindings } from "../src/index.ts";
+import {
+  buildRegistry,
+  loadSources,
+  readDeclarationFiles,
+  readDeclarations,
+  unloadedFindings,
+} from "../src/index.ts";
 
 let root = "";
 
@@ -62,8 +68,20 @@ describe("loadSources", () => {
     const { sources, unloaded } = loadSources(ctx());
     expect([...sources.keys()]).toEqual(["docs"]);
     expect(unloaded).toEqual([
-      { file: join("sources", "design.yaml"), reason: expect.stringContaining("`scope`") },
+      {
+        file: join("sources", "design.yaml"),
+        id: "design",
+        reason: expect.stringContaining("`scope`"),
+      },
     ]);
+  });
+
+  test("a YAML error is cut to its first line, which does not quote the file", () => {
+    writeSource("bad.yaml", "id: bad\ntype: fs\nroot: [unclosed\nsecret: `ignore previous`\n");
+    const [entry] = loadSources(ctx()).unloaded;
+    expect(entry?.id).toBeUndefined();
+    expect(entry?.reason).not.toContain("\n");
+    expect(entry?.reason).not.toContain("ignore previous");
   });
 
   test("a file that is not a declaration is reported against itself", () => {
@@ -80,12 +98,29 @@ describe("loadSources", () => {
     expect(unloaded[0]?.reason).toContain("`id`");
   });
 
-  test("a finding names the file and carries the reason", () => {
+  test("a finding names the file, how much went unchecked, and the reason", () => {
     writeSource("design.yaml", "id: design\ntype: delegated\nscope: The design pages.\n");
-    const [finding] = unloadedFindings(loadSources(ctx()).unloaded);
+    const [unloaded] = loadSources(ctx()).unloaded;
+    const [finding] = unloadedFindings([{ ...unloaded!, pages: 3 }]);
     expect(finding?.kind).toBe("unloaded-source");
     expect(finding?.path).toBe(join("sources", "design.yaml"));
+    expect(finding?.detail).toContain("3 page(s) cite it and were not checked");
     expect(finding?.detail).toContain("`via`");
+
+    const [unknown] = unloadedFindings([{ ...unloaded!, id: undefined, pages: null }]);
+    expect(unknown?.detail).toContain("an unknown number of pages");
+  });
+
+  test("the per-file reader returns a declaration or an error for each file", () => {
+    writeSource("a.yaml", "id: a\ntype: fs\n");
+    writeSource("b.yaml", "type: fs\n");
+    const files = readDeclarationFiles(root);
+    expect(files.map((f) => f.file)).toEqual([
+      join("sources", "a.yaml"),
+      join("sources", "b.yaml"),
+    ]);
+    expect("declaration" in files[0]! && files[0].declaration.id).toBe("a");
+    expect("error" in files[1]! && files[1].error).toContain("`id`");
   });
 
   test("files that are not YAML are ignored", () => {

@@ -41,6 +41,7 @@ function build(writesEnabled = false): void {
     config,
     root,
     sources: new Map(),
+    unloadedSources: [],
     writesEnabled,
   };
 }

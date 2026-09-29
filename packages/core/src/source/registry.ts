@@ -1,4 +1,5 @@
 import { parse as parseYaml } from "yaml";
+import type { Database } from "../index-db/db.ts";
 import type { SourceAdapter } from "./adapter.ts";
 
 /**
@@ -44,6 +45,14 @@ export function parseSourceDeclaration(source: string): SourceDeclaration {
   }
 
   return { id, type, options };
+}
+
+/** How many pages name this source: what went unchecked when it did not load. */
+export function countPagesOfSource(db: Database, sourceId: string): number {
+  const row = db.query(`SELECT COUNT(*) AS n FROM pages WHERE source = ?`).get(sourceId) as {
+    n: number;
+  };
+  return row.n;
 }
 
 /**
