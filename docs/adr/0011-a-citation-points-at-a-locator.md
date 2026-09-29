@@ -1,6 +1,6 @@
 # ADR-0011: A citation points at a locator, and only the source knows what one means
 
-Status: accepted
+Status: accepted, amended 2026-09-29 (footnotes; see the end)
 Date: 2026-09-08
 
 ## Context
@@ -120,3 +120,14 @@ direction of one of them getting a fix.
   the lines, compare" that the other also implements. Accepted rather than hidden: the
   conformance suite runs both, so a fix applied to one and not the other shows up as a
   failure.
+
+## Amendment, 2026-09-29: footnotes are read back through the format
+
+`canonical_source` keeps its fixed grammar. Footnotes, the citation on each claim, are now read
+by inverting the knowledge base's own `provenance.format` (`compileCitationTemplate`), so a
+fabricated footnote fails lint instead of passing it (#123). This does not reopen the rejected
+alternative above. The fixed grammar stays the one every knowledge base shares. The inverted
+format reads only the prose that knowledge base chose to render. A format that cannot be read
+back unambiguously, because two placeholders touch or `{source}` or `{path}` is missing, is
+reported once against the config, and its footnotes go unchecked rather than guessed at. The
+retired `L{start}-L{end}` reads as `{locator}`, which renders the same text.

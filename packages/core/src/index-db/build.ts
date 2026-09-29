@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import type { AccretaConfig } from "../config.ts";
+import { compileCitationTemplate, extractFootnotes } from "../citations.ts";
 import { extractLinks, tryResolveWikilink } from "../links.ts";
 import { parsePage } from "../page.ts";
 import { openIndex, sealForReading, type Database } from "./db.ts";
@@ -10,6 +11,8 @@ export interface BuildResult {
   pages: number;
   links: number;
   brokenLinks: number;
+  /** Footnotes read as citation attempts, parsed or not. */
+  citations: number;
   ms: number;
 }
 
@@ -165,6 +168,11 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
     `INSERT OR IGNORE INTO broken_links (src_path, target, kind, reason)
      VALUES ($src, $target, $kind, $reason)`,
   );
+  const insertCitation = db.prepare(
+    `INSERT INTO citations
+       (page_path, footnote, line, text, source, revision, path, locator, claim)
+     VALUES ($page, $footnote, $line, $text, $source, $revision, $path, $locator, $claim)`,
+  );
   const upsertMeta = db.prepare(
     `INSERT INTO meta (key, value) VALUES ($key, $value)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
@@ -173,7 +181,12 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
   let pages = 0;
   let links = 0;
   let brokenLinks = 0;
+  let citations = 0;
   let maxMtime = 0;
+
+  // A format that cannot be read back indexes no footnotes; `lint` names the format instead.
+  const compiled = compileCitationTemplate(config.provenanceFormat);
+  const template = compiled.ok ? compiled.template : null;
 
   const knowledgeDir = join(root, config.knowledgeBase);
 
@@ -183,6 +196,7 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
     db.exec("DELETE FROM pages_fts");
     db.exec("DELETE FROM links");
     db.exec("DELETE FROM broken_links");
+    db.exec("DELETE FROM citations");
 
     for (const absolute of walkMarkdown(knowledgeDir)) {
       const path = toPosix(relative(root, absolute));
@@ -240,6 +254,26 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
         }
       }
 
+      if (template) {
+        const offset = raw.slice(0, raw.length - body.length).split("\n").length - 1;
+        for (const footnote of extractFootnotes(body)) {
+          if (!template.attempts(footnote.text)) continue;
+          const parts = template.read(footnote.text);
+          insertCitation.run({
+            $page: path,
+            $footnote: footnote.id,
+            $line: footnote.line + offset,
+            $text: footnote.text,
+            $source: parts?.sourceId ?? null,
+            $revision: parts?.revision ?? null,
+            $path: parts?.path ?? null,
+            $locator: parts?.locator ?? null,
+            $claim: footnote.claim,
+          });
+          citations++;
+        }
+      }
+
       pages++;
     }
 
@@ -254,5 +288,5 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
     throw error;
   }
 
-  return { pages, links, brokenLinks, ms: performance.now() - started };
+  return { pages, links, brokenLinks, citations, ms: performance.now() - started };
 }

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { checkConfig, DEFAULT_CONFIG } from "@accreta/core";
+import { checkConfig, compileCitationTemplate, DEFAULT_CONFIG } from "@accreta/core";
 import { KNOWN_TYPES, kindFor, readDeclarations } from "@accreta/adapters";
 import { CONFIG_FILENAME, findWorkspace } from "../workspace.ts";
 import { reportPreflight, type CommandContext } from "./shared.ts";
@@ -25,6 +25,12 @@ export async function doctor(ctx: CommandContext): Promise<number> {
     exitCode = 1;
   } else {
     ctx.out(`  ok: ${CONFIG_FILENAME} parses`);
+  }
+  const format = compileCitationTemplate(workspace.config.provenanceFormat);
+  if (!format.ok) {
+    ctx.out(`  unreadable: ${format.reason}`);
+    ctx.out("    → footnote citations cannot be checked until it separates each placeholder");
+    exitCode = 1;
   }
   if (/\{start\}|\{end\}/.test(workspace.config.provenanceFormat)) {
     ctx.out("  stale: provenance.format still uses {start} and {end}");

@@ -561,6 +561,20 @@ describe("accreta doctor", () => {
     expect(stdout()).toContain("still uses {start} and {end}");
   });
 
+  test("a provenance format footnotes cannot be read back through is flagged", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    writeFileSync(
+      join(root, "accreta.config.yaml"),
+      'knowledge_base: knowledge\nprovenance:\n  format: "{source}{path}"\n',
+      "utf-8",
+    );
+    output = [];
+
+    expect(await cli("doctor")).toBe(1);
+    expect(stdout()).toContain("side by side");
+  });
+
   test("an unknown source type is a finding rather than a crash", async () => {
     await cli("init");
     rmSync(join(root, "sources", "example.yaml"), { force: true });

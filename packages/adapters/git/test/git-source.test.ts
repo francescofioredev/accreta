@@ -102,6 +102,17 @@ describe("GitSource", () => {
     expect(source().changedSince("0".repeat(40))).rejects.toThrow(UnknownRevisionError);
   });
 
+  test("knowsRevision says whether a citation's revision is in the history", async () => {
+    write("a.md", "one");
+    await commit("first");
+    const git = source();
+    const head = await git.revision();
+    expect(await git.knowsRevision(head)).toBe(true);
+    expect(await git.knowsRevision(head.slice(0, 7))).toBe(true);
+    expect(await git.knowsRevision("0".repeat(40))).toBe(false);
+    expect(await git.knowsRevision("not-a-revision")).toBe(false);
+  });
+
   test("locate answers from the working tree", async () => {
     write("docs/a.md", "hello");
     await commit("first");

@@ -339,4 +339,28 @@ describe("buildIndex", () => {
     expect(second.query("SELECT COUNT(*) AS n FROM pages").get()).toEqual({ n: 2 });
     second.close();
   });
+
+  test("footnote citations are indexed with their page line and claim", () => {
+    writePage(
+      "a.md",
+      "---\ntype: note\n---\n\n# A\n\nRetries default to two.[^r]\n\n[^r]: s @ r1 · src/a.ts#L3-L9\n",
+    );
+    expect(build().citations).toBe(1);
+    const db = openIndex(indexPath, { readonly: true });
+    const rows = db.query("SELECT * FROM citations").all();
+    db.close();
+    expect(rows).toEqual([
+      {
+        page_path: "knowledge/a.md",
+        footnote: "r",
+        line: 9,
+        text: "s @ r1 · src/a.ts#L3-L9",
+        source: "s",
+        revision: "r1",
+        path: "src/a.ts",
+        locator: "L3-L9",
+        claim: "Retries default to two.",
+      },
+    ]);
+  });
 });
