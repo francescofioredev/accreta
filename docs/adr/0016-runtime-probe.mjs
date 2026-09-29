@@ -1,5 +1,5 @@
-// Records where Node and Bun differ in ways the seam and the bins must absorb (ADR-0016).
-// Run with `node` or `bun` on this file. It reports outcomes; it asserts nothing.
+// Records runtime behaviour that db.ts, the git adapter and the bins depend on (ADR-0016).
+// Run with `node` or `bun`: node:sqlite on both, `--driver=bun` for bun:sqlite. Reports only.
 import { execFile, execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -19,8 +19,8 @@ process.emitWarning = (warning, ...rest) => {
   return emitWarning.call(process, warning, ...rest);
 };
 const require = createRequire(import.meta.url);
-const driver = isBun ? "bun:sqlite" : "node:sqlite";
-const Database = isBun ? require(driver).Database : require(driver).DatabaseSync;
+const driver = process.argv.includes("--driver=bun") ? "bun:sqlite" : "node:sqlite";
+const Database = driver === "bun:sqlite" ? require(driver).Database : require(driver).DatabaseSync;
 const open = (path, opts) => new Database(path, opts);
 
 const dir = mkdtempSync(join(tmpdir(), "accreta-0016-rt-"));
@@ -49,7 +49,7 @@ async function probeAsync(name, fn) {
 probe("import.meta.main in the entry module", () => import.meta.main);
 probe("experimental warnings filtered while loading", () => filtered);
 
-const readWrite = isBun ? { create: true } : {};
+const readWrite = driver === "bun:sqlite" ? { create: true } : {};
 const mem = open(":memory:", readWrite);
 mem.exec("CREATE TABLE t (a, b)");
 probe("bind undefined", () => mem.prepare("INSERT INTO t (a) VALUES (?)").run(undefined).changes);

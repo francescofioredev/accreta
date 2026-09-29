@@ -1,4 +1,4 @@
-# ADR-0016: Run on Node 22.16+ and on Bun, with one SQLite seam
+# ADR-0016: Run on Node 22.16+ and Bun 1.4+, with `node:sqlite` on both
 
 Status: accepted
 Date: 2026-09-29
@@ -15,44 +15,55 @@ Node cannot run the published packages as they are. Measured on Node v24.21.0: i
 entry point from `node_modules` fails with `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`. Node
 strips types in your own code, not in dependencies.
 
-The Bun-specific surface is three things:
+Three things in the code are specific to Bun:
 
 - `bun:sqlite` in `packages/core/src/index-db/db.ts`;
 - `Bun.spawn` in the git adapter;
 - `import.meta.main`, which guards all work in `packages/cli/src/main.ts` and
   `packages/mcp-server/src/main.ts`.
 
-SQLite is the one with depth. The index depends on four things from its driver: FTS5 with the
-`porter unicode61` tokenizer, WAL mode while a rebuild writes, the prepared-statement API, and
-the stage-and-rename swap that [ADR-0010](0010-readers-revalidate-by-inode.md) relies on.
+SQLite is the one with depth. The index depends on four things from its driver:
+
+- FTS5 with the `porter unicode61` tokenizer;
+- WAL mode while a rebuild writes;
+- the prepared-statement API;
+- the stage-and-rename swap that [ADR-0010](0010-readers-revalidate-by-inode.md) relies on.
 
 ### What was measured
 
-**Everything here ran on macOS arm64 only.** Linux and Windows are unmeasured. Node versions
-that were not installed were run with `npx -y node@<version>`.
+**Everything here ran on macOS arm64 only.** Linux and Windows are unmeasured. Versions that
+were not installed were run with `npx -y node@<version>` or `npx -y bun@<version>`.
 
 [`0016-sqlite-probe.mjs`](0016-sqlite-probe.mjs) checks the four needs. It runs the real
 `schema.sql` and mirrors `openIndex`, `sealForReading` and the swap in `build.ts`, with its own
-copy of the driver calls. Run it with `node` or `bun`. It shows what each runtime's SQLite can do.
-It does not test the seam #117 will write, because it does not import it.
+copy of the driver calls. Run it with `node` or `bun`. It uses `node:sqlite` on both, and
+`--driver=bun` switches it to `bun:sqlite`. It shows what each runtime's SQLite can do. It does
+not test accreta's own `db.ts`.
 
-| Runtime               | SQLite         | FTS5                       | SQLite probe |
-| --------------------- | -------------- | -------------------------- | ------------ |
-| Node 22.14.0          | 3.47.2         | no: `no such module: fts5` | 2/8          |
-| Node 22.15.0, 22.15.1 | 3.49.1         | no                         | —            |
-| Node 22.16.0          | 3.49.1         | yes                        | 8/8          |
-| Node 22.18.0          | 3.50.2         | yes                        | —            |
-| Node 22.23.3          | 3.51.3         | yes                        | 8/8          |
-| Node 23.10.0          | 3.49.1         | no                         | 2/8          |
-| Node 24.21.0          | 3.53.4         | yes                        | 8/8          |
-| Node 25.6.0, 25.9.0   | 3.51.2, 3.53.0 | yes                        | —            |
-| Bun 1.3.13            | 3.51.0         | yes                        | 8/8          |
+| Runtime               | Driver        | SQLite         | FTS5                       | SQLite probe |
+| --------------------- | ------------- | -------------- | -------------------------- | ------------ |
+| Node 22.14.0          | `node:sqlite` | 3.47.2         | no: `no such module: fts5` | 2/8          |
+| Node 22.15.0, 22.15.1 | `node:sqlite` | 3.49.1         | no                         | —            |
+| Node 22.16.0          | `node:sqlite` | 3.49.1         | yes                        | 8/8          |
+| Node 22.18.0          | `node:sqlite` | 3.50.2         | yes                        | —            |
+| Node 22.23.3          | `node:sqlite` | 3.51.3         | yes                        | 8/8          |
+| Node 23.10.0          | `node:sqlite` | 3.49.1         | no                         | 2/8          |
+| Node 24.21.0          | `node:sqlite` | 3.53.4         | yes                        | 8/8          |
+| Node 25.6.0, 25.9.0   | `node:sqlite` | 3.51.2, 3.53.0 | yes                        | —            |
+| Bun 1.3.13            | `bun:sqlite`  | 3.51.0         | yes                        | 8/8          |
+| Bun 1.3.13, 1.3.14    | `node:sqlite` | —              | —                          | does not load |
+| Bun 1.4.0             | `node:sqlite` | 3.51.0         | yes                        | 8/8          |
+| Bun 1.4.2             | `node:sqlite` | 3.51.0         | yes                        | 8/8          |
 
-A dash means only the FTS5 check was run. No Node version needed a flag. Every Node 22, 23 and
-25 run printed `ExperimentalWarning: SQLite is an experimental feature` on stderr; Node 24.21.0
-did not.
+A dash in the probe column means only the FTS5 check was run.
 
-On every version with FTS5, all four needs hold:
+On Bun 1.3.13 and 1.3.14, loading the module fails with `No such built-in module: node:sqlite`.
+Bun 1.4.0 was published to npm on 2026-08-20.
+
+No Node version needed a flag. Every Node 22, 23 and 25 run printed `ExperimentalWarning: SQLite
+is an experimental feature` on stderr. Node 24.21.0, Bun 1.4.0 and Bun 1.4.2 printed nothing.
+
+On every runtime with FTS5, all four needs hold:
 
 - **FTS5.** Porter stemming, diacritic folding (`cafe` finds `café`), the `aliases:` column
   filter, and the exact `snippet(...) … ORDER BY rank` query in `search.ts`.
@@ -65,158 +76,188 @@ On every version with FTS5, all four needs hold:
 - **The swap.** After a rebuild is renamed over the live file, `dev:ino` changes and a reopened
   reader sees the new rows.
 
-[`0016-runtime-probe.mjs`](0016-runtime-probe.mjs) records where the two runtimes differ. It
-reports outcomes and asserts nothing. Results on Node 22.16.0, Node 24.21.0 and Bun 1.3.13:
+[`0016-runtime-probe.mjs`](0016-runtime-probe.mjs) records the behaviour code has to know about.
+It reports outcomes and asserts nothing. The same run gave the same result on Bun 1.4.0 and
+1.4.2. The last column is `--driver=bun` on Bun 1.3.13, the driver this ADR moves away from.
 
-| Case                                   | Node 22.16.0              | Node 24.21.0      | Bun 1.3.13                 |
-| -------------------------------------- | ------------------------- | ----------------- | -------------------------- |
-| `import.meta.main` in the entry module | `undefined`               | `true`            | `true`                     |
-| bind `undefined`                       | throws                    | throws            | binds NULL                 |
-| bind `true`                            | throws                    | binds 1           | binds 1                    |
-| unknown named key (`$nope`)            | throws                    | throws            | ignored                    |
-| `SELECT "text"` (double-quoted)        | throws `no such column`   | throws            | returns `'text'`           |
-| INTEGER 2^53 + 1                       | throws                    | throws            | returns 2^53, rounded      |
-| statement used after `close()`         | throws `finalized`        | throws            | still returns rows         |
-| open with `{ readonly: true }`         | **ignored: writes succeed** | **ignored: writes succeed** | read-only          |
-| open with `{ readOnly: true }`         | read-only                 | read-only         | throws `Misspelled option` |
-| `execFileSync`, 2 MiB stdout           | throws `ENOBUFS`          | throws `ENOBUFS`  | throws `ENOBUFS`           |
-| async `execFile`, `maxBuffer` 64 MiB   | 2,097,152 bytes           | same              | same                       |
+| Case                                   | Node 22.16.0              | Node 24.21.0      | Bun 1.4.x, `node:sqlite`  | Bun 1.3.13, `bun:sqlite`   |
+| -------------------------------------- | ------------------------- | ----------------- | ------------------------- | -------------------------- |
+| `import.meta.main` in the entry module | `undefined`               | `true`            | `true`                    | `true`                     |
+| bind `undefined`                       | throws                    | throws            | throws                    | binds NULL                 |
+| bind `true`                            | throws                    | binds 1           | throws                    | binds 1                    |
+| unknown named key (`$nope`)            | throws                    | throws            | throws                    | ignored                    |
+| `SELECT "text"` (double-quoted)        | throws `no such column`   | throws            | throws `no such column`   | returns `'text'`           |
+| INTEGER 2^53 + 1                       | throws                    | throws            | throws                    | returns 2^53, rounded      |
+| statement used after `close()`         | throws `finalized`        | throws            | throws `finalized`        | still returns rows         |
+| open with `{ readonly: true }`         | ignored: writes succeed   | ignored           | ignored: writes succeed   | read-only                  |
+| open with `{ readOnly: true }`         | read-only                 | read-only         | read-only                 | throws `Misspelled option` |
+| `execFileSync`, 2 MiB stdout           | throws `ENOBUFS`          | throws `ENOBUFS`  | throws `ENOBUFS`          | throws `ENOBUFS`           |
+| async `execFile`, `maxBuffer` 64 MiB   | 2,097,152 bytes           | same              | same                      | same                       |
 
 `import.meta.main` was also `undefined` on Node 22.17.1 and 23.10.0, and `true` on 22.18.0 and
-22.23.3. Binding `true` also threw on 22.23.3.
+22.23.3. Binding `true` also threw on Node 22.23.3.
 
-The script loads the driver the way the seam will: it installs the warning filter, then
-`createRequire(import.meta.url)` loads `node:sqlite` or `bun:sqlite` synchronously. On 22.16.0
-the filter caught one warning and nothing reached stderr.
+Under Bun 1.4, `node:sqlite` matches Node on every row that matters. There is one driver and one
+set of rules. The last column is what a two-driver design would have had to make match, and
+the double-quoted literal could not have been.
 
 Some results come from one-off commands, not from a script in the repository:
 
+- **A static import works on every supported runtime.** `import { DatabaseSync } from
+  "node:sqlite"` followed by creating an fts5 table worked on Node 22.16.0 and 24.21.0 and on
+  Bun 1.4.0 and 1.4.2.
+- **On Node 22 the warning fires before any module code runs.** A module that installs a
+  `process.emitWarning` filter, imported on the line above the static `node:sqlite` import,
+  caught nothing, and the warning reached stderr. An entry file that imports the filter and
+  then loads the rest with `await import(...)` caught it on Node 22.16.0 and 22.23.3. Nothing
+  reached stderr.
+- **Null-prototype rows compare equal.** Under `bun test` on Bun 1.4.2, a `node:sqlite` row
+  passed both `toEqual({ n: 1 })` and `toStrictEqual({ n: 1 })`.
+- **The held reader on macOS.** Under Bun 1.4.2, the SQLite probe's held reader threw `disk
+  I/O error`, as it did with `bun:sqlite`. On macOS, Bun loads the system SQLite (3.51.0 on
+  both), and Apple's SQLite is what fails that connection. Node bundles its own SQLite, and
+  there the held reader kept serving the old rows. The PR review also measured Bun against
+  Homebrew's SQLite 3.53 serving stale rows. The difference is the SQLite build, not the
+  operating system.
 - **Type stripping.** A `node_modules/tspkg` whose `exports` is `./index.ts`, imported from an
   `.mjs` under Node 24.21.0, gave `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`.
 - **`better-sqlite3` 13.0.3**, installed with `npm install better-sqlite3` in a scratch
-  directory. Creating an fts5 table worked under Node 22.14.0. `bun` on the same file crashed
-  with `panic: NAPI FATAL ERROR`.
-- **Bun has no `node:sqlite`.** `bun -e 'await import("node:sqlite")'` gave `No such built-in
-  module: node:sqlite`.
-- **`imports` conditions.** A package with `"imports": {"#sqlite": {"bun": "./bun.js",
-  "default": "./node.js"}}` loaded `bun.js` under `bun` and `node.js` under `node`.
+  directory. Creating an fts5 table worked under Node 22.14.0. Bun 1.3.13 on the same file
+  crashed with `panic: NAPI FATAL ERROR`.
 - **Custom export condition.** A package exporting `{"@accreta/source": "./src.ts", "default":
   "./dist.js"}` resolved `src.ts` under `bun --conditions=@accreta/source test` and `dist.js`
-  under plain `bun test`. The same held for a condition named `development`.
-- **`bun:sqlite` options.** A database opened with `{ strict: true, safeIntegers: true }`
-  accepted an unknown named key and a bound `undefined`, threw on a missing named key, returned
-  `SELECT 9007199254740993` exactly as a bigint, and returned `SELECT "text"` as a string.
+  under plain `bun test`.
 - **The shebang decides the runtime.** A bin with `#!/usr/bin/env node`, run with `bun run` and
   nvm's Node 22.14.0 first on `PATH`, ran under Node 22.14.0. `bun --bun run` ran it under Bun.
-  The PR review measured the same with `bunx`, and found that `bun add -g` links bins straight
-  to the script.
+- **No Node on `PATH`.** With `PATH=/usr/bin:/bin`, executing that bin directly failed with
+  `env: node: No such file or directory`, exit 127, before any of its code ran. That is how a
+  bin linked by `bun add -g` is executed. `bun run` on the same bin fell back to Bun. The PR
+  review measured the same with `bunx`, and found that `bun add -g` links bins straight to the
+  script.
 - **`tsc` 5.9.3 emit of `packages/core`** with `rewriteRelativeImportExtensions`: 13 JavaScript
   files, and all 21 relative imports rewritten to `.js`. The emitted `.d.ts` files keep `.ts`
   specifiers. A `nodenext` consumer with `skipLibCheck: false` resolved them, and its only error
-  was the missing `bun:sqlite` types.
+  was the missing `bun:sqlite` types, which this decision removes.
 
 ## Decision
 
-**Support Node `^22.16.0 || >=24`, and Bun 1.3.13 and later.** 22.16.0 is the first Node 22
-release whose `node:sqlite` ships FTS5, and without FTS5 there is no search. Node 23 is left out
-because 23.10.0 has no FTS5.
+**Support Node `^22.16.0 || >=24`, and Bun `>=1.4.0`.**
 
-**Use each runtime's built-in SQLite, behind one seam in `packages/core`.** `node:sqlite` under
-Node, `bun:sqlite` under Bun. The seam is one module in `index-db/`. It chooses the driver once,
-from `process.versions.bun`, and loads it with `createRequire(import.meta.url)`. That load is
-synchronous, so opening an index stays synchronous. It also lets the warning filter be installed
-before the driver loads. A static import cannot work, because each runtime fails on the other's
-module. Nothing outside the seam imports either driver, and nothing outside it knows which
-runtime it is on.
+- 22.16.0 is the first Node 22 release whose `node:sqlite` ships FTS5, and without FTS5 there
+  is no search.
+- Node 23 is left out because 23.10.0 has no FTS5.
+- Bun 1.4.0 is the first Bun with `node:sqlite`.
 
-The seam exports accreta's own narrow interface: open (read-only or not), `exec`, `prepare`
-returning `all`/`get`/`run`, and `close`. The exported `Database` type becomes that interface,
-not `bun:sqlite`'s class.
+**Use `node:sqlite` on both runtimes, imported statically.** `db.ts` imports `DatabaseSync` from
+`node:sqlite`, and `bun:sqlite` leaves the codebase. There is no second driver, no runtime check
+and no strictness code: both runtimes already refuse the same things, as the table above shows.
 
-**The seam behaves the same on both runtimes, and the stricter side sets the rule.** Where the
-drivers differ, as in the table above, the seam makes Bun as strict as Node:
+What is left of the seam is `db.ts` itself, and it keeps two jobs:
 
-- it throws on binding `undefined`, and on a named key the statement does not have;
-- it binds booleans as 1 and 0 on both runtimes, because Node 22 refuses them;
-- it throws on an integer outside the safe range rather than rounding it;
-- it throws when a statement is used after its database is closed;
-- `.get()` returns `null` for no row, and rows are plain objects.
+- **Opening.** It is the one place that opens a database, and so the one place that spells
+  `readOnly`. Bun's old spelling, `readonly`, is silently ignored by `node:sqlite` and leaves a
+  reader writable.
+- **The FTS5 check.** It checks for FTS5 when it opens a database. If FTS5 is missing it fails
+  with a message naming the supported range, not with `no such module: fts5`.
 
-Most of this has to be done in the seam's own code. Bun's `strict: true` option rejected a
-*missing* named key but accepted an unknown key and a bound `undefined`. `safeIntegers:
-true` returns 2^53 + 1 exactly, as a bigint, so the seam can convert or throw.
+The exported `Database` type becomes `node:sqlite`'s `DatabaseSync`, or a narrow interface over
+it.
 
-Double-quoted string literals are the one gap. Node rejects them. Bun accepted `SELECT "text"`
-even with `strict: true`, and `bun:sqlite` has no option to turn them off. The seam cannot make
-Bun strict here without parsing SQL. Instead, CI runs the seam test and the smoke test under
-Node, which fails on any such literal in accreta's queries.
+**Callers use `prepare`, with no statement cache.** `bun:sqlite`'s `db.query` was a cached
+`prepare`, and `node:sqlite` has none. Preparing the search query took 4.2–4.6µs on Node, 4.9µs
+on Bun 1.4.2 and 3.8µs on Bun 1.3.13 with `bun:sqlite` (mean of 10,000, from the SQLite probe).
+`search_pages` also calls `getPage` for each hit, which prepares one or two statements. At the
+50-hit maximum that is at most 101 prepares, about 0.5 ms. That does not justify a cache and its
+invalidation rules.
 
-**Callers use `prepare`, with no statement cache.** `bun:sqlite`'s `db.query` is a cached
-`prepare`, and `node:sqlite` has none. Preparing the search query took 4.2–4.6µs on Node and
-3.8µs on Bun (mean of 10,000, from the SQLite probe). `search_pages` also calls `getPage` for
-each hit, which prepares one or two statements. At the 50-hit maximum that is at most 101
-prepares, about 0.46 ms at 4.6µs each. That does not justify a cache and its invalidation
-rules.
+**Code is written for `node:sqlite`'s behaviour, not normalized.**
 
-**Spawn git with async `execFile` from `node:child_process`, with an explicit `maxBuffer`.** It
-behaves the same under both runtimes, so no seam is needed. `execFileSync` is rejected. Its
-default 1 MiB buffer threw `ENOBUFS` on both runtimes, and it would block the MCP server while
-git runs. Today's `Bun.spawn` helper is async and has no output cap, so the replacement keeps
-both properties: async, and a buffer far above any real diff, or streaming. Failures still map
-to `GitCommandError`.
+- `.get()` returns `undefined` for no row, and the source call sites already test only for
+  truthiness.
+- Rows have a null prototype, which `bun test` equality accepts.
+- Booleans are never bound. Node 22 and Bun 1.4 refuse them, while Node 24 binds them.
 
-**Bins get an entry file with no guard.** Each bin points at a small file that calls `run()`
-directly. `main.ts` stops guarding on `import.meta.main`, which is `undefined` on Node 22.16 and
-22.17. Under that guard, the PR review found that `npx accreta drift --strict` printed nothing and
-exited 0 on those versions: a silent pass in CI, with the FTS5 check never run.
+**Spawn git with async `execFile` from `node:child_process`, with an explicit `maxBuffer`.**
+`execFileSync` is rejected: its default 1 MiB buffer threw `ENOBUFS` on every runtime, and it
+would block the MCP server while git runs. Today's `Bun.spawn` helper is async and has no output
+cap, so the replacement keeps both: async, and a buffer far above any real diff, or streaming.
+Failures still map to `GitCommandError`.
+
+**Each bin gets an entry file, and nothing is guarded by `import.meta.main`.** The entry file
+does three things, in this order:
+
+1. It installs the filter for the one SQLite experimental warning.
+2. It loads the rest of the program with `await import(...)`. Loading it this way is what lets
+   the filter run first on Node 22.
+3. It calls `run()`.
+
+If the dynamic import fails because `node:sqlite` is missing (Node before 22.13, or Bun before
+1.4), the entry file prints the same message as the FTS5 check.
+
+`main.ts` loses its guard. `import.meta.main` is `undefined` on Node 22.16 and 22.17, and the PR
+review found that `npx accreta drift --strict` then printed nothing and exited 0. That is a
+silent pass in CI, with the FTS5 check never run.
 
 **The shebang is `#!/usr/bin/env node`, and it decides the runtime.** A Bun install runs the
-bins under whatever Node is first on `PATH`, not under Bun. That covers `bunx`, `bun run` and a
-bin linked by `bun add -g`. A Bun user with an old Node on `PATH` therefore gets that Node. The
-FTS5 check's error names the way out, `bunx --bun accreta` or `bun --bun`, and Bun install
-instructions use `--bun`.
+bins under whatever Node is first on `PATH`. That covers `bunx`, `bun run` and a bin linked by
+`bun add -g`.
+
+- A Bun user with an older Node on `PATH` gets that Node, and the version message names the
+  way out: `bunx --bun accreta`, or `bun --bun`.
+- A bin installed with `bun add -g` needs Node on `PATH`. Without it the shell fails with exit
+  127 before accreta can say anything.
+- Bun-only users run accreta with `bunx --bun accreta` or `bun --bun`, and Bun install
+  instructions say so.
 
 **Build with `tsc` to `dist/` using `rewriteRelativeImportExtensions`.** Sources keep their
 `.ts` import specifiers, and the compiler rewrites them to `.js` on emit. `exports`, `bin` and
-`types` point at `dist/`. The `bun:sqlite` types stay out of the exported declarations.
+`types` point at `dist/`.
 
 **Inside the repository, tests and benches run from source.** Workspace packages export `src/`
-under a condition unique to this project, `@accreta/source`, and Bun and TypeScript are told to
-use it. Bun takes it as `--conditions=@accreta/source`, and TypeScript through
-`customConditions`. A widely shared name like `development` is rejected, because Vite and
-webpack set it in dev mode. A consumer's dev server would then resolve `src/`, which is not
-published. The PR review found that the flag has to be passed on every invocation, since no
-`bunfig.toml` spelling worked. `postpack` deletes `dist/`, so a stale build is never picked up by
-a plain `bun test`, a bench or a CI step that forgot the flag.
+under a condition unique to this project, `@accreta/source`. Bun takes it as
+`--conditions=@accreta/source`, and TypeScript through `customConditions`.
+
+- A widely shared name like `development` is rejected, because Vite and webpack set it in dev
+  mode. A consumer's dev server would then resolve `src/`, which is not published.
+- The PR review found that the flag has to be passed on every invocation, since no
+  `bunfig.toml` spelling worked.
+- `postpack` deletes `dist/`, so a stale build is never picked up by a plain `bun test`, a bench
+  or a CI step that forgot the flag.
 
 ## Alternatives rejected
 
-**`better-sqlite3` on Node, `bun:sqlite` on Bun.** It would lower the Node floor to any Node 22,
-since it bundles its own SQLite with FTS5. But it crashes Bun, so it could only ever be half of
-a split, and the seam is needed anyway. What it adds is a native dependency: a prebuilt binary
-per platform and Node ABI, and a compile from source where none matches. A built-in driver has
-none of that.
+**Two drivers behind one seam: `node:sqlite` on Node, `bun:sqlite` on Bun.** This was this ADR's
+first decision. It keeps Bun 1.3.x, and that is its whole advantage. It costs the following:
 
-**One `node:sqlite` driver everywhere.** No seam at all. Bun does not implement `node:sqlite`,
-so this would drop Bun.
+- The seam has to load the driver without a static import, because each runtime fails on the
+  other's module (`createRequire` was measured to work).
+- The seam needs its own strictness code to make `bun:sqlite` behave like `node:sqlite` on
+  `undefined`, unknown keys, large integers and use after close. Bun's `strict: true` rejected
+  a missing named key but still accepted an unknown key and a bound `undefined`.
+- It leaves one gap that code cannot close. `bun:sqlite` accepts double-quoted string literals
+  and has no option to refuse them, so only a CI run under Node would catch one.
+- It needs two driver paths in every test.
+
+Bun 1.4 removes all of that. Choosing the driver with `package.json` `imports` conditions was
+considered within this option and goes with it.
+
+**`better-sqlite3` on Node.** It would lower the Node floor to any Node 22, since it bundles its
+own SQLite with FTS5. But it crashed Bun 1.3.13, so it would have been half of a split. Its cost
+is a native dependency: a prebuilt binary per platform and Node ABI, and a compile from source
+where none matches. The built-in driver has none of that.
+
+**`bun:sqlite` everywhere.** Node has no `bun:sqlite`.
 
 **A Node 24 floor.** Node 24 has FTS5, sets `import.meta.main`, and printed no experimental
 warning. But Node 22 is still a maintained LTS line, until April 2027. Requiring 24 would turn
-away users whose Node works, to avoid a stderr line, a guard-free entry file and a version
+away users whose Node works, to avoid a warning filter, a guard-free entry file and a version
 check.
-
-**Choosing the driver with `package.json` `imports` conditions** (`"#sqlite": {"bun": …,
-"default": …}`). It worked when measured, and it avoids any runtime check, but the targets are
-file paths. Running from `src/` in the repository and from `dist/` when installed then needs a
-second pair of mappings under the source condition. One `process.versions.bun` check in one
-file is less to keep straight.
 
 **Shipping `.ts` and letting Node strip types.** Node refuses inside `node_modules`, measured
 above.
 
 **A bundler** (`bun build`, esbuild, tsup). ADR-0005 turned this down for Bun, and the reason
-still holds: stack traces should point at real files. A bundle also has to be told to leave
-`bun:sqlite` and `node:sqlite` external, which is the seam again, described a second way.
+still holds: stack traces should point at real files.
 
 **Rewriting every relative import to `.js` by hand**, then `tsc` without the rewrite. Bun
 resolves `.js` specifiers to `.ts` files, so this would work. It touches every import in the
@@ -227,54 +268,71 @@ the audience this ADR exists for. Two bins double what every install guide has t
 
 ## Consequences
 
-[#117](https://github.com/francescofioredev/accreta/issues/117) implements this, and has to
-handle the following.
+Most of this is [#117](https://github.com/francescofioredev/accreta/issues/117). Where another
+issue or lane owns a file, it is named. This ADR edits none of those files.
 
-- **A version check up front.** `engines` is advisory, as ADR-0005 said. A user on Node
-  22.13–22.15 or 23 would otherwise get `no such module: fts5` at the first reindex, which names
-  neither Node nor a fix. The seam checks that FTS5 is present when it opens a database, and
-  fails with a message that names Node 22.16 and `bunx --bun accreta`. It checks the capability
-  rather than parsing `process.version`, so a Node with FTS5 built in some other way still
-  works. `doctor` reports the same check. On Node older than 22.13, `node:sqlite` itself will not
-  load, and the seam turns that into the same message.
-- **The experimental warning.** Node 22 prints it on stderr each time `node:sqlite` loads. It
-  cannot corrupt MCP stdio or stdout output, but a CLI that warns on every command looks
-  broken. Filter that one warning, matched by message, before the driver loads, and nothing
-  else.
+- **Bun 1.4 everywhere Bun runs.** CI moves off Bun 1.3.13 to 1.4.0 and to the current 1.4
+  ([#118](https://github.com/francescofioredev/accreta/issues/118); this lane owns
+  `.github/workflows/`). So do contributors' machines and `bun.lock`. The root tsconfig loads only the
+  `bun` types today, so #117 checks that `node:sqlite`'s types resolve under it.
+- **The version message.** `engines` is advisory, as ADR-0005 said. Without a check, a user on
+  Node 22.13–22.15 or 23 gets `no such module: fts5` at the first reindex, and a user on Bun
+  1.3 gets `No such built-in module`. Neither names a fix. The message names Node
+  `^22.16.0 || >=24`, Bun 1.4, and `bunx --bun accreta`. It checks the capability rather than
+  parsing version strings. `doctor` reports the same check.
 - **Statement call sites.** `db.query` becomes `prepare`: 16 call sites in `packages/*/src` and
-  23 in the tests on `main`, counted with `grep -rE '\.query\('`.
-- **One seam test, run under both runtimes.** It covers every row of the runtime table: the
-  binding rules, large integers, use after close, `get` returning `null`, and plain-object
-  rows. Under Node it also covers double-quoted literals. It also runs under Node against the real seam and asserts that
-  a write through the read-only open is refused. Passing Bun's spelling to `node:sqlite` is
-  silently ignored and leaves the MCP reader writable, and the SQLite probe would not notice.
-  The probe is not coverage of the Node path.
-- **The held reader across a swap.** On the same Mac, a reader held across a rebuild threw
-  `disk I/O error` under Bun and kept serving the old rows under Node. The difference is the
-  SQLite build, not the operating system. Bun on macOS uses Apple's system SQLite, and the PR
-  review measured Bun against Homebrew's SQLite 3.53 serving stale rows, as Node does. ADR-0010's
-  inode check reopens in both cases, so the design holds, and its tests must keep asserting the
-  reopen, never either failure mode. The comments that say "macOS fails" should say "Apple's
-  SQLite fails": ADR-0010's Context, `build.ts` near the staging comment, `context.ts` in the MCP
-  server, and the swap test in `build.test.ts`. That rewording belongs to #117, not this ADR.
+  23 in the tests on `main`, counted with `grep -rE '\.query\('`. Tests that assert `null` from
+  `.get()` change to `undefined`.
+- **A read-only test against the real `db.ts`.** It runs under both runtimes and asserts that a
+  write through the read-only open is refused. The probes copy the driver calls, so they are not
+  coverage of `db.ts`.
+- **The held reader across a swap.** On macOS, Bun uses Apple's SQLite, and a held reader fails
+  with `disk I/O error`. Node's bundled SQLite serves stale rows. ADR-0010's inode check reopens
+  in both cases, so the design holds. Its tests must keep asserting the reopen, never either
+  failure mode.
+  - The comments that say "macOS fails" should say "Apple's SQLite fails": ADR-0010's Context,
+    the staging comment in `build.ts`, `context.ts` in the MCP server, and the swap test in
+    `build.test.ts`.
 - **Git output.** A test runs the adapter against a diff over 1 MiB.
-- **Bins.** Each bin gets a guard-free entry file. The installed-tarball smoke test asserts the
-  commands did something: an index file exists after `reindex`, and a search returns a hit.
-  Exit 0 alone proved nothing on Node 22.16.
+- **Every direct invocation of `src/main.ts` moves to the entry file.** Once the guard is gone
+  from `main.ts`, running it directly does nothing and exits 0. Current invocations, and who
+  owns them:
+  - the demo gate in `.github/workflows/ci.yml`, which also starts asserting on `lint`'s output
+    rather than its exit code (#118);
+  - the demo commands in `README.md`, which is frozen until the launch lane
+    ([#141](https://github.com/francescofioredev/accreta/issues/141));
+  - `examples/climate/README.md`.
+- **Existing MCP configs break on upgrade.** The setup skill, the MCP server's README and
+  `examples/.mcp.json` all write `args: ["run", "node_modules/@accreta/mcp-server/src/main.ts"]`.
+  That path no longer ships.
+  - They move to `accreta mcp` (PR
+    [#167](https://github.com/francescofioredev/accreta/pull/167)), and the release notes carry
+    an upgrade note.
+  - `doctor` currently reports ok when `.mcp.json` merely names accreta's server. It has to check
+    the configured command as well
+    ([#121](https://github.com/francescofioredev/accreta/issues/121)). The skill and its example
+    belong to the surfaces lane.
+- **The packaging test runs each installed bin under both runtimes.** Spawning `.bin/accreta`
+  directly obeys the shebang, so the Bun job was really testing the runner's Node.
+  - Each bin runs under `node` and under `bun --bun`.
+  - The CLI's check asserts that the commands did something: an index file exists after
+    `reindex`, and a search returns a hit. Exit 0 alone proved nothing on Node 22.16.
+  - The MCP server's check includes an MCP `initialize` and `tools/list`.
 - **Source condition.** A test asserts that `@accreta/core` resolves to `src/` inside the
   repository.
 - **Build output.** `tsc` does not copy `schema.sql`. The build copies it into `dist/`, and the
   packing test keeps asserting it ships, for the reason ADR-0005 gives for `files`.
-- **CI covers the second execution path.** ADR-0005's objection was that a Node path is worth
-  nothing unless CI runs it. The unit suite stays on `bun test`. CI also runs the seam test and
-  the installed-tarball smoke test under Node 22.16, which is the floor, and under current Node.
+- **CI covers both runtimes at both ends of the range.** ADR-0005's objection was that a second
+  execution path is worth nothing unless CI runs it. CI runs the unit suite under Bun, and the
+  `db.ts` test and the packaging test under Node 22.16, current Node, Bun 1.4.0 and current Bun
+  (#118).
 - **Only macOS arm64 was measured.** CI runs both probes on Linux under both runtimes before
   this ships, because a hosted deployment runs there. Windows is unmeasured and unsupported
   until someone measures it. Renaming over an open index may fail there with `EPERM`, which
   would break ADR-0010's swap.
-- **README follow-up.** `README.md` is frozen until the launch lane
-  ([#141](https://github.com/francescofioredev/accreta/issues/141)). When it is next edited, its
-  install section states the Node range, and gives `bunx --bun accreta` for Bun.
+- **README follow-up.** When the launch lane edits `README.md`, its install section states the
+  Node and Bun ranges. It gives `bunx --bun accreta` for Bun, and says a `bun add -g` install
+  needs Node on `PATH`.
 
 ADR-0005's decisions on assets copied at pack time, directory-form `files`, and `npm publish`
 under trusted publishing still stand. This ADR replaces only its runtime and build decisions.

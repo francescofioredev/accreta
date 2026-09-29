@@ -1,5 +1,5 @@
 // Checks that the runtime's built-in SQLite does everything accreta's index relies on (ADR-0016).
-// Run: `node docs/adr/0016-sqlite-probe.mjs` (node:sqlite) or `bun docs/adr/0016-sqlite-probe.mjs` (bun:sqlite).
+// Run with `node` or `bun`: node:sqlite on both, `--driver=bun` for bun:sqlite.
 import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const isBun = typeof globalThis.Bun !== "undefined";
 const runtime = isBun ? `bun ${globalThis.Bun.version}` : `node ${process.version}`;
 
-const driver = isBun
+const driver = process.argv.includes("--driver=bun")
   ? await (async () => {
       const { Database } = await import("bun:sqlite");
       return {
