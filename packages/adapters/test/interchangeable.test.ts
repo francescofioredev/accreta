@@ -3,8 +3,11 @@ import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  cite,
+  compileCitationTemplate,
   detectDrift,
   openIndex,
+  parseCitation,
   UNPINNED_REVISION,
   type Database,
   type SourceAdapter,
@@ -185,6 +188,30 @@ for (const [name, makeFixture] of EVERY_ADAPTER) {
       expect(adapter.citation("chapter-07.md")).toContain(UNPINNED_REVISION);
       expect(adapter.citation("chapter-07.md")).not.toContain(real);
     });
+
+    test("cite leaves the revision an ingest pinned alone", async () => {
+      const { adapter, advance, verifiedRevision } = await makeFixture();
+      const verifiedAt = await verifiedRevision();
+      adapter.pinRevision(verifiedAt);
+      await advance();
+
+      await cite(new Map([["src", adapter]]), CITATION, { sourceId: "src", path: "chapter-07.md" });
+      expect(adapter.citation("chapter-07.md")).toContain(verifiedAt);
+    });
+
+    test("cite's footnote reads back as what it cites", async () => {
+      const { adapter } = await makeFixture();
+      const target = { sourceId: "src", path: "chapter-07.md", locator: "L1" };
+      const cited = await cite(new Map([["src", adapter]]), CITATION, target);
+
+      const template = compileCitationTemplate(CITATION);
+      if (!template.ok) throw new Error(template.reason);
+      expect(template.template.read(cited.footnote)).toEqual({
+        ...target,
+        revision: cited.revision ?? UNPINNED_REVISION,
+      });
+      expect(parseCitation(cited.canonicalSource)).toEqual(target);
+    });
   });
 }
 
@@ -258,6 +285,38 @@ for (const [name, makeFixture] of QUESTIONABLE) {
       for (const escape of ["../outside.md", "./../outside.md", join(root, "outside.md")]) {
         expect(await adapter.locate(escape)).toMatchObject({ verdict: "missing", part: "path" });
       }
+    });
+
+    test("cite names the revision the source is at now, not the one it started at", async () => {
+      const { adapter, advance } = await makeFixture();
+      const before = await adapter.revision();
+      await advance();
+
+      const sources = new Map([["src", adapter]]);
+      const cited = await cite(sources, CITATION, {
+        sourceId: "src",
+        path: "chapter-07.md",
+        locator: "L1",
+      });
+      expect(cited.revision).toBe(await adapter.revision());
+      expect(cited.revision).not.toBe(before);
+      expect(cited.footnote).toBe(`src @ ${cited.revision} · chapter-07.md#L1`);
+      expect(cited.location).toEqual({ verdict: "found" });
+      expect(cited.delegated).toBeUndefined();
+    });
+
+    test("cite passes on the source's verdict for a place that is not there", async () => {
+      const { adapter } = await makeFixture();
+      const sources = new Map([["src", adapter]]);
+      const past = await cite(sources, CITATION, {
+        sourceId: "src",
+        path: "chapter-07.md",
+        locator: "L99999",
+      });
+      const absent = await cite(sources, CITATION, { sourceId: "src", path: "never-written.md" });
+
+      expect(past.location).toMatchObject({ verdict: "missing", part: "locator" });
+      expect(absent.location).toMatchObject({ verdict: "missing", part: "path" });
     });
   });
 }

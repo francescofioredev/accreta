@@ -4,6 +4,7 @@ import type { AccretaConfig } from "../config.ts";
 import {
   parseCitation,
   UNPINNED_REVISION,
+  unknownVerdict,
   type LocationVerdict,
   type SourceAdapter,
 } from "../source/adapter.ts";
@@ -347,16 +348,4 @@ export async function lintCitations(
   }
 
   return { findings, pagesChecked: checkedPages.size, citationsChecked, citationsUnchecked };
-}
-
-/**
- * An adapter that threw told us nothing, which is not the same as telling us a
- * citation is wrong. A network that was down would otherwise mark every page
- * citing that source as broken.
- */
-function unknownVerdict(error: unknown): LocationVerdict {
-  return {
-    verdict: "unknown",
-    detail: error instanceof Error ? error.message : String(error),
-  };
 }

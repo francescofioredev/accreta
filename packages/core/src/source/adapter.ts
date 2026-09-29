@@ -106,6 +106,18 @@ export type LocationVerdict =
   | { verdict: "unknown"; detail: string };
 
 /**
+ * An adapter that threw told us nothing, which is not the same as telling us a
+ * citation is wrong. A network that was down would otherwise mark every page
+ * citing that source as broken.
+ */
+export function unknownVerdict(error: unknown): LocationVerdict {
+  return {
+    verdict: "unknown",
+    detail: error instanceof Error ? error.message : String(error),
+  };
+}
+
+/**
  * What a citation names before anything has been pinned.
  *
  * Shared by every adapter so the honest answer cannot vary by source type. The
