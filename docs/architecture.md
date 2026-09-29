@@ -29,7 +29,6 @@ recorded in [`adr/`](adr/).
         ┌─────────────────────────────┐
         │  Index (SQLite)             │
         │  pages · pages_fts · links  │
-        │  [+ vectors, optional]      │
         └──────────────┬──────────────┘
                        │
         ┌──────────────┴──────────────┐
@@ -40,7 +39,7 @@ recorded in [`adr/`](adr/).
 The index is derived and disposable: it rebuilds from the knowledge base in well under a
 second for a few hundred pages, so it is never committed and never migrated.
 
-## The three abstractions
+## The two abstractions
 
 ### `SourceAdapter`
 
@@ -82,26 +81,17 @@ provenance:
   format: "{source} @ {rev} · {path}#{locator}"
 ```
 
-Code-oriented types (`module`, `api`, `usecase`, `endpoint`) ship as the `codebase` preset.
+Code-oriented types (`repository`, `module`, `api`, `usecase`, `integration`) ship as the
+`codebase` preset.
 They are a preset precisely because they are not universal.
 
-### `SearchBackend`
+## Search
 
-Lexical search over a curated, cross-referenced corpus is a strong default, and it needs no
-dependencies, no keys, and no network. It is therefore always on. Semantic search is an
-optional refinement layered on top:
+Search is SQLite FTS5 over each page's title, aliases and body, with Porter stemming. It needs
+no dependencies, no keys and no network, and there is no `search` configuration key.
 
-```yaml
-search:
-  lexical: fts5                 # always on
-  semantic:                     # optional, off by default
-    driver: sqlite-vec
-    embed: local|openai|voyage
-  fusion: rrf
-```
-
-With `semantic` absent, accreta has no embedding dependency and runs entirely offline. The
-reasoning, and the benchmark that should decide it, belong in ADR-0001.
+Semantic search is **not built**. [ADR-0001](adr/0001-lexical-search-first.md) measured 85%
+recall@1 without it and keeps it optional and unbuilt until a benchmark says otherwise.
 
 ## Pages
 
@@ -133,19 +123,20 @@ fine and is nearly useless.
 
 A pointer that *is* present is checked rather than trusted: `lint` resolves the path against
 the source it names and the line range against that file's length. Both are deterministic and
-need only `SourceAdapter.read`. What neither can tell is whether a range that exists supports
+need only `SourceAdapter.locate`, which asks the source whether the location exists. What neither can tell is whether a range that exists supports
 the claim made from it — that needs reading both, and is not attempted.
 
 ## The index
 
-Three tables. `pages` holds frontmatter fields promoted to columns for filtering, plus the
-full frontmatter as JSON and the body. `pages_fts` is an FTS5 virtual table over title and
-body. `links(src, dst, kind)` is the graph.
+Five tables. `pages` holds frontmatter fields promoted to columns for filtering, plus the
+full frontmatter as JSON and the body. `pages_fts` is an FTS5 virtual table over title, aliases
+and body. `links(src, dst, kind)` is the graph. `broken_links` keeps every link that did not
+resolve, because that is what `lint` reports. `meta` holds build metadata.
 
 Rebuilds are wholesale rather than incremental: a full delete-and-reinsert inside one
 transaction. At this corpus size delta tracking would add failure modes to save milliseconds.
 
-For hosted deployments the rebuild happens beside the live index and is moved into place with
+Every rebuild happens beside the live index and is moved into place with
 `rename(2)`, which is atomic within a filesystem. A reader either sees the whole old index or
 the whole new one; the path never names a half-rebuilt database.
 
@@ -172,10 +163,12 @@ already failing cannot be asked, and a stale one on Linux would answer with the 
 | `find_consumers` | Impact analysis across the link graph, inbound and outbound. |
 | `find_canonical` | Resolve a concept, including aliases, to its authoritative page. |
 | `check_drift` | Compare a source's current revision against what pages were verified at. |
-| `list_recent_changes` | What changed in a source since the last ingest. |
-| `update_verified_commit` | Write tool. Env-gated, dry-run then confirm-token. |
+| `list_recent_changes` | What changed in a source since a given revision. |
+| `lint_knowledge_base` | Broken links, unknown page types, missing provenance, citations that do not resolve. |
+| `update_verified_revision` | Write tool. Off unless `ACCRETA_ALLOW_WRITES=1`; dry run, then confirm token. |
 
-**CLI**, for humans: `init`, `ingest`, `reindex`, `lint`, `serve`.
+**CLI**, for humans: `init`, `reindex`, `lint`, `drift`, `doctor`, `source add`, `search`,
+`show`, `consumers`, `canonical`. `accreta help` lists their flags.
 
 ## Where the method lives
 

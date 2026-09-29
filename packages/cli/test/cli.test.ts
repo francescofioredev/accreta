@@ -356,6 +356,15 @@ describe("accreta help", () => {
     expect(await cli("frobnicate")).toBe(1);
     expect(stderr()).toContain("Unknown command");
   });
+
+  test("usage names every flag the parser accepts", async () => {
+    const source = readFileSync(join(import.meta.dir, "..", "src", "main.ts"), "utf-8");
+    const flags = [...source.matchAll(/arg === "(--[a-z-]+)"/g)].map((match) => match[1]!);
+    expect(flags.length).toBeGreaterThan(0);
+
+    await cli("help");
+    for (const flag of flags) expect(stdout()).toContain(flag);
+  });
 });
 
 describe("accreta lint — citations", () => {
