@@ -18,12 +18,8 @@ export interface GitSourceOptions {
   /** Provenance template, from `accreta.config.yaml`. */
   citationFormat: string;
   /**
-   * Restrict the source to these repository-relative paths.
-   *
-   * Without it a source is the entire repository, so any commit touching
-   * anything — a README, a test — reports as drift for pages whose documents
-   * never moved. A drift report full of false positives is one people learn to
-   * ignore, which costs more than having no report at all.
+   * Paths relative to `root`, not the repository top, that bound the source. Without them any
+   * commit drifts pages whose documents never moved, and a noisy report is one people ignore.
    */
   paths?: readonly string[];
 }
@@ -98,18 +94,17 @@ export class GitSource implements SourceAdapter {
   }
 
   /**
-   * The revision of the source: the last commit that touched it.
-   *
-   * With `paths` set this is `rev-list -1 HEAD -- <paths>` rather than HEAD, so
-   * a source's revision advances only when the source itself changes. Using
-   * HEAD would drift every page in the knowledge base on every commit to the
-   * repository, whatever it touched.
+   * The last commit that touched the source: `rev-list -1 HEAD -- <scope>` when `paths` or a root
+   * below the top level bounds it, since HEAD would drift every page on every commit anywhere.
    */
   async revision(): Promise<string> {
-    if (this.paths.length === 0) {
+    // At the top level `-- .` would skip an empty or TREESAME merge HEAD, so the revision stays HEAD.
+    const scope =
+      this.paths.length > 0 ? this.paths : (await this.showPrefix()) === "" ? [] : ["."];
+    if (scope.length === 0) {
       return (await git(this.root, ["rev-parse", "HEAD"])).trim();
     }
-    const out = (await git(this.root, ["rev-list", "-1", "HEAD", "--", ...this.paths])).trim();
+    const out = (await git(this.root, ["rev-list", "-1", "HEAD", "--", ...scope])).trim();
     // Paths with no commits yet are legitimately empty, and HEAD is the honest
     // answer: nothing in this source has ever changed.
     return out || (await git(this.root, ["rev-parse", "HEAD"])).trim();
@@ -136,7 +131,8 @@ export class GitSource implements SourceAdapter {
     }
 
     // Citations name a renamed file's old path; -z stops git quoting a non-ASCII one.
-    const args = ["diff", "--name-only", "-z", "--no-renames", revision, "HEAD"];
+    // --relative: citations name paths from the root, not the repository top.
+    const args = ["diff", "--name-only", "-z", "--no-renames", "--relative", revision, "HEAD"];
     if (this.paths.length > 0) args.push("--", ...this.paths);
     const out = await git(this.root, args);
     return out.split("\0").filter(Boolean).toSorted();
@@ -320,7 +316,8 @@ export class GitSource implements SourceAdapter {
     return batch.states.then((states) => states.get(path) ?? "committed");
   }
 
-  private async statesOf(paths: string[]): Promise<Map<string, WorkingState>> {
+  /** Where the root sits below the repository top, with a trailing slash; "" at the top. */
+  private showPrefix(): Promise<string> {
     this.prefix ??= git(this.root, ["rev-parse", "--show-prefix"]).then(
       (out) => out.trim(),
       (error) => {
@@ -328,7 +325,11 @@ export class GitSource implements SourceAdapter {
         throw error;
       },
     );
-    const prefix = await this.prefix;
+    return this.prefix;
+  }
+
+  private async statesOf(paths: string[]): Promise<Map<string, WorkingState>> {
+    const prefix = await this.showPrefix();
 
     const tracked = new Set<string>();
     const changed = new Set<string>();

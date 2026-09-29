@@ -604,3 +604,108 @@ describe("drift over GitSource names the page whose cited lines changed", () => 
     expect(rank).toBe("changed");
   });
 });
+
+describe("GitSource rooted in a subdirectory of the repository", () => {
+  let kb = "";
+
+  const sub = (paths?: string[]) =>
+    new GitSource({
+      id: "repo",
+      root: join(root, "sub"),
+      citationFormat: "{source} @ {rev} · {path}#{locator}",
+      paths,
+    });
+
+  async function head(): Promise<string> {
+    const proc = Bun.spawn(["git", "rev-parse", "HEAD"], { cwd: root, stdout: "pipe" });
+    return (await new Response(proc.stdout).text()).trim();
+  }
+
+  /** Index a page citing `docs/a.md#L5-L8` as verified at `from`, and run drift over the source. */
+  async function drift(from: string) {
+    mkdirSync(join(kb, "knowledge"), { recursive: true });
+    writeFileSync(
+      join(kb, "knowledge", "page.md"),
+      `---\ntype: note\nsource: repo\nlast_verified_revision: ${from}\n---\n\nA claim.[^a]\n\n[^a]: repo @ ${from} · docs/a.md#L5-L8\n`,
+    );
+    const indexPath = join(kb, "index.sqlite");
+    buildIndex({ root: kb, config: DEFAULT_CONFIG, indexPath });
+    const db = openIndex(indexPath);
+    try {
+      const report = await detectDrift(db, sub());
+      const [entry] = report.stale;
+      return { report, rank: entry && pageChanges(entry)?.get("knowledge/page.md") };
+    } finally {
+      db.close();
+    }
+  }
+
+  beforeEach(async () => {
+    kb = mkdtempSync(join(tmpdir(), "accreta-git-kb-"));
+    write("sub/docs/a.md", lines(12));
+    write("other.md", lines(3));
+    await commit("first");
+  });
+
+  afterEach(() => {
+    rmSync(kb, { recursive: true, force: true });
+  });
+
+  test("an edit to a cited line is named", async () => {
+    const from = await sub().revision();
+    write("sub/docs/a.md", lines(12, { 6: "changed" }));
+    await commit("edit a cited line");
+    expect((await drift(from)).rank).toBe("changed");
+  });
+
+  test("a commit outside the root does not mark the page stale", async () => {
+    const from = await sub().revision();
+    write("other.md", lines(3, { 1: "changed" }));
+    await commit("touch only other.md");
+    const { report } = await drift(from);
+    expect(report.stale).toEqual([]);
+    expect(report.unresolvable).toEqual([]);
+  });
+
+  test("a commit outside the root does not move the revision", async () => {
+    const before = await sub().revision();
+    write("other.md", lines(3, { 1: "changed" }));
+    await commit("touch only other.md");
+    expect(await sub().revision()).toBe(before);
+  });
+
+  // A page may have recorded HEAD when it was a commit that never touched the root.
+  test("a page verified at a commit outside the root is not stale after another", async () => {
+    write("other.md", lines(3, { 1: "changed" }));
+    await commit("touch only other.md");
+    const from = await head();
+    write("other.md", lines(3, { 2: "changed" }));
+    await commit("touch only other.md again");
+    const { report } = await drift(from);
+    expect(report.stale).toEqual([]);
+    expect(report.unresolvable).toEqual([]);
+  });
+
+  test("a page verified at a commit outside the root still sees its cited line change", async () => {
+    write("other.md", lines(3, { 1: "changed" }));
+    await commit("touch only other.md");
+    const from = await head();
+    write("sub/docs/a.md", lines(12, { 6: "changed" }));
+    await commit("edit a cited line");
+    expect((await drift(from)).rank).toBe("changed");
+  });
+
+  test("paths are relative to the root, and so is what changedSince names", async () => {
+    const scoped = sub(["docs"]);
+    const from = await scoped.revision();
+    write("sub/docs/a.md", lines(12, { 6: "changed" }));
+    write("other.md", lines(3, { 1: "changed" }));
+    await commit("touch both");
+    expect(await scoped.changedSince(from)).toEqual(["docs/a.md"]);
+  });
+
+  test("at the top level the revision is still HEAD, even when HEAD changed nothing", async () => {
+    await run(["commit", "-q", "--allow-empty", "-m", "empty"]);
+    expect(await source().revision()).toBe(await head());
+  });
+});
