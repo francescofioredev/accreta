@@ -72,6 +72,7 @@ const CURRENT_EDGES: Edge[] = [
   { dependent: "@accreta/adapters", dependency: "@accreta/adapter-git" },
   { dependent: "accreta", dependency: "@accreta/core" },
   { dependent: "accreta", dependency: "@accreta/adapters" },
+  { dependent: "accreta", dependency: "@accreta/mcp-server" },
   { dependent: "@accreta/mcp-server", dependency: "@accreta/core" },
   { dependent: "@accreta/mcp-server", dependency: "@accreta/adapters" },
 ];

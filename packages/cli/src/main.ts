@@ -13,6 +13,7 @@ import { doctor } from "./commands/doctor.ts";
 import { drift } from "./commands/drift.ts";
 import { init } from "./commands/init.ts";
 import { runLint } from "./commands/lint.ts";
+import { mcp } from "./commands/mcp.ts";
 import { reindex } from "./commands/reindex.ts";
 import { search } from "./commands/search.ts";
 import { show } from "./commands/show.ts";
@@ -258,6 +259,8 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
       });
     case "canonical":
       return canonical(ctx, positional.join(" "), { json });
+    case "mcp":
+      return mcp(ctx, positional);
     default:
       ctx.err(`Unknown command "${command}".\n`);
       ctx.err(USAGE);
