@@ -61,6 +61,13 @@ function aliasesOf(frontmatter: Record<string, unknown>): string {
   return value.filter((a): a is string => typeof a === "string").join(" ");
 }
 
+/** A scalar `aliases` is searchable but was never an alias to findCanonical, and still is not. */
+function canonicalAliases(frontmatter: Record<string, unknown>): string[] {
+  const value = frontmatter.aliases;
+  if (!Array.isArray(value)) return [];
+  return value.filter((a): a is string => typeof a === "string").map((a) => a.trim().toLowerCase());
+}
+
 /** Record paths with `/` regardless of platform: they are identifiers, not filesystem locations. */
 function toPosix(path: string): string {
   return sep === "/" ? path : path.split(sep).join("/");
@@ -161,6 +168,9 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
     INSERT INTO pages_fts (title, aliases, body, path, type, source)
     VALUES ($title, $aliases, $body, $path, $type, $source)
   `);
+  const insertAlias = db.prepare(
+    `INSERT OR IGNORE INTO aliases (alias, path) VALUES ($alias, $path)`,
+  );
   const insertLink = db.prepare(
     `INSERT OR IGNORE INTO links (src_path, dst_path, kind) VALUES ($src, $dst, $kind)`,
   );
@@ -194,6 +204,7 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
   try {
     db.exec("DELETE FROM pages");
     db.exec("DELETE FROM pages_fts");
+    db.exec("DELETE FROM aliases");
     db.exec("DELETE FROM links");
     db.exec("DELETE FROM broken_links");
     db.exec("DELETE FROM citations");
@@ -235,6 +246,10 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
         $type: type,
         $source: source ?? "",
       });
+
+      for (const alias of canonicalAliases(frontmatter)) {
+        insertAlias.run({ $alias: alias, $path: path });
+      }
 
       for (const link of extractLinks(frontmatter, body, config)) {
         const resolved = tryResolveWikilink(link.target, config);

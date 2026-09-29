@@ -50,6 +50,14 @@ CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
   tokenize = 'porter unicode61'
 );
 
+-- Each entry of a list-valued `aliases`, trimmed and lower-cased as findCanonical compares it.
+-- Its own table because a LIKE over frontmatter_json can use no index and scans every page.
+CREATE TABLE IF NOT EXISTS aliases (
+  alias TEXT NOT NULL,
+  path TEXT NOT NULL,
+  PRIMARY KEY (alias, path)
+) WITHOUT ROWID;
+
 CREATE TABLE IF NOT EXISTS links (
   src_path TEXT NOT NULL,
   dst_path TEXT NOT NULL,

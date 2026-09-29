@@ -195,6 +195,44 @@ describe("findCanonical", () => {
   test("an unknown term yields no matches", () => {
     expect(findCanonical(db, "not a concept here", config)).toEqual([]);
   });
+
+  test("the term as the whole value of another frontmatter field is not an alias", () => {
+    writePage("notes/field.md", "---\ntype: note\nsummary: climate forcing\n---\n\n# Field\n");
+    reindex();
+    const matches = findCanonical(db, "climate forcing", config);
+    expect(matches.map((m) => m.path)).toEqual(["knowledge/concepts/forcing.md"]);
+  });
+
+  test("an alias JSON would escape still resolves", () => {
+    // The old LIKE ran over JSON text, where this alias reads `the \"greenhouse\" effect`.
+    writePage(
+      "concepts/greenhouse.md",
+      "---\ntype: concept\naliases: ['the \"greenhouse\" effect']\n---\n\n# Greenhouse\n",
+    );
+    reindex();
+    const [match] = findCanonical(db, 'The "greenhouse" effect', config);
+    expect(match?.path).toBe("knowledge/concepts/greenhouse.md");
+  });
+
+  test("a non-ASCII alias resolves case-insensitively, as the comparison always said", () => {
+    writePage("concepts/emission.md", '---\ntype: concept\naliases: ["Émissions"]\n---\n\n# E\n');
+    reindex();
+    const [match] = findCanonical(db, "émissions", config);
+    expect(match?.path).toBe("knowledge/concepts/emission.md");
+  });
+
+  test("aliases differing only in case yield one match", () => {
+    writePage("concepts/rf.md", '---\ntype: concept\naliases: ["RF", "rf"]\n---\n\n# R\n');
+    reindex();
+    expect(findCanonical(db, "Rf", config)).toHaveLength(1);
+  });
+
+  test("a removed alias stops resolving after a rebuild", () => {
+    writePage("concepts/forcing.md", "---\ntype: concept\n---\n\n# Radiative forcing\n");
+    db.close();
+    reindex();
+    expect(findCanonical(db, "climate forcing", config)).toEqual([]);
+  });
 });
 
 describe("lint", () => {

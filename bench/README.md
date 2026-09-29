@@ -57,6 +57,18 @@ bun run bench:scale -- --sizes=100,1000      # pick your own
 
 The 100,000-page case takes about twelve minutes, most of it in corpus generation.
 
+# Canonical lookup
+
+`canonical-bench.ts` times `findCanonical` with four probes: an alias on one page, an alias on
+a tenth of the pages, a word in every page's frontmatter that no page declares as an alias,
+and a term that is nowhere. It also reports the rebuild, since every table the index gains is
+paid for there. Each probe checks its match count before it is timed.
+
+```bash
+bun run bench:canonical                                  # 1000, 10000
+bun run bench:canonical -- --sizes=1000,10000,100000 --runs=21 --builds=5
+```
+
 # MCP response budget
 
 The consumer of the MCP server is a language model with a finite context window, so every
