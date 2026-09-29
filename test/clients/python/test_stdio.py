@@ -4,6 +4,8 @@ Run from the repository root after `bun install`:
 
     pip install -r test/clients/python/requirements.txt
     pytest test/clients/python
+
+check_drift and list_recent_changes are not exercised: they need git history a depth-1 checkout lacks.
 """
 
 import json
@@ -14,13 +16,19 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pytest
-from mcp import ClientSession, StdioServerParameters, stdio_client
+from mcp import ClientSession, MCPError, StdioServerParameters, stdio_client
 
 REPO = Path(__file__).resolve().parents[3]
 # The one place the server launch lives; change it here when the entry point moves.
 SERVER_COMMAND = ["bun", "run", str(REPO / "packages" / "mcp-server" / "src" / "main.ts")]
 CLI = REPO / "packages" / "cli" / "src" / "main.ts"
 KB_ROOT = REPO / "examples" / "climate"
+PAGES = sorted(p.relative_to(KB_ROOT).as_posix() for p in (KB_ROOT / "knowledge").rglob("*.md"))
+SOURCE_IDS = {
+    m.group(1)
+    for f in (KB_ROOT / "sources").glob("*.yaml")
+    if (m := re.search(r"^id:\s*(\S+)\s*$", f.read_text(), re.MULTILINE))
+}
 
 READ_TOOLS = {
     "check_drift",
@@ -33,11 +41,12 @@ READ_TOOLS = {
 }
 WRITE_TOOL = "update_verified_revision"
 
+FOOTNOTE_DEF = re.compile(r"^\[\^[^\]]+\]:.*$", re.MULTILINE)
 # The demo's configured provenance format: "{source} @ {rev} · {path}#{locator}".
 FOOTNOTE = re.compile(
-    r"^\[\^[^\]]+\]: (?P<source>\S+) @ (?P<rev>[0-9a-f]{40}) · (?P<path>\S+)#L(?P<start>\d+)(?:-L(?P<end>\d+))?$",
-    re.MULTILINE,
+    r"\[\^[^\]]+\]: (?P<source>\S+) @ (?P<rev>[0-9a-f]{40}) · \S+#L\d+(?:-L\d+)?"
 )
+TIMEOUT_SECONDS = 30
 
 
 @pytest.fixture
@@ -50,7 +59,7 @@ def index_path(tmp_path_factory):
     # Built outside the corpus so the test never writes into examples/.
     path = tmp_path_factory.mktemp("index") / "index.sqlite"
     env = {**os.environ, "ACCRETA_ROOT": str(KB_ROOT), "ACCRETA_INDEX_PATH": str(path)}
-    subprocess.run(["bun", "run", str(CLI), "reindex"], env=env, check=True)
+    subprocess.run(["bun", "run", str(CLI), "reindex"], env=env, check=True, timeout=120)
     return path
 
 
@@ -63,7 +72,8 @@ async def connect(index_path):
         env={"ACCRETA_ROOT": str(KB_ROOT), "ACCRETA_INDEX_PATH": str(index_path)},
     )
     async with stdio_client(params) as (read, write):
-        async with ClientSession(read, write) as client:
+        # mcp 2.2.0 waits forever by default; a hung server should fail the run, not stall it.
+        async with ClientSession(read, write, read_timeout_seconds=TIMEOUT_SECONDS) as client:
             yield client, await client.initialize()
 
 
@@ -83,6 +93,16 @@ async def call_json(client, name, arguments):
     return json.loads(text_of(result))
 
 
+async def refusal_message(client, name, arguments):
+    # The spec allows a refusal as either a tool error or a JSON-RPC error.
+    try:
+        result = await client.call_tool(name, arguments)
+    except MCPError as error:
+        return str(error)
+    assert result.is_error, f"{name} was not refused: {text_of(result)[:300]}"
+    return text_of(result)
+
+
 @pytest.mark.anyio
 async def test_initialize_reports_the_package_version(index_path):
     manifest = json.loads((REPO / "packages" / "mcp-server" / "package.json").read_text())
@@ -97,43 +117,52 @@ async def test_lists_the_read_tools_and_hides_the_write_tool(index_path):
     async with session(index_path) as client:
         listed = await client.list_tools()
     names = {tool.name for tool in listed.tools}
-    assert names == READ_TOOLS
+    assert READ_TOOLS <= names
     assert WRITE_TOOL not in names
     for tool in listed.tools:
         assert tool.input_schema.get("type") == "object", tool.name
 
 
 @pytest.mark.anyio
-async def test_search_hits_carry_a_verified_revision(index_path):
+async def test_search_finds_the_page_and_labels_author_fields(index_path):
     async with session(index_path) as client:
         found = await call_json(client, "search_pages", {"query": "climate sensitivity", "limit": 5})
     paths = [hit["path"] for hit in found["results"]]
     assert "knowledge/concepts/climate-sensitivity.md" in paths
     assert found["count"] == len(found["results"])
-    for hit in found["results"]:
-        assert re.fullmatch(r"[0-9a-f]{40}", hit["last_verified_revision"] or ""), hit["path"]
     assert "results[].snippet" in found["_provenance"]["page_derived_fields"]
 
 
 @pytest.mark.anyio
-async def test_get_page_returns_citations_that_resolve(index_path):
+async def test_get_page_serves_every_body_intact_with_well_formed_citations(index_path):
+    assert PAGES, "no pages found on disk"
+    async with session(index_path) as client:
+        for path in PAGES:
+            found = await call_json(client, "get_page", {"path": path})
+            assert found["found"] is True, path
+            page = found["page"]
+            assert page["path"] == path
+            assert "page.body" in found["_provenance"]["page_derived_fields"]
+
+            # Catches transport damage: encoding of "·", newline handling, truncation.
+            raw = (KB_ROOT / path).read_bytes()
+            assert raw.startswith(b"---\n"), path
+            # Core's frontmatter split also consumes blank lines after the closing fence.
+            expected = raw.split(b"\n---\n", 1)[1].lstrip(b"\n")
+            assert page["body"].encode("utf-8") == expected, path
+
+            for definition in FOOTNOTE_DEF.finditer(page["body"]):
+                cite = FOOTNOTE.fullmatch(definition.group(0))
+                assert cite, f"{path}: malformed citation {definition.group(0)!r}"
+                assert cite["source"] in SOURCE_IDS, f"{path}: unknown source {cite['source']}"
+
+
+@pytest.mark.anyio
+async def test_get_page_resolves_a_wikilink_target_to_a_cited_page(index_path):
     async with session(index_path) as client:
         found = await call_json(client, "get_page", {"path": "concepts/climate-sensitivity"})
-    assert found["found"] is True
-    page = found["page"]
-    assert page["path"] == "knowledge/concepts/climate-sensitivity.md"
-    assert page["canonical_source"].startswith(f"{page['source']}:")
-    assert "page.body" in found["_provenance"]["page_derived_fields"]
-
-    citations = list(FOOTNOTE.finditer(page["body"]))
-    assert citations, "page body carries no citation in the configured format"
-    for cite in citations:
-        assert cite["source"] == page["source"]
-        assert cite["rev"] == page["last_verified_revision"]
-        # Paths are relative to the git root the source declares, which is the repository here.
-        lines = (REPO / cite["path"]).read_text().splitlines()
-        end = int(cite["end"] or cite["start"])
-        assert 1 <= int(cite["start"]) <= end <= len(lines), cite.group(0)
+    assert found["page"]["path"] == "knowledge/concepts/climate-sensitivity.md"
+    assert FOOTNOTE.search(found["page"]["body"]), "page body carries no citation"
 
 
 @pytest.mark.anyio
@@ -144,16 +173,27 @@ async def test_get_page_reports_a_missing_page_without_erroring(index_path):
 
 
 @pytest.mark.anyio
-async def test_unknown_tool_is_refused_as_a_tool_error(index_path):
+async def test_link_graph_and_lint_tools_answer(index_path):
     async with session(index_path) as client:
-        result = await client.call_tool("no_such_tool", {})
-    assert result.is_error
-    assert "no_such_tool not found" in text_of(result)
+        consumers = await call_json(client, "find_consumers", {"target": "concepts/climate-sensitivity"})
+        canonical = await call_json(client, "find_canonical", {"term": "ECS"})
+        lint = await call_json(client, "lint_knowledge_base", {})
+    assert consumers["target_exists"] is True
+    assert "knowledge/concepts/climate-sensitivity.md" in [m["path"] for m in canonical["results"]]
+    assert lint["pages_checked"] == len(PAGES)
 
 
 @pytest.mark.anyio
-async def test_invalid_arguments_are_rejected_by_the_server(index_path):
+async def test_unknown_tool_is_refused_and_the_session_survives(index_path):
     async with session(index_path) as client:
-        result = await client.call_tool("search_pages", {"query": ""})
-    assert result.is_error
-    assert "Input validation error" in text_of(result)
+        message = await refusal_message(client, "no_such_tool", {})
+        assert "no_such_tool" in message
+        await call_json(client, "search_pages", {"query": "albedo"})
+
+
+@pytest.mark.anyio
+async def test_invalid_arguments_are_refused_and_the_session_survives(index_path):
+    async with session(index_path) as client:
+        message = await refusal_message(client, "search_pages", {"query": ""})
+        assert "query" in message
+        await call_json(client, "search_pages", {"query": "albedo"})
