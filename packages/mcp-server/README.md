@@ -29,11 +29,11 @@ another — it needs no filesystem access to the knowledge base itself, only to 
 |---|---|
 | `search_pages` | Full-text search with type and source filters. The primary discovery tool. |
 | `get_page` | Fetch a page by path or wikilink target. |
-| `find_consumers` | Impact analysis across the link graph, both directions. |
-| `find_canonical` | Resolve a term, including aliases, to the page that defines it. |
+| `find_consumers` | Impact analysis across the link graph, both directions. Paged: `count` is the total; follow `nextCursor`. |
+| `find_canonical` | Resolve a term, including aliases, to the page that defines it. Paged: `count` is the total; follow `nextCursor`. |
 | `check_drift` | Which pages their sources have moved out from under. |
 | `list_recent_changes` | What changed in a source since a revision. |
-| `lint_knowledge_base` | Unresolvable links, missing provenance, unknown page types, and a count of the citations it could not check. |
+| `lint_knowledge_base` | Unresolvable links, missing provenance, unknown page types, and a count of the citations it could not check. Filter by `kinds`. Paged: `count` is the total; follow `nextCursor`. |
 | `update_verified_revision` | Write. Registered only when `ACCRETA_ALLOW_WRITES=1`. |
 
 ## Which fields a page author wrote

@@ -1,6 +1,15 @@
 import type { AccretaConfig } from "../config.ts";
 import type { Database } from "../index-db/db.ts";
 import { tryResolveWikilink } from "../links.ts";
+import {
+  clampLimit,
+  cursorOffset,
+  indexIdentity,
+  nextCursorAfter,
+  paginate,
+  type PageInfo,
+  type PageRequest,
+} from "./paging.ts";
 
 export interface PageRecord {
   path: string;
@@ -77,13 +86,15 @@ export interface Relation {
  * Inbound is "who points at this"; outbound is "what this points at". Impact
  * analysis needs both, and conflating them makes "what depends on X" and "what X
  * depends on" indistinguishable in the result.
+ *
+ * Without `page` every relation is returned. The links key makes (kind, path) a total order.
  */
 export function findRelated(
   db: Database,
   pathOrTarget: string,
   config: AccretaConfig,
-  options: { kinds?: readonly string[]; includeInline?: boolean } = {},
-): { target: string; targetExists: boolean; relations: Relation[] } {
+  options: { kinds?: readonly string[]; includeInline?: boolean; page?: PageRequest } = {},
+): { target: string; targetExists: boolean; relations: Relation[] } & PageInfo {
   const resolved = tryResolveWikilink(pathOrTarget, config);
   const target = resolved.ok ? resolved.path : pathOrTarget;
 
@@ -101,36 +112,80 @@ export function findRelated(
     }
     return { sql: parts.join(" AND "), params };
   };
-
   const inboundWhere = conditions("l.dst_path");
-  const inbound = db
-    .query(
-      `SELECT l.src_path AS path, l.kind AS kind, p.type AS type, p.title AS title
-       FROM links l LEFT JOIN pages p ON p.path = l.src_path
-       WHERE ${inboundWhere.sql}
-       ORDER BY l.kind, l.src_path`,
-    )
-    .all(...inboundWhere.params) as Omit<Relation, "direction">[];
-
   const outboundWhere = conditions("l.src_path");
-  const outbound = db
-    .query(
-      `SELECT l.dst_path AS path, l.kind AS kind, p.type AS type, p.title AS title
-       FROM links l LEFT JOIN pages p ON p.path = l.dst_path
-       WHERE ${outboundWhere.sql}
-       ORDER BY l.kind, l.dst_path`,
-    )
-    .all(...outboundWhere.params) as Omit<Relation, "direction">[];
+
+  const count = (where: { sql: string; params: string[] }) =>
+    (
+      db.query(`SELECT COUNT(*) AS n FROM links l WHERE ${where.sql}`).get(...where.params) as {
+        n: number;
+      }
+    ).n;
+
+  let offset = 0;
+  // SQLite reads a negative LIMIT as none, which is what an unpaged call asks for.
+  let limit = -1;
+  let scope = "";
+  let inboundTotal = Infinity;
+  let total = 0;
+  if (options.page) {
+    inboundTotal = count(inboundWhere);
+    total = inboundTotal + count(outboundWhere);
+    scope = [
+      "related",
+      target,
+      kindFilter ? kindFilter.toSorted().join(",") : "",
+      String(excludeInline),
+      indexIdentity(db, options.page),
+    ].join("\0");
+    offset = cursorOffset(options.page, scope);
+    limit = clampLimit(options.page.limit);
+  }
+
+  const inboundTake = limit < 0 ? -1 : Math.max(0, Math.min(limit, inboundTotal - offset));
+  const inbound =
+    inboundTake === 0
+      ? []
+      : (db
+          .query(
+            `SELECT l.src_path AS path, l.kind AS kind, p.type AS type, p.title AS title
+             FROM links l LEFT JOIN pages p ON p.path = l.src_path
+             WHERE ${inboundWhere.sql}
+             ORDER BY l.kind, l.src_path
+             LIMIT ? OFFSET ?`,
+          )
+          .all(...inboundWhere.params, inboundTake, offset) as Omit<Relation, "direction">[]);
+
+  const outboundTake = limit < 0 ? -1 : limit - inbound.length;
+  const outbound =
+    outboundTake === 0
+      ? []
+      : (db
+          .query(
+            `SELECT l.dst_path AS path, l.kind AS kind, p.type AS type, p.title AS title
+             FROM links l LEFT JOIN pages p ON p.path = l.dst_path
+             WHERE ${outboundWhere.sql}
+             ORDER BY l.kind, l.dst_path
+             LIMIT ? OFFSET ?`,
+          )
+          .all(...outboundWhere.params, outboundTake, Math.max(0, offset - inboundTotal)) as Omit<
+          Relation,
+          "direction"
+        >[]);
 
   const targetExists = Boolean(db.query("SELECT 1 FROM pages WHERE path = ?").get(target));
+  const relations = [
+    ...inbound.map((r) => ({ ...r, direction: "inbound" as const })),
+    ...outbound.map((r) => ({ ...r, direction: "outbound" as const })),
+  ];
 
+  if (!options.page) return { target, targetExists, relations, total: relations.length };
   return {
     target,
     targetExists,
-    relations: [
-      ...inbound.map((r) => ({ ...r, direction: "inbound" as const })),
-      ...outbound.map((r) => ({ ...r, direction: "outbound" as const })),
-    ],
+    relations,
+    total,
+    nextCursor: nextCursorAfter(offset, relations.length, total, scope),
   };
 }
 
@@ -172,14 +227,16 @@ export function findCanonical(db: Database, term: string, config: AccretaConfig)
     push(row, "path");
   }
 
-  const byTitle = db.query(`${SELECT} WHERE LOWER(title) = ?`).all(needle) as PageRow[];
+  const byTitle = db
+    .query(`${SELECT} WHERE LOWER(title) = ? ORDER BY path`)
+    .all(needle) as PageRow[];
   for (const row of byTitle) push(row, "title");
 
   // Aliases live in frontmatter_json rather than a column, because which fields
   // matter is configuration. The LIKE narrows the candidates; the JSON is parsed
   // to confirm, so a page merely containing the word is not a false positive.
   const candidates = db
-    .query(`${SELECT} WHERE LOWER(frontmatter_json) LIKE ?`)
+    .query(`${SELECT} WHERE LOWER(frontmatter_json) LIKE ? ORDER BY path`)
     .all(`%${needle}%`) as PageRow[];
   for (const row of candidates) {
     const frontmatter = JSON.parse(row.frontmatter_json) as Record<string, unknown>;
@@ -191,4 +248,16 @@ export function findCanonical(db: Database, term: string, config: AccretaConfig)
   }
 
   return out;
+}
+
+/** Paged in memory: an exact total needs every alias candidate parsed anyway, until #82. */
+export function findCanonicalPage(
+  db: Database,
+  term: string,
+  config: AccretaConfig,
+  page: PageRequest,
+): { results: CanonicalMatch[] } & PageInfo {
+  const matches = findCanonical(db, term, config);
+  const { items, total, nextCursor } = paginate(matches, page, `canonical\0${term}`);
+  return { results: items, total, nextCursor };
 }

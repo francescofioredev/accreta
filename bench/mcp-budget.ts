@@ -3,10 +3,10 @@
  * Measure what each MCP tool costs the agent that calls it.
  *
  * The consumer of this server is a language model with a finite context window, so every
- * token a tool returns is a token unavailable for reasoning. Only `search_pages` bounds
- * its response — default 20 results, hard maximum 50. `get_page` returns a whole body,
- * and `find_consumers`, `find_canonical`, `check_drift` and `lint_knowledge_base` return
- * everything they find. Whether that matters is not a matter of opinion; it is a number,
+ * token a tool returns is a token unavailable for reasoning. `search_pages` returns at
+ * most 50 results, and `find_consumers`, `find_canonical` and `lint_knowledge_base` one
+ * page of at most 50 (ADR-0007). `get_page` returns a whole body, and `check_drift`
+ * everything it finds. Whether that matters is not a matter of opinion; it is a number,
  * and this measures it.
  *
  * The failure it exists to quantify is specific and circular: an agent asks
@@ -133,6 +133,9 @@ export interface Row {
   findCanonical: number;
   lint: number;
   lintFindings: number;
+  /** The response held fewer entries than its `count`: one page, not the whole list. */
+  lintPaged: boolean;
+  findConsumersPaged: boolean;
 }
 
 export async function measure(size: number): Promise<Row> {
@@ -179,6 +182,8 @@ export async function measure(size: number): Promise<Row> {
         findCanonical: serialize("find_canonical", canonical),
         lint: serialize("lint_knowledge_base", lintResult),
         lintFindings: lintResult.count,
+        lintPaged: lintResult.count > lintResult.findings.length,
+        findConsumersPaged: consumers.count > consumers.results.length,
       };
     } finally {
       // Close before rmSync deletes the directory the handle points into.
@@ -234,18 +239,30 @@ async function main(): Promise<void> {
 
   // Linear extrapolation from the largest measured size. Stated as extrapolation, not as
   // measurement: the growth is linear in findings and the constant is what was measured.
+  // A paged response stays one page however large `count` grows, so it is not extrapolated.
   const last = rows[rows.length - 1]!;
+  const growing = [
+    { name: "lint", bytes: last.lint, paged: last.lintPaged },
+    {
+      name: "find_consumers on the hub",
+      bytes: last.findConsumers,
+      paged: last.findConsumersPaged,
+    },
+  ];
   if (last.pages > 0) {
     console.log(`\nEXTRAPOLATION from ${last.pages} pages (linear; not measured)`);
-    for (const target of [10_000, 100_000]) {
-      const factor = target / last.pages;
-      const lintTokens = estTokens(last.lint * factor);
-      const consumersTokens = estTokens(last.findConsumers * factor);
-      console.log(
-        `  ${String(target).padStart(7)} pages: lint ~${(lintTokens / 1000).toFixed(0)}k tokens ` +
-          `(${(lintTokens / 200_000).toFixed(0)}x a 200k window), ` +
-          `find_consumers on the hub ~${(consumersTokens / 1000).toFixed(0)}k tokens`,
-      );
+    for (const tool of growing) {
+      if (tool.paged) {
+        console.log(`  ${tool.name}: paged at ${last.pages} pages, so bounded; not extrapolated`);
+        continue;
+      }
+      for (const target of [10_000, 100_000]) {
+        const tokens = estTokens(tool.bytes * (target / last.pages));
+        console.log(
+          `  ${tool.name}, ${String(target).padStart(7)} pages: ~${(tokens / 1000).toFixed(0)}k tokens ` +
+            `(${(tokens / 200_000).toFixed(0)}x a 200k window)`,
+        );
+      }
     }
   }
 }

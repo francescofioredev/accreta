@@ -4,17 +4,18 @@ import { join } from "node:path";
 import {
   DelegatedSourceError,
   detectDrift,
-  findCanonical,
+  findCanonicalPage,
   findRelated,
   getPage,
-  lint,
-  lintCitations,
+  lintKnowledgeBase,
   pageChanges,
   searchPages,
   type AccretaConfig,
   type CanonicalMatch,
   type Database,
+  type LintFindingKind,
   type PageChange,
+  type PageRequest,
   type PageRecord,
   type Relation,
   type SearchHit,
@@ -170,26 +171,30 @@ export function getPageTool(ctx: ToolContext, input: { path: string }) {
 
 export function findConsumersTool(
   ctx: ToolContext,
-  input: { target: string; kinds?: string[]; include_inline?: boolean },
+  input: { target: string; kinds?: string[]; include_inline?: boolean } & PageRequest,
 ) {
   const result = findRelated(ctx.db, input.target, ctx.config, {
     kinds: input.kinds,
     includeInline: input.include_inline,
+    page: { limit: input.limit, cursor: input.cursor },
   });
   return {
     target: result.target,
     target_exists: result.targetExists,
-    count: result.relations.length,
+    // The untruncated total (ADR-0007); `results` may be one page of it.
+    count: result.total,
     results: result.relations.map(relationOut),
+    nextCursor: result.nextCursor,
     _provenance: provenance(TITLE_FIELDS),
   };
 }
 
-export function findCanonicalTool(ctx: ToolContext, input: { term: string }) {
-  const matches = findCanonical(ctx.db, input.term, ctx.config);
+export function findCanonicalTool(ctx: ToolContext, input: { term: string } & PageRequest) {
+  const page = findCanonicalPage(ctx.db, input.term, ctx.config, input);
   return {
-    count: matches.length,
-    results: matches.map(matchOut),
+    count: page.total,
+    results: page.results.map(matchOut),
+    nextCursor: page.nextCursor,
     _provenance: provenance(TITLE_FIELDS),
   };
 }
@@ -344,25 +349,28 @@ const LINT_FIELDS = [
   "unchecked_reasons[].paths",
 ] as const;
 
-export async function lintTool(ctx: ToolContext) {
+export async function lintTool(
+  ctx: ToolContext,
+  input: { kinds?: LintFindingKind[] } & PageRequest = {},
+) {
+  // Pinned once: the context reopens the index when a rebuild swaps it.
   const db = ctx.db;
-  const report = lint(db, ctx.config);
-  const citations = await lintCitations(db, ctx.sources);
-  const findings = [
-    ...report.findings,
-    ...unloadedFindings(countUnchecked(db, ctx.unloadedSources)),
-    ...citations.findings,
-  ];
+  const report = await lintKnowledgeBase(db, ctx.config, ctx.sources, {
+    kinds: input.kinds,
+    page: { limit: input.limit, cursor: input.cursor },
+    sourceFindings: unloadedFindings(countUnchecked(db, ctx.unloadedSources)),
+  });
   return {
     pages_checked: report.pagesChecked,
-    count: findings.length,
+    count: report.total,
     // Citations whose source could not be questioned. A number rather than
     // findings: reporting them would say a problem was found where nothing was
     // looked at.
-    citations_checked: citations.citationsChecked,
-    citations_unchecked: citations.citationsUnchecked,
-    unchecked_reasons: citations.uncheckedReasons,
-    findings,
+    citations_checked: report.citationsChecked,
+    citations_unchecked: report.citationsUnchecked,
+    unchecked_reasons: report.uncheckedReasons,
+    findings: report.findings,
+    nextCursor: report.nextCursor,
     _provenance: provenance(LINT_FIELDS),
   };
 }

@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { lint, lintCitations, openIndex } from "@accreta/core";
+import { lintKnowledgeBase, openIndex } from "@accreta/core";
 import { countUnchecked, unloadedFindings } from "@accreta/adapters";
 import { findWorkspace } from "../workspace.ts";
 import { loadSources, printJson, provenance, type CommandContext } from "./shared.ts";
@@ -25,24 +25,21 @@ export async function runLint(
 
   const db = openIndex(workspace.indexPath, { readonly: true });
   try {
-    const report = lint(db, workspace.config);
-
     const loaded = loadSources(workspace);
     const sources = new Map(loaded.sources.map((adapter) => [adapter.id, adapter]));
-    const citations = await lintCitations(db, sources);
-    const findings = [
-      ...report.findings,
-      ...unloadedFindings(countUnchecked(db, loaded.unloaded)),
-      ...citations.findings,
-    ];
+    // No page: the CLI prints every finding. The MCP tool pages the same list.
+    const report = await lintKnowledgeBase(db, workspace.config, sources, {
+      sourceFindings: unloadedFindings(countUnchecked(db, loaded.unloaded)),
+    });
+    const findings = report.findings;
 
     if (options.json) {
       printJson(ctx, {
         pages_checked: report.pagesChecked,
         count: findings.length,
-        citations_checked: citations.citationsChecked,
-        citations_unchecked: citations.citationsUnchecked,
-        unchecked_reasons: citations.uncheckedReasons,
+        citations_checked: report.citationsChecked,
+        citations_unchecked: report.citationsUnchecked,
+        unchecked_reasons: report.uncheckedReasons,
         findings,
         _provenance: provenance(LINT_FIELDS),
       });
@@ -53,17 +50,17 @@ export async function runLint(
     // cannot question, and "I did not look" must not be printed as a problem
     // found. It is still the size of what this pass did not cover.
     const unchecked =
-      citations.citationsUnchecked > 0
+      report.citationsUnchecked > 0
         ? [
-            `${citations.citationsUnchecked} citation(s) could not be checked:`,
-            ...citations.uncheckedReasons.flatMap((r) => [
+            `${report.citationsUnchecked} citation(s) could not be checked:`,
+            ...report.uncheckedReasons.flatMap((r) => [
               `  ${r.citations}  ${r.detail}`,
               `       ${r.paths.slice(0, 5).join(", ")}${r.paths.length > 5 ? `, +${r.paths.length - 5} more` : ""}`,
             ]),
           ].join("\n")
         : null;
 
-    const checked = `${citations.citationsChecked} citation(s) checked against their source.`;
+    const checked = `${report.citationsChecked} citation(s) checked against their source.`;
     if (findings.length === 0) {
       ctx.out(`${report.pagesChecked} page(s) checked, nothing to report.`);
       ctx.out(checked);
