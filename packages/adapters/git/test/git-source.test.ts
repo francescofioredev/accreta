@@ -131,7 +131,7 @@ describe("GitSource", () => {
     // HEAD has no line 5, so `found` here would pin a revision that never held it.
     expect(await source().locate("a.md", "L5-L6")).toEqual({
       verdict: "unknown",
-      detail: "a.md has uncommitted changes; no commit holds what is on disk",
+      detail: "uncommitted changes: no commit holds what is on disk",
     });
   });
 
@@ -221,6 +221,19 @@ describe("GitSource", () => {
       );
     } finally {
       rmSync(plain, { recursive: true, force: true });
+    }
+  });
+
+  test("git that cannot start is not reported as git refusing the repository", async () => {
+    write("a.md", "one");
+    await commit("first");
+    const path = process.env.PATH;
+    process.env.PATH = join(root, "no-git-here");
+    try {
+      const verdict = await source().locate("a.md", "L1");
+      expect(verdict.verdict === "unknown" && verdict.detail).toStartWith("git could not run: ");
+    } finally {
+      process.env.PATH = path;
     }
   });
 

@@ -222,19 +222,24 @@ export class GitSource implements SourceAdapter {
     try {
       working = await state;
     } catch (error) {
-      const reason = error instanceof GitCommandError ? error.stderr : String(error);
-      return { verdict: "unknown", detail: `git refused the repository: ${reason}` };
+      const detail =
+        error instanceof GitCommandError
+          ? `git refused the repository: ${error.stderr}`
+          : `git could not run: ${error instanceof Error ? error.message : String(error)}`;
+      return { verdict: "unknown", detail };
     }
+    // No path in these details: lint groups unknowns by detail and lists the paths itself.
     if (working === "changed") {
       return {
         verdict: "unknown",
-        detail: `${path} has uncommitted changes; no commit holds what is on disk`,
+        detail: "uncommitted changes: no commit holds what is on disk",
       };
     }
     if (working === "untracked") {
       return {
         verdict: "unknown",
-        detail: `${path} is not tracked here (untracked, ignored or in a submodule); no commit of this repository holds it`,
+        detail:
+          "not tracked here (untracked, ignored, in a submodule, or spelled differently from the index): no commit of this repository holds it",
       };
     }
 

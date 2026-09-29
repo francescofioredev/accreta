@@ -3,7 +3,11 @@ import { lint, lintCitations, openIndex } from "@accreta/core";
 import { findWorkspace } from "../workspace.ts";
 import { loadSources, printJson, provenance, type CommandContext } from "./shared.ts";
 
-const LINT_FIELDS = ["findings[].detail"] as const;
+const LINT_FIELDS = [
+  "findings[].detail",
+  "unchecked_reasons[].detail",
+  "unchecked_reasons[].paths",
+] as const;
 
 // Opens and closes the index itself rather than going through `withIndex`:
 // citation checks read from the sources, and `withIndex` closes the database in
@@ -46,7 +50,10 @@ export async function runLint(
       citations.citationsUnchecked > 0
         ? [
             `${citations.citationsUnchecked} citation(s) could not be checked:`,
-            ...citations.uncheckedReasons.map((r) => `  ${r.citations}  ${r.detail}`),
+            ...citations.uncheckedReasons.flatMap((r) => [
+              `  ${r.citations}  ${r.detail}`,
+              `       ${r.paths.slice(0, 5).join(", ")}${r.paths.length > 5 ? `, +${r.paths.length - 5} more` : ""}`,
+            ]),
           ].join("\n")
         : null;
 

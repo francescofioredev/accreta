@@ -2,6 +2,7 @@ import type { Database } from "../index-db/db.ts";
 import { compileCitationTemplate } from "../citations.ts";
 import type { AccretaConfig } from "../config.ts";
 import {
+  formatCanonicalSource,
   parseCitation,
   UNPINNED_REVISION,
   unknownVerdict,
@@ -43,8 +44,8 @@ export interface LintReport {
    * pass did not cover.
    */
   citationsUnchecked: number;
-  /** Why they went unchecked, by the source's own detail: a delegated source, a dirty file, git failing. */
-  uncheckedReasons: { detail: string; citations: number }[];
+  /** Why they went unchecked, by the source's own detail, with the `source:path` values it covers. */
+  uncheckedReasons: { detail: string; citations: number; paths: string[] }[];
 }
 
 interface BrokenRow {
@@ -217,7 +218,13 @@ export async function lintCitations(
   sources: Map<string, SourceAdapter>,
 ): Promise<LintReport> {
   const findings: LintFinding[] = [];
-  const unchecked = new Map<string, number>();
+  const unchecked = new Map<string, { citations: number; paths: Set<string> }>();
+  const skip = (detail: string, sourceId: string, path: string) => {
+    const group = unchecked.get(detail) ?? { citations: 0, paths: new Set<string>() };
+    group.citations++;
+    group.paths.add(formatCanonicalSource({ sourceId, path }));
+    unchecked.set(detail, group);
+  };
 
   const pages = db
     .query(
@@ -281,7 +288,7 @@ export async function lintCitations(
 
     const verdict = await locate(adapter, citation.path, citation.locator);
     if (verdict.verdict === "unknown") {
-      unchecked.set(verdict.detail, (unchecked.get(verdict.detail) ?? 0) + 1);
+      skip(verdict.detail, citation.sourceId, citation.path);
       continue;
     }
     citationsChecked++;
@@ -344,7 +351,7 @@ export async function lintCitations(
 
     const verdict = await locate(adapter, row.path, row.locator ?? undefined);
     if (verdict.verdict === "unknown") {
-      unchecked.set(verdict.detail, (unchecked.get(verdict.detail) ?? 0) + 1);
+      skip(verdict.detail, row.source, row.path);
       continue;
     }
     citationsChecked++;
@@ -368,7 +375,7 @@ export async function lintCitations(
   }
 
   const uncheckedReasons = [...unchecked]
-    .map(([detail, citations]) => ({ detail, citations }))
+    .map(([detail, { citations, paths }]) => ({ detail, citations, paths: [...paths].toSorted() }))
     .toSorted((a, b) => b.citations - a.citations || a.detail.localeCompare(b.detail));
   return {
     findings,

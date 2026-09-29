@@ -501,6 +501,14 @@ describe("accreta lint — citations", () => {
     expect(stdout()).toContain(
       '1  source "design-docs" is read through notion; accreta cannot check it',
     );
+    expect(stdout()).toContain("design-docs:2f1a4b");
+
+    output = [];
+    await cli("lint", "--json");
+    const report = JSON.parse(stdout());
+    expect(report.unchecked_reasons[0].paths).toEqual(["design-docs:2f1a4b"]);
+    expect(report._provenance.page_derived_fields).toContain("unchecked_reasons[].detail");
+    expect(report._provenance.page_derived_fields).toContain("unchecked_reasons[].paths");
   });
 
   test("a citation that resolves is not reported", async () => {

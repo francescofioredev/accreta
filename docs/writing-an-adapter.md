@@ -97,7 +97,8 @@ between "nothing changed" and "I cannot tell". Lint counts unknowns; it does not
 as findings.
 
 The `detail` string is yours to write and is shown to the user verbatim, so make it name the
-document and what was wrong with the pointer.
+document and what was wrong with the pointer. The exception is `unknown`: leave the path out, since
+lint groups unknowns by detail and lists the paths under each group itself.
 
 **A locator is opaque to everything but you.** A file source reads `L142-L158`; a page source
 might read `block-a1b2c3`. If yours is line-oriented, parse it with `parseLineLocator()` from
