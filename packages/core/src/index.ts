@@ -26,11 +26,14 @@ export {
   UNPINNED_REVISION,
   DelegatedSourceError,
   UnknownRevisionError,
+  formatCanonicalSource,
   formatCitation,
   parseCitation,
   parseLineLocator,
   resolveInside,
 } from "./source/adapter.ts";
+export type { Citation } from "./source/cite.ts";
+export { cite } from "./source/cite.ts";
 export type {
   CitedChange,
   DelegatedWork,

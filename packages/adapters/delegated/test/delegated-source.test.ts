@@ -1,15 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { DelegatedSourceError, UNPINNED_REVISION } from "@accreta/core";
+import { cite, DelegatedSourceError, UNPINNED_REVISION } from "@accreta/core";
 import { DelegatedSource } from "../src/index.ts";
 
 const SCOPE = "The Design decisions page and everything below it.";
+const FORMAT = "{source} @ {rev} · {path}#{locator}";
 
 function source(overrides: Partial<{ via: string; scope: string }> = {}) {
   return new DelegatedSource({
     id: "design-docs",
     via: overrides.via ?? "notion",
     scope: overrides.scope ?? SCOPE,
-    citationFormat: "{source} @ {rev} · {path}#{locator}",
+    citationFormat: FORMAT,
   });
 }
 
@@ -54,6 +55,21 @@ describe("DelegatedSource", () => {
 
   test("an unpinned citation names the shared sentinel", () => {
     expect(source().citation("2f1a4b")).toContain(UNPINNED_REVISION);
+  });
+
+  test("cite says it cannot pin a revision rather than inventing one", async () => {
+    const docs = source();
+    const cited = await cite(new Map([["design-docs", docs]]), FORMAT, {
+      sourceId: "design-docs",
+      path: "2f1a4b",
+      locator: "block-a1b2c3",
+    });
+
+    expect(cited.revision).toBeNull();
+    expect(cited.delegated).toEqual({ via: "notion", guidance: SCOPE });
+    expect(cited.location.verdict).toBe("unknown");
+    expect(cited.footnote).toBe(`design-docs @ ${UNPINNED_REVISION} · 2f1a4b#block-a1b2c3`);
+    expect(cited.canonicalSource).toBe("design-docs:2f1a4b#block-a1b2c3");
   });
 
   test("a declaration with no scope is refused, not defaulted", () => {

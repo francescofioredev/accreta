@@ -88,7 +88,8 @@ const DIFFING_SOURCE: SourceAdapter = {
   revision: async () => "rev2",
   // Echoes the path diffed.md cites, since drift only reports citations into changed paths.
   changedSince: async () => ["CANARY-CITEPATH.md"],
-  locate: async () => ({ verdict: "found" }),
+  // Unknown, with the cited path in its detail as an adapter's may be, so lint's unchecked_reasons carry it.
+  locate: async (path) => ({ verdict: "unknown", detail: `${path} cannot be checked here` }),
   citation: () => "",
   pinRevision: () => {},
   touchedSince: async (_revision, _path, locators) =>

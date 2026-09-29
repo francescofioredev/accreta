@@ -451,6 +451,9 @@ describe("lintCitations", () => {
     const report = await lintCitations(db, sources(opaque));
     expect(report.findings).toEqual([]);
     expect(report.citationsUnchecked).toBe(1);
+    expect(report.uncheckedReasons).toEqual([
+      { detail: "only the agent can reach this", citations: 1, paths: ["s:anything"] },
+    ]);
   });
 
   test("an adapter that throws leaves the citation unchecked, not broken", async () => {
@@ -466,6 +469,27 @@ describe("lintCitations", () => {
     const report = await lintCitations(db, sources(failing));
     expect(report.findings).toEqual([]);
     expect(report.citationsUnchecked).toBe(1);
+    expect(report.uncheckedReasons).toEqual([
+      { detail: "connection refused", citations: 1, paths: ["s:doc.md"] },
+    ]);
+  });
+
+  test("unchecked citations sharing a reason are one group listing their paths", async () => {
+    const dirty: SourceAdapter = {
+      ...source("s", {}),
+      locate: async () => ({ verdict: "unknown", detail: "uncommitted changes" }),
+    };
+    for (const name of ["a", "b", "c"]) {
+      writePage(
+        `${name}.md`,
+        `---\ntype: note\ncanonical_source: "s:${name === "c" ? "a" : name}.md#L1"\n---\n\n# ${name}\n`,
+      );
+    }
+    reindex();
+    const report = await lintCitations(db, sources(dirty));
+    expect(report.uncheckedReasons).toEqual([
+      { detail: "uncommitted changes", citations: 3, paths: ["s:a.md", "s:b.md"] },
+    ]);
   });
 });
 

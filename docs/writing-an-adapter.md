@@ -97,7 +97,8 @@ between "nothing changed" and "I cannot tell". Lint counts unknowns; it does not
 as findings.
 
 The `detail` string is yours to write and is shown to the user verbatim, so make it name the
-document and what was wrong with the pointer.
+document and what was wrong with the pointer. The exception is `unknown`: leave the path out, since
+lint groups unknowns by detail and lists the paths under each group itself.
 
 **A locator is opaque to everything but you.** A file source reads `L142-L158`; a page source
 might read `block-a1b2c3`. If yours is line-oriented, parse it with `parseLineLocator()` from
@@ -142,6 +143,16 @@ the source cannot support. `fs` shipped a `citation()` that named no revision at
 still passed its adapter tests, because the shared suite checked only the path and line
 tail. Both are the same mistake — a citation that satisfies the shape without keeping the
 promise.
+
+The citation the agent pastes does not come from `citation()`. The core's `cite()` builds it
+from your `revision()` and `locate()` and renders it with `formatCitation()`, without pinning
+you: one adapter serves every caller, so a pin set for one lookup would leak into the next. So
+`locate()` must not say `found` for content your `revision()` does not hold. `git` answers
+`unknown` for a file with uncommitted changes, and `cite()` then names no revision. `fs` with
+`extensions` and `git` with `paths` do not yet enforce this (#178).
+
+`locate()` may be called for many places at once, as `lint` does. If each answer costs a process
+or a request, batch the calls that arrive together, as `git` does with one `git status`.
 
 ## Registration
 

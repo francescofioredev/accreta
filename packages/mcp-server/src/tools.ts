@@ -307,7 +307,11 @@ export async function listRecentChangesTool(
   }
 }
 
-const LINT_FIELDS = ["findings[].detail"] as const;
+const LINT_FIELDS = [
+  "findings[].detail",
+  "unchecked_reasons[].detail",
+  "unchecked_reasons[].paths",
+] as const;
 
 export async function lintTool(ctx: ToolContext) {
   const db = ctx.db;
@@ -322,6 +326,7 @@ export async function lintTool(ctx: ToolContext) {
     // looked at.
     citations_checked: citations.citationsChecked,
     citations_unchecked: citations.citationsUnchecked,
+    unchecked_reasons: citations.uncheckedReasons,
     findings,
     _provenance: provenance(LINT_FIELDS),
   };

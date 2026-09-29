@@ -3,7 +3,11 @@ import { lint, lintCitations, openIndex } from "@accreta/core";
 import { findWorkspace } from "../workspace.ts";
 import { loadSources, printJson, provenance, type CommandContext } from "./shared.ts";
 
-const LINT_FIELDS = ["findings[].detail"] as const;
+const LINT_FIELDS = [
+  "findings[].detail",
+  "unchecked_reasons[].detail",
+  "unchecked_reasons[].paths",
+] as const;
 
 // Opens and closes the index itself rather than going through `withIndex`:
 // citation checks read from the sources, and `withIndex` closes the database in
@@ -32,6 +36,7 @@ export async function runLint(
         count: findings.length,
         citations_checked: citations.citationsChecked,
         citations_unchecked: citations.citationsUnchecked,
+        unchecked_reasons: citations.uncheckedReasons,
         findings,
         _provenance: provenance(LINT_FIELDS),
       });
@@ -43,8 +48,13 @@ export async function runLint(
     // found. It is still the size of what this pass did not cover.
     const unchecked =
       citations.citationsUnchecked > 0
-        ? `${citations.citationsUnchecked} citation(s) could not be checked: ` +
-          `their source is one only the agent can read.`
+        ? [
+            `${citations.citationsUnchecked} citation(s) could not be checked:`,
+            ...citations.uncheckedReasons.flatMap((r) => [
+              `  ${r.citations}  ${r.detail}`,
+              `       ${r.paths.slice(0, 5).join(", ")}${r.paths.length > 5 ? `, +${r.paths.length - 5} more` : ""}`,
+            ]),
+          ].join("\n")
         : null;
 
     const checked = `${citations.citationsChecked} citation(s) checked against their source.`;
