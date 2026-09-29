@@ -110,7 +110,16 @@ lint finding. That is the state a knowledge base is in when an agent most needs 
 ```bash
 bun run bench:mcp                            # 10, 100, 1000
 bun run bench:mcp -- --sizes=10,100,1000
+bun run bench:mcp -- --body-bytes=1000       # a page body closer to a real one
 ```
+
+Two figures describe the generator, not accreta, and the output says so:
+
+- **`get_page`** is the page body plus a fixed envelope. Every generated page has the same
+  body, 29,889 bytes by default; the page bodies in `examples/climate` run 462–1,488 bytes.
+  The run prints the body size, and `--body-bytes` sets it.
+- **`find_consumers`** probes a hub that every other page links to. Real link graphs are not
+  stars, so its figure is an upper bound, not a typical case.
 
 The token figure is bytes/4 — a rule of thumb for English prose under a BPE tokenizer. JSON
 punctuation tokenizes worse than prose, so the estimate understates the real count.

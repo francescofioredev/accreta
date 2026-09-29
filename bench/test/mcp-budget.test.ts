@@ -21,3 +21,11 @@ test("every probe hits the corpus, and lint reports one finding per page", async
   expect(row.lintFindings).toBe(10);
   expect(row.lint).toBeGreaterThan(1024);
 });
+
+test("the generated body size is reported, and get_page follows it", async () => {
+  const small = await measure(2, { bodyBytes: 1_000 });
+  const large = await measure(2);
+  expect(small.bodyBytes).toBe(1_000);
+  expect(large.bodyBytes).toBe(29_889);
+  expect(large.getPage - small.getPage).toBe(large.bodyBytes - small.bodyBytes);
+});

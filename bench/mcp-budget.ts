@@ -17,10 +17,10 @@
  * a single text block, per `packages/mcp-server/src/server.ts` — because the two-space
  * indentation is itself paid for in tokens.
  */
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildIndex, openIndex, parseConfig, type AccretaConfig } from "@accreta/core";
+import { buildIndex, openIndex, parseConfig, parsePage, type AccretaConfig } from "@accreta/core";
 import {
   findCanonicalTool,
   findConsumersTool,
@@ -38,6 +38,17 @@ const SIZES = ((): number[] => {
   if (sizes.some((n) => !Number.isInteger(n) || n < 2)) throw new Error("--sizes: integers >= 2");
   return sizes;
 })();
+
+// Undefined keeps the 400-sentence body ADR-0007's table was measured with.
+const BODY_BYTES = ((): number | undefined => {
+  const arg = process.argv.find((a) => a.startsWith("--body-bytes="));
+  if (!arg) return undefined;
+  const bytes = Number(arg.slice("--body-bytes=".length));
+  if (!Number.isInteger(bytes) || bytes < 1) throw new Error("--body-bytes: an integer >= 1");
+  return bytes;
+})();
+
+const DEMO_KB = join(import.meta.dir, "..", "examples", "climate", "knowledge");
 
 const CONFIG_YAML = `knowledge_base: knowledge
 page_types: [note, source, concept, decision, synthesis]
@@ -77,6 +88,7 @@ interface Corpus {
   root: string;
   hubPath: string;
   lintFindings: number;
+  bodyBytes: number;
 }
 
 /**
@@ -84,16 +96,20 @@ interface Corpus {
  * half the pages lack provenance and a verified revision, two lint findings each, which
  * is not pessimistic — it is what a half-finished ingest looks like.
  */
-function generate(n: number): Corpus {
+function generate(n: number, bodyBytes?: number): Corpus {
   const root = mkdtempSync(join(tmpdir(), "accreta-mcp-budget-"));
   const knowledge = join(root, "knowledge");
   mkdirSync(knowledge, { recursive: true });
   writeFileSync(join(root, "accreta.config.yaml"), CONFIG_YAML);
 
-  const body = Array.from(
-    { length: 400 },
-    (_, i) => `Sentence ${i} about radiative forcing, feedback strength and carbon budget.`,
-  ).join(" ");
+  const sentence = (i: number) =>
+    `Sentence ${i} about radiative forcing, feedback strength and carbon budget.`;
+  let body = Array.from({ length: 400 }, (_, i) => sentence(i)).join(" ");
+  if (bodyBytes !== undefined) {
+    for (let i = 400; body.length < bodyBytes; i++) body += ` ${sentence(i)}`;
+    // ASCII, so one character is one byte.
+    body = body.slice(0, bodyBytes);
+  }
 
   for (let i = 0; i < n; i++) {
     const id = String(i).padStart(6, "0");
@@ -122,13 +138,20 @@ ${body}
     );
   }
   // Odd pages: missing-provenance and unverified-page. `related_dangling` is not a link field.
-  return { root, hubPath: "knowledge/page-000000.md", lintFindings: 2 * Math.floor(n / 2) };
+  return {
+    root,
+    hubPath: "knowledge/page-000000.md",
+    lintFindings: 2 * Math.floor(n / 2),
+    bodyBytes: Buffer.byteLength(body, "utf-8"),
+  };
 }
 
 export interface Row {
   pages: number;
   search: number;
   getPage: number;
+  /** The generated prose in every page, which get_page's figure is made of. */
+  bodyBytes: number;
   findConsumers: number;
   findCanonical: number;
   lint: number;
@@ -138,8 +161,8 @@ export interface Row {
   findConsumersPaged: boolean;
 }
 
-export async function measure(size: number): Promise<Row> {
-  const corpus = generate(size);
+export async function measure(size: number, options: { bodyBytes?: number } = {}): Promise<Row> {
+  const corpus = generate(size, options.bodyBytes);
   try {
     const config: AccretaConfig = parseConfig(CONFIG_YAML);
     const indexPath = join(corpus.root, ".accreta", "index.sqlite");
@@ -178,6 +201,7 @@ export async function measure(size: number): Promise<Row> {
         pages: size,
         search: serialize("search_pages", search),
         getPage: serialize("get_page", page),
+        bodyBytes: corpus.bodyBytes,
         findConsumers: serialize("find_consumers", consumers),
         findCanonical: serialize("find_canonical", canonical),
         lint: serialize("lint_knowledge_base", lintResult),
@@ -201,16 +225,34 @@ const tok = (bytes: number) => {
   return t >= 1000 ? `${(t / 1000).toFixed(1)}k` : String(t);
 };
 
+/** Body bytes of the demo pages, parsed as the indexer parses them, for scale. */
+function demoBodyRange(): string {
+  const sizes = readdirSync(DEMO_KB, { recursive: true })
+    .map(String)
+    .filter((f) => f.endsWith(".md"))
+    .map((f) => Buffer.byteLength(parsePage(readFileSync(join(DEMO_KB, f), "utf-8"), f).body));
+  if (sizes.length === 0) return "no demo pages to compare with";
+  const n = (x: number) => x.toLocaleString("en-US");
+  return `real page bodies in examples/climate run ${n(Math.min(...sizes))}-${n(Math.max(...sizes))}`;
+}
+
 async function main(): Promise<void> {
   console.log(`platform: ${process.platform} ${process.arch}, bun ${Bun.version}`);
   console.log(`token estimate: bytes/4 (understates JSON; see the comment in this file)`);
-  console.log(`sizes: ${SIZES.join(", ")}\n`);
+  console.log(`sizes: ${SIZES.join(", ")}`);
 
   const rows: Row[] = [];
   for (const size of SIZES) {
     process.stderr.write(`  measuring ${size} pages...\n`);
-    rows.push(await measure(size));
+    rows.push(await measure(size, { bodyBytes: BODY_BYTES }));
   }
+
+  const body = rows[0]!.bodyBytes.toLocaleString("en-US");
+  console.log(`body size: ${body} bytes (generated; ${demoBodyRange()}; set with --body-bytes=N)`);
+  console.log("  get_page is that body plus a fixed envelope: its figure describes the generator.");
+  console.log(
+    "  find_consumers probes the hub of a star graph, so its figure is an upper bound.\n",
+  );
 
   console.log("RESPONSE SIZE (bytes as serialized by the server)");
   console.log("  pages   search    get_page  find_consumers  find_canonical      lint  findings");
