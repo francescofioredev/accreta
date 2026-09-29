@@ -40,7 +40,7 @@ Two things follow that are less obvious than the interface itself.
 
 An adapter asked about a revision it cannot place throws `UnknownRevisionError` rather than
 returning an empty array. A rewritten history, a shallow clone, a revision from a different
-repository, or — for `fs` — a revision from a previous process all land here.
+repository, or — for `fs` — a revision whose saved listing is gone all land here.
 
 Returning `[]` would mean "nothing changed", and drift detection would render a page as
 verified when it has no way to know. **"I cannot tell" and "nothing changed" are different
@@ -114,9 +114,63 @@ should be versioned by something that versions contents, which is what the git a
 
 - `fs` cannot see a change that preserves modification times. Stated in the adapter's
   documentation rather than left to be discovered.
-- `fs` revisions do not survive a process restart: `changedSince` needs the old listing to
-  diff against and a hash cannot be inverted. It reports `UnknownRevisionError` rather than
-  guessing, which is the honest answer and the one a caller can act on.
+- `changedSince` on `fs` needs the old listing to diff against, and a hash cannot be
+  inverted. Without that listing it reports `UnknownRevisionError` rather than guessing,
+  which is the honest answer and the one a caller can act on.
+  *Amended 2026-09-29 (#125):* the listings used to live only in memory, so every CLI run
+  was a new process and a changed `fs` source never read as stale, only as unplaceable. They
+  are now saved in the state directory the registry passes, beside the index, as
+  `fs-snapshots/<16-hex prefix of sha256(id)>/<revision>.json`, self-gitignored. Each is
+  checked against its own hash when read. A missing, pruned or damaged listing is still
+  `UnknownRevisionError`. Unlike the index they cannot be rebuilt: losing them costs
+  re-verification, never correctness.
+
+  **Pruning rule.** This is the one statement of it; other documents link here.
+  - Every `revision()` starts a run. It moves `.last-run` to `.prev-run` and touches
+    `.last-run`, so the directory remembers when the last two runs started.
+  - A snapshot either of those runs wrote or read has an mtime at or after the earlier start,
+    and is never evicted. Drift reads every cited revision, and a read refreshes the file even
+    when a long-lived process answers it from memory. So what pages cite stays in that
+    protected set, however long the corpus sits idle.
+  - Two generations, not one, because a run that reads nothing (overlapping, or aborted after
+    `revision()`) would otherwise leave every cited snapshot unprotected. Measured in review:
+    10 of 10 were lost to one such run.
+  - Every time the prune compares is set by accreta from one clock: markers, reads and
+    writes alike. Linux stamps a write from a coarser clock, and in CI that dated a snapshot
+    0.39 ms before the marker of the run that wrote it.
+  - Anything else is evicted oldest first, and only while the source's snapshots exceed
+    64 MiB. If the protected set alone exceeds it, it is kept, and `accreta doctor` says so.
+  - A snapshot over 64 MiB is never written, because it could never be read back. That is
+    about 1.4M files at the 35–59 bytes per file measured in review. Such a source reads
+    "cannot place", and doctor says why.
+
+  **The state directory.** Git stores symlinks, so a committed link could aim the writes and
+  the prune anywhere.
+  - The default `<root>/.accreta` is checked as written. One chosen through
+    `ACCRETA_INDEX_PATH` is resolved first, because the operator chose it.
+  - From there down, every step must be a real directory. The two that accreta creates,
+    `fs-snapshots` and `<hash>`, must also be this user's and writable by nobody else.
+    Otherwise persistence is off and doctor says why. Ownership is not checked on Windows,
+    which has no `getuid`.
+  - The state dir itself is held to less, so an index in `/tmp` or under umask 002 still
+    keeps snapshots.
+    - A group-writable state dir is accepted. That is trust in the group, which is what
+      umask 002 already expresses.
+    - A world-writable state dir must be sticky, or anyone could rename our directories and
+      race the checks. Measured in review at mode 0777: 23 snapshots and 12 staging files
+      landed in a victim directory in 20 s.
+    - A sticky state dir must be owned by this user or root, as `/tmp` is.
+  - That is enough. Inside such a parent, only we, the parent's owner, or root can rename our
+    0700 directories. Whatever sits at those names is checked again on every open, so a
+    replacement that is not ours, or a symlink, turns persistence off rather than being
+    written to.
+  - Directories are created 0700 and files 0600, so a shared machine does not expose the
+    corpus's file names.
+  - Prune removes only regular files with its own names. Snapshots are opened without
+    following links or blocking.
+- A revision must be placeable by a new instance of the adapter. If it cannot be, throw
+  `UnknownRevisionError`, and the conformance suite will fail. Every CLI run is a new
+  process, so an adapter that only remembers in memory has no drift from the CLI.
 - Adding a source type touches no existing file except the one that registers it.
 - An adapter must be pinned before its citations mean anything. Unpinned it renders
   `UNPINNED_REVISION`, which is checkable and honest, rather than a plausible-looking

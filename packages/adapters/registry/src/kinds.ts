@@ -1,7 +1,7 @@
-import { existsSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, realpathSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { SourceAdapter, SourceDeclaration } from "@accreta/core";
-import { FsSource } from "@accreta/adapter-fs";
+import { FsSource, SNAPSHOT_BUDGET_BYTES, snapshotHealth } from "@accreta/adapter-fs";
 import { GitSource, isWorkingTree } from "@accreta/adapter-git";
 import { DelegatedSource } from "@accreta/adapter-delegated";
 
@@ -10,6 +10,8 @@ export interface SourceContext {
   root: string;
   /** `provenance.format`, handed to every adapter as its citation template. */
   citationFormat: string;
+  /** Where adapters keep local state: the index's directory, from `stateDirFor`. */
+  stateDir: string;
 }
 
 /** What the agent, rather than accreta, has to be able to reach. */
@@ -57,6 +59,20 @@ function rootOf(declaration: SourceDeclaration, ctx: SourceContext): string {
   return join(ctx.root, String(declaration.options.root ?? "."));
 }
 
+/**
+ * The index's directory. The default is kept as written so a committed `.accreta` symlink is
+ * caught; one the operator chose through ACCRETA_INDEX_PATH is resolved, symlinks and all.
+ */
+export function stateDirFor(root: string, indexPath: string): string {
+  const dir = dirname(indexPath);
+  if (dir === join(root, ".accreta")) return dir;
+  try {
+    return realpathSync(dir);
+  } catch {
+    return dir;
+  }
+}
+
 /** Both file-backed kinds want the same answer about their root. */
 function checkDirectory(root: string): Preflight | null {
   if (!existsSync(root)) {
@@ -77,8 +93,11 @@ const fsKind: SourceKind = {
   template: (id) => `# A directory of documents.
 #
 # The revision is a hash of modification times, so a change that preserves them
-# is invisible to this source. Revisions also do not survive a restart — a hash
-# cannot be inverted — so \`drift\` reports "cannot place" rather than guessing.
+# is invisible to this source. The listing behind each revision is kept in
+# fs-snapshots/ beside the index. Every revision a page cites is kept, and older
+# ones are pruned past ${SNAPSHOT_BUDGET_BYTES / 1024 / 1024} MiB. A revision whose
+# listing is gone is reported as "cannot place" rather than guessed at.
+# \`accreta doctor\` says when snapshots cannot be kept, and why.
 # A corpus that needs content-level certainty wants \`type: git\`.
 
 id: ${id}
@@ -92,10 +111,29 @@ extensions: [".md"]
       root: rootOf(d, ctx),
       citationFormat: ctx.citationFormat,
       extensions: stringsOr(d.options.extensions),
+      stateDir: ctx.stateDir,
     }),
   preflight: async (d, ctx) => {
     const root = rootOf(d, ctx);
-    return checkDirectory(root) ?? { reachable: "yes", detail: `${root} is readable` };
+    const bad = checkDirectory(root);
+    if (bad) return bad;
+    const health = snapshotHealth({
+      id: d.id,
+      root,
+      citationFormat: ctx.citationFormat,
+      extensions: stringsOr(d.options.extensions),
+      stateDir: ctx.stateDir,
+    });
+    if (!health.persists) {
+      return {
+        reachable: "yes",
+        detail: `${root} is readable, but snapshots cannot persist: ${health.detail}`,
+        remedy:
+          "Until this is fixed, drift from a new process reports this source as cannot place.",
+      };
+    }
+    const note = health.detail ? `; snapshots: ${health.detail}` : "";
+    return { reachable: "yes", detail: `${root} is readable${note}` };
   },
 };
 

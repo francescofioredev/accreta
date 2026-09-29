@@ -1,12 +1,23 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { snapshotDirFor } from "@accreta/adapter-fs";
 import {
   buildRegistry,
+  kindFor,
   loadSources,
   readDeclarationFiles,
   readDeclarations,
+  stateDirFor,
   unloadedFindings,
 } from "../src/index.ts";
 
@@ -25,7 +36,11 @@ function writeSource(name: string, yaml: string): void {
   writeFileSync(join(root, "sources", name), yaml, "utf-8");
 }
 
-const ctx = () => ({ root, citationFormat: "{source} @ {rev} · {path}#{locator}" });
+const ctx = () => ({
+  root,
+  citationFormat: "{source} @ {rev} · {path}#{locator}",
+  stateDir: join(root, ".accreta"),
+});
 
 describe("loadSources", () => {
   test("every declaration in sources/ becomes an adapter, keyed by id", () => {
@@ -163,5 +178,73 @@ describe("buildRegistry", () => {
 
     const docs = loadSources(ctx()).sources.get("docs")!;
     expect(docs.locate("chapter.md", "L1")).resolves.toEqual({ verdict: "found" });
+  });
+});
+
+describe("fs snapshots", () => {
+  test("land beside the index, one directory per source", async () => {
+    mkdirSync(join(root, "corpus"), { recursive: true });
+    writeFileSync(join(root, "corpus", "chapter.md"), "one\n", "utf-8");
+    writeSource("docs.yaml", "id: docs\ntype: fs\nroot: corpus\n");
+
+    const revision = await loadSources(ctx()).sources.get("docs")!.revision();
+    const file = join(snapshotDirFor(join(root, ".accreta"), "docs"), `${revision}.json`);
+    expect(existsSync(file)).toBe(true);
+  });
+
+  test("follow the state directory the surface passes", async () => {
+    mkdirSync(join(root, "corpus"), { recursive: true });
+    writeFileSync(join(root, "corpus", "chapter.md"), "one\n", "utf-8");
+    writeSource("docs.yaml", "id: docs\ntype: fs\nroot: corpus\n");
+    const stateDir = join(root, "elsewhere");
+
+    const revision = await loadSources({ ...ctx(), stateDir })
+      .sources.get("docs")!
+      .revision();
+    expect(existsSync(join(snapshotDirFor(stateDir, "docs"), `${revision}.json`))).toBe(true);
+  });
+
+  test("any id persists, whatever a filesystem thinks of it as a name", async () => {
+    mkdirSync(join(root, "corpus"), { recursive: true });
+    writeFileSync(join(root, "corpus", "chapter.md"), "one\n", "utf-8");
+    const stateDir = join(root, ".accreta");
+    const base = join(stateDir, "fs-snapshots");
+
+    for (const id of ["docs\uD800", "文".repeat(40), "..", "../../etc", "a/b"]) {
+      const adapter = buildRegistry(ctx()).create({ id, type: "fs", options: { root: "corpus" } });
+      const revision = await adapter.revision();
+      expect(dirname(snapshotDirFor(stateDir, id))).toBe(base);
+      expect(existsSync(join(snapshotDirFor(stateDir, id), `${revision}.json`))).toBe(true);
+    }
+  });
+});
+
+describe("stateDirFor", () => {
+  test("the default is kept as written, so a committed symlink there is still caught", () => {
+    const real = join(root, "real");
+    mkdirSync(real);
+    symlinkSync(real, join(root, ".accreta"));
+    expect(stateDirFor(root, join(root, ".accreta", "index.sqlite"))).toBe(join(root, ".accreta"));
+  });
+
+  test("a directory the operator chose is resolved through its symlinks", () => {
+    const real = join(root, "real");
+    mkdirSync(real);
+    symlinkSync(real, join(root, "link"));
+    expect(stateDirFor(root, join(root, "link", "kb.sqlite"))).toBe(realpathSync(real));
+  });
+});
+
+describe("fs preflight", () => {
+  test("says when snapshots cannot persist, and why", async () => {
+    mkdirSync(join(root, "corpus"));
+    mkdirSync(join(root, ".accreta"));
+    symlinkSync(join(root, "corpus"), join(root, ".accreta", "fs-snapshots"));
+    const declaration = { id: "docs", type: "fs", options: { root: "corpus" } };
+
+    const preflight = await kindFor("fs")!.preflight(declaration, ctx());
+    expect(preflight.reachable).toBe("yes");
+    expect(preflight.detail).toContain("snapshots cannot persist:");
+    expect(preflight.detail).toContain("is a symlink");
   });
 });

@@ -59,6 +59,8 @@ and merge conflicts nobody can resolve. Gitignored instead.
   markdown with citations.
 - A rebuild is required after any write, and the CLI says so rather than hiding it.
 - The index can be deleted at any time with no loss. `accreta reindex` restores it.
+  *Exception (#125):* `fs-snapshots/`, beside the index, cannot be rebuilt. Deleting it
+  loses no knowledge, but pages verified against an `fs` source must be re-verified.
 - A reader holding an open connection across a rebuild must reopen; the behaviour differs by
   platform and the tests assert only what holds everywhere. See `docs/architecture.md`.
 - Rebuild cost grows linearly with corpus size. At a few hundred pages it is imperceptible;

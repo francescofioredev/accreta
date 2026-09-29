@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { openIndex, type SourceAdapter } from "@accreta/core";
 import {
   loadSources as loadDeclaredSources,
+  stateDirFor,
   type Preflight,
   type UnloadedSource,
 } from "@accreta/adapters";
@@ -21,6 +22,7 @@ export function loadSources(workspace: Workspace): {
   const loaded = loadDeclaredSources({
     root: workspace.root,
     citationFormat: workspace.config.provenanceFormat,
+    stateDir: stateDirFor(workspace.root, workspace.indexPath),
   });
   return { sources: [...loaded.sources.values()], unloaded: loaded.unloaded };
 }

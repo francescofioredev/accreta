@@ -77,17 +77,27 @@ interface Fixture {
    * against, and who said it is a different question.
    */
   verifiedRevision: () => Promise<string>;
+  /** The same source as a new process would build it: nothing shared in memory. */
+  reopen: () => SourceAdapter;
 }
 
 async function fsFixture(): Promise<Fixture> {
   const dir = join(root, "fs-source");
   mkdirSync(dir, { recursive: true });
   write(dir, "chapter-07.md", "one", 1000);
-  const adapter = new FsSource({ id: "src", root: dir, citationFormat: CITATION });
+  const open = () =>
+    new FsSource({
+      id: "src",
+      root: dir,
+      citationFormat: CITATION,
+      stateDir: join(root, ".accreta"),
+    });
+  const adapter = open();
   return {
     adapter,
     advance: async () => write(dir, "chapter-07.md", "two", 2000),
     verifiedRevision: () => adapter.revision(),
+    reopen: open,
   };
 }
 
@@ -102,7 +112,8 @@ async function gitFixture(): Promise<Fixture> {
   await git(dir, ["add", "-A"]);
   await git(dir, ["commit", "-q", "-m", "first"]);
 
-  const adapter = new GitSource({ id: "src", root: dir, citationFormat: CITATION });
+  const open = () => new GitSource({ id: "src", root: dir, citationFormat: CITATION });
+  const adapter = open();
   return {
     adapter,
     advance: async () => {
@@ -111,21 +122,24 @@ async function gitFixture(): Promise<Fixture> {
       await git(dir, ["commit", "-q", "-m", "second"]);
     },
     verifiedRevision: () => adapter.revision(),
+    reopen: open,
   };
 }
 
 async function delegatedFixture(): Promise<Fixture> {
-  const adapter = new DelegatedSource({
-    id: "src",
-    via: "notion",
-    scope: "The Design decisions page and everything below it.",
-    citationFormat: CITATION,
-  });
+  const open = () =>
+    new DelegatedSource({
+      id: "src",
+      via: "notion",
+      scope: "The Design decisions page and everything below it.",
+      citationFormat: CITATION,
+    });
   // Nothing to advance: a source accreta cannot read is also one it cannot move.
   return {
-    adapter,
+    adapter: open(),
     advance: async () => {},
     verifiedRevision: async () => "2026-08-01T10:22:00Z",
+    reopen: open,
   };
 }
 
@@ -237,6 +251,20 @@ for (const [name, makeFixture] of QUESTIONABLE) {
       expect(report.stale.flatMap((entry) => entry.pages)).toEqual(["knowledge/a.md"]);
       expect(report.stale[0]?.changedPaths).toEqual(["chapter-07.md"]);
       expect(report.currentRevision).not.toBe(verifiedAt);
+    });
+
+    test("a page goes stale for an adapter that did not see the revision taken", async () => {
+      const { adapter, advance, reopen } = await makeFixture();
+      const verifiedAt = await adapter.revision();
+      addPage("knowledge/a.md", "src", verifiedAt);
+
+      await advance();
+
+      // Every CLI run is a new process, so the revision was taken by a different instance.
+      const report = await detectDrift(db, reopen());
+      expect(report.unresolvable).toEqual([]);
+      expect(report.stale.flatMap((entry) => entry.pages)).toEqual(["knowledge/a.md"]);
+      expect(report.stale[0]?.changedPaths).toEqual(["chapter-07.md"]);
     });
 
     test("a page recording no revision is unverifiable", async () => {

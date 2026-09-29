@@ -59,8 +59,23 @@ the single most important thing to get right in an adapter, and the easiest to g
 because an empty array is what a stub returns.
 
 Real cases: rewritten history, a shallow clone that lacks the commit, a revision from a
-different source, and — for `fs` — any revision from a previous process, since a hash cannot
-be inverted.
+different source, and — for `fs` — a revision whose saved listing is missing, pruned or
+damaged, since a hash cannot be inverted.
+
+**A revision must be placeable by a new instance of the adapter.** Every CLI run is a new
+process. If a new instance cannot place a revision, throw `UnknownRevisionError`, and the
+conformance suite will fail.
+
+**If you keep state to answer this, keep it in `ctx.stateDir`.** The registry hands every
+adapter the directory the index lives in, so state follows `ACCRETA_INDEX_PATH`. `fs` saves
+each listing under `fs-snapshots/` there. Unlike the index, this state cannot be rebuilt:
+losing it costs re-verification, never correctness. So write it atomically (a unique staging
+name, then rename), bound it, and verify it when you read it back. A damaged file must read as
+"I cannot tell", never as an answer. Never prune what the last run used: that is what pages
+cite. Treat the directory as hostile too. Git stores symlinks, so refuse a symlinked step, and
+delete only files you can recognize as your own. Open files without following links or
+blocking. `fs` does all of this; its rules are in
+[ADR-0002](adr/0002-source-adapter-interface.md#consequences).
 
 **Scope the source to what it actually contains.** If several sources live inside one
 repository or one tree, a source that reports the whole tree's revision drifts every page
@@ -208,6 +223,8 @@ the abstraction is leaking and that is worth knowing before the code merges.
 You provide a fixture: a source at an initial revision, and a way to move it forward. The
 suite pins your adapter, moves the source, and asserts the citation still names the pinned
 revision — so the property above is checked for you rather than left to your own tests.
+It also rebuilds your adapter with `reopen()` after the source moves, and expects the fresh
+instance to report the page stale.
 
 ## Before you write one
 

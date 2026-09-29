@@ -102,8 +102,11 @@ What `delegated` costs, so you can decide with it in view:
 Two `fs` consequences to state plainly, because they surprise people:
 
 - A change that preserves mtime is invisible.
-- **A revision does not survive a process restart.** `accreta drift` will report
-  `unresolvable` for pages verified in an earlier run. That is the system saying *I cannot
+- **An old revision can become unplaceable.** Each revision's file listing is saved in
+  `fs-snapshots/` beside the index. Revisions pages cite are kept, and older ones are pruned
+  (the rule is in [ADR-0002](https://github.com/francescofioredev/accreta/blob/main/docs/adr/0002-source-adapter-interface.md#consequences)).
+  `accreta drift` reports `unresolvable` for a revision whose listing is gone, and
+  `accreta doctor` says when listings cannot be saved at all. That is the system saying *I cannot
   tell*, which is correct and is not the same as *nothing changed*. Do not treat it as a bug.
 
 `id` matters: it appears in every citation and in each page's `source` field. Pick the name
@@ -273,6 +276,6 @@ pages verified against it.
 |---|---|
 | `No accreta.config.yaml found` | not inside the knowledge base; `cd` there or set `ACCRETA_ROOT` |
 | `No index at …` | run `accreta reindex` |
-| everything reports `unresolvable` | expected for `fs` after a restart — re-verify, or use `git` |
+| everything reports `unresolvable` | expected for an `fs` revision whose saved listing is gone (pruned or deleted) — re-verify, or use `git` |
 | a page is missing from search | check `accreta lint`; a page whose frontmatter will not parse still indexes but loses its fields — `unparseable-frontmatter` names the line |
 | `consumers` returns fewer pages than expected | broken links — `accreta lint` names them |
