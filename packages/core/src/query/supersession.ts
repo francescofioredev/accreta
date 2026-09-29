@@ -30,15 +30,14 @@ export function supersessionFindings(db: Database, config: AccretaConfig): LintF
   const { supersedes, supersededBy } = fields;
 
   const missing = [supersedes, supersededBy].filter((field) => !config.linkFields.includes(field));
+  // Unset, a knowledge base without the default pair simply does not use supersession.
+  if (missing.length > 0 && !config.supersessionFields) return [];
   if (missing.length > 0) {
-    const named = config.supersessionFields
-      ? "supersession_fields names"
-      : "supersession_fields is not set, and its default pair names";
     return [
       {
         kind: KIND,
         path: "accreta.config.yaml",
-        detail: `${named} ${missing.join(" and ")}, which link_fields does not list, so supersession is not checked; name the pair in supersession_fields, or set it to false`,
+        detail: `supersession_fields names ${missing.join(" and ")}, which link_fields does not list, so supersession is not checked; add it to link_fields, or set supersession_fields to false`,
       },
     ];
   }

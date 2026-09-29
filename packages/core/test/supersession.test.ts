@@ -163,21 +163,19 @@ describe("supersession_fields", () => {
     expect(findings[0]!.detail).toContain("no replaced_by");
   });
 
-  test("unset, with the default pair not in link_fields, lint says once that it did not check", () => {
+  test("unset, with the default pair not in link_fields, the check does not apply and lint is clean", () => {
     const plain: AccretaConfig = { ...config, linkFields: ["related"] };
     writePage("a", { supersedes: "[[b]]" });
     writePage("b", { supersedes: "[[a]]" });
 
-    const findings = supersessionFindings(plain);
+    expect(supersessionFindings(plain)).toEqual([]);
+    expect(lint(db!, plain).findings).toEqual([]);
+  });
 
-    expect(findings).toEqual([
-      {
-        kind: "inconsistent-supersession",
-        path: "accreta.config.yaml",
-        detail:
-          "supersession_fields is not set, and its default pair names supersedes and superseded_by, which link_fields does not list, so supersession is not checked; name the pair in supersession_fields, or set it to false",
-      },
-    ]);
+  test("unset, with only one default field in link_fields, the check does not apply either", () => {
+    writePage("a", { supersedes: "[[b]]" });
+    writePage("b", {});
+    expect(supersessionFindings({ ...config, linkFields: ["supersedes"] })).toEqual([]);
   });
 
   test("a pair naming a field that is not a link field is a config finding", () => {

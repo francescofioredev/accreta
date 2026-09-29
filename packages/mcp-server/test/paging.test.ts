@@ -24,7 +24,6 @@ const config: AccretaConfig = {
   knowledgeBase: "knowledge",
   pageTypes: ["note"],
   linkFields: ["related"],
-  supersessionFields: null,
 };
 
 // Every page links to the hub, shares an alias, and lacks provenance: all three lists exceed a page.
