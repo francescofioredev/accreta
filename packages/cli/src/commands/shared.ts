@@ -85,6 +85,7 @@ export const COMMAND_ARGS: Readonly<Record<string, CommandArgs>> = {
     maxPositional: 1,
   },
   canonical: { flags: ["--json", "--limit", "--cursor"], maxPositional: Infinity },
+  cite: { flags: ["--expect-revision", "--json"], maxPositional: 1 },
   mcp: { flags: [], maxPositional: 1 },
 };
 

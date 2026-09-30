@@ -36,6 +36,11 @@ const PROBES: Record<string, Probe[]> = {
     { source: "lines", since: "rev1" },
   ],
   lint_knowledge_base: [{}],
+  cite: [
+    { target: "docs:ch01.md#L1" },
+    { target: "docs:ch01.md#L999" },
+    { target: "quoting:p#b1" },
+  ],
   [WRITE_TOOL]: [
     { path: "concepts/injected", revision: "deadbeef" },
     (dryRun) => ({
@@ -78,6 +83,16 @@ const DELEGATED_SOURCE: SourceAdapter = {
   },
   changedSince: async () => [],
   locate: async () => ({ verdict: "unknown", detail: "only the agent can read this source" }),
+  citation: () => "",
+  pinRevision: () => {},
+};
+
+// Quotes the source in its locate detail, as git's stderr can, so cite's location.detail carries text accreta did not write.
+const QUOTING_SOURCE: SourceAdapter = {
+  id: "quoting",
+  revision: async () => "rev1",
+  changedSince: async () => [],
+  locate: async () => ({ verdict: "missing", part: "locator", detail: "no CANARY-QUOTED block" }),
   citation: () => "",
   pinRevision: () => {},
 };
@@ -230,6 +245,7 @@ describe("every tool response, against pages that try to give instructions", () 
     const ctx = contextWith("1");
     ctx.sources.set("lines", DIFFING_SOURCE);
     ctx.sources.set("agent", DELEGATED_SOURCE);
+    ctx.sources.set("quoting", QUOTING_SOURCE);
     const client = await connect(ctx);
     try {
       capabilities = client.getServerCapabilities() ?? {};

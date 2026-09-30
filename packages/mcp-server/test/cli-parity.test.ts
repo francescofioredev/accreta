@@ -16,6 +16,7 @@ const CLI_TWIN: Record<string, string> = {
   find_canonical: "canonical",
   lint_knowledge_base: "lint",
   check_drift: "drift",
+  cite: "cite",
 };
 
 // Twins whose `--json` is another issue's work, so their shape is not compared yet.
@@ -98,6 +99,26 @@ const CASES: Case[] = [
   },
   { tool: "find_canonical", args: { term: "nothing" }, argv: ["canonical", "nothing"], code: 0 },
   { tool: "lint_knowledge_base", args: {}, argv: ["lint"], code: 1 },
+  {
+    tool: "cite",
+    args: { target: "docs:forcing.md#L2" },
+    argv: ["cite", "docs:forcing.md#L2"],
+    code: 0,
+  },
+  {
+    tool: "cite",
+    args: { target: "docs:forcing.md#L9" },
+    argv: ["cite", "docs:forcing.md#L9"],
+    code: 1,
+  },
+  { tool: "cite", args: { target: "repo:a.md#L1" }, argv: ["cite", "repo:a.md#L1"], code: 0 },
+  { tool: "cite", args: { target: "repo:dirty.md" }, argv: ["cite", "repo:dirty.md"], code: 0 },
+  {
+    tool: "cite",
+    args: { target: "wiki:design-page#block-a1" },
+    argv: ["cite", "wiki:design-page#block-a1"],
+    code: 0,
+  },
 ];
 
 // Each would once have been ignored or misread, and answered as if it had run.
@@ -128,9 +149,18 @@ const REFUSED: { argv: string[]; says: string }[] = [
   { argv: ["source", "add", "fs", "x", "--set", "novalue"], says: "--set takes key=value" },
   { argv: ["source", "add", "nosuchtype", "x"], says: "Unknown source type" },
   { argv: ["source", "remove", "docs"], says: "Usage: accreta source add" },
+  { argv: ["cite"], says: "Usage: accreta cite" },
+  { argv: ["cite", "forcing.md"], says: "is not source:path[#locator]" },
+  { argv: ["cite", "docs:forcing.md", "repo:a.md"], says: 'cite does not take "repo:a.md"' },
+  { argv: ["cite", "docs:forcing.md", "--limit", "1"], says: "cite does not take --limit" },
+  {
+    argv: ["cite", "docs:forcing.md", "--expect-revision"],
+    says: "--expect-revision needs a value",
+  },
 ];
 
 let root = "";
+let head = "";
 let ctx: ToolContext;
 let client: Client;
 
@@ -143,11 +173,13 @@ function write(relativePath: string, contents: string): void {
 async function cli(argv: string[]) {
   const out: string[] = [];
   const err: string[] = [];
-  const code = await run(argv, {
+  const io = {
     cwd: root,
-    out: (line) => out.push(line),
-    err: (line) => err.push(line),
-  });
+    out: (line: string) => out.push(line),
+    err: (line: string) => err.push(line),
+  };
+  // As main.ts does outside `run`: a thrown refusal is its message on stderr and exit 1.
+  const code = await run(argv, io).catch((error: Error) => (io.err(error.message), 1));
   return { code, stdout: out.join("\n"), stderr: err.join("\n") };
 }
 
@@ -172,6 +204,24 @@ beforeAll(async () => {
   write("sources/docs.yaml", "id: docs\ntype: fs\nroot: src-docs\n");
   write("sources/typo.yaml", "id: typo\ntype: fss\n");
   write("src-docs/forcing.md", "one\ntwo\nthree\n");
+  write("sources/repo.yaml", "id: repo\ntype: git\nroot: src-repo\n");
+  write("src-repo/a.md", "alpha\n");
+  write("src-repo/dirty.md", "committed\n");
+  const repo = join(root, "src-repo");
+  for (const args of [
+    ["init", "-q"],
+    ["add", "."],
+    ["commit", "-qm", "first"],
+  ]) {
+    const identity = ["-c", "user.name=T", "-c", "user.email=t@example.invalid"];
+    expect(Bun.spawnSync(["git", ...identity, ...args], { cwd: repo }).exitCode).toBe(0);
+  }
+  head = Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: repo }).stdout.toString().trim();
+  write("src-repo/dirty.md", "edited, not committed\n");
+  write(
+    "sources/wiki.yaml",
+    "id: wiki\ntype: delegated\nvia: notion\nscope: |\n  The design pages.\n",
+  );
   write(
     "knowledge/concepts/forcing.md",
     '---\ntype: concept\nsource: docs\naliases: [RF, radiative forcing, "-O2"]\n' +
@@ -264,6 +314,99 @@ describe("--json matches the MCP tool field for field", () => {
     expect(lint.count).toBeGreaterThan(0);
     expect(lint.citations_checked).toBeGreaterThan(0);
     expect(lint.findings.map((f: { kind: string }) => f.kind)).toContain("unloaded-source");
+  });
+});
+
+describe("cite", () => {
+  const cited = async (argv: string[]) => JSON.parse((await cli([...argv, "--json"])).stdout);
+
+  // Fixture guard: the parity cases above are only worth something if each source answers as its kind should.
+  test("fs and git pin a revision where they could check the place", async () => {
+    const fs = await cited(["cite", "docs:forcing.md#L2"]);
+    expect(fs.location).toEqual({ verdict: "found" });
+    expect(fs.revision).toMatch(/\S/);
+    expect(fs.footnote).toBe(`docs @ ${fs.revision} · forcing.md#L2`);
+
+    const git = await cited(["cite", "repo:a.md#L1"]);
+    expect(git.revision).toBe(head);
+    expect(git.canonical_source).toBe("repo:a.md#L1");
+
+    const dirty = await cited(["cite", "repo:dirty.md"]);
+    expect(dirty.revision).toBeNull();
+    expect(dirty.location.verdict).toBe("unknown");
+  });
+
+  test("a delegated source says it cannot pin a revision rather than inventing one", async () => {
+    const out = await cited(["cite", "wiki:design-page#block-a1"]);
+    expect(out.revision).toBeNull();
+    expect(out.footnote).toBe("wiki @ unknown · design-page#block-a1");
+    expect(out.location.verdict).toBe("unknown");
+    expect(out.delegated).toEqual({ via: "notion", scope: "The design pages.\n" });
+  });
+
+  test("the expected revision passes when the source has not moved", async () => {
+    const fromCli = await cli(["cite", "repo:a.md#L1", "--expect-revision", head, "--json"]);
+    const fromMcp = await mcp("cite", { target: "repo:a.md#L1", expect_revision: head });
+    expect(fromCli.code).toBe(0);
+    expect(fromMcp.isError).toBe(false);
+    expect(JSON.parse(fromCli.stdout)).toStrictEqual(JSON.parse(fromMcp.text));
+  });
+
+  // Each refusal is the same sentence on both surfaces, and never a footnote.
+  const refusals = [
+    {
+      name: "the source moved after the read",
+      args: { target: "repo:a.md#L1", expect_revision: "0000000" },
+      says: "not 0000000: it moved after you read it",
+    },
+    {
+      name: "a delegated source cannot confirm a revision",
+      args: { target: "wiki:design-page", expect_revision: "v7" },
+      says: "read through notion, and accreta cannot tell its revision",
+    },
+    {
+      name: "an unchecked place cannot confirm a revision",
+      args: { target: "repo:dirty.md", expect_revision: "0000000" },
+      says: "accreta could not check this place",
+    },
+    {
+      name: "an unknown source",
+      args: { target: "nope:a.md" },
+      says: 'Unknown source "nope"',
+    },
+    {
+      name: "a declared source that did not load",
+      args: { target: "typo:a.md" },
+      says: 'Source "typo" is declared in',
+    },
+    {
+      name: "a path that is not canonical",
+      args: { target: "docs:../forcing.md" },
+      says: "is not canonical",
+    },
+  ];
+  for (const r of refusals) {
+    test(`refuses ${r.name}`, async () => {
+      const expected = (r.args as { expect_revision?: string }).expect_revision;
+      const argv = ["cite", r.args.target, "--json"];
+      if (expected) argv.push("--expect-revision", expected);
+      const [fromCli, fromMcp] = [await cli(argv), await mcp("cite", r.args)];
+      expect(fromMcp.isError).toBe(true);
+      expect(fromCli.code).toBe(1);
+      expect(fromCli.stdout).toBe("");
+      expect(fromCli.stderr).toBe(fromMcp.text);
+      expect(fromMcp.text).toContain(r.says);
+    });
+  }
+
+  test("a target outside the grammar is a usage error on the CLI and the same sentence over MCP", async () => {
+    const [fromCli, fromMcp] = [
+      await cli(["cite", "forcing.md"]),
+      await mcp("cite", { target: "forcing.md" }),
+    ];
+    expect(fromCli.code).toBe(2);
+    expect(fromMcp.isError).toBe(true);
+    expect(fromCli.stderr).toBe(fromMcp.text);
   });
 });
 

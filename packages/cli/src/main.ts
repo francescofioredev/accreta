@@ -8,6 +8,7 @@ import {
   type ParsedArgs,
 } from "./commands/shared.ts";
 import { canonical } from "./commands/canonical.ts";
+import { cite } from "./commands/cite.ts";
 import { consumers } from "./commands/consumers.ts";
 import { doctor } from "./commands/doctor.ts";
 import { drift } from "./commands/drift.ts";
@@ -38,9 +39,12 @@ Usage: accreta <command> [arguments]
   consumers <path>         What links to this page, and what it links to (--inline;
                            --kind <field>, repeatable)
   canonical <term>         Resolve a term to the page that defines it
+  cite <source>:<path>[#locator]
+                           The citation for a claim, at the source's current revision.
+                           --expect-revision <rev> fails if the source has moved since
 
-  --json                   On lint, search, show, consumers and canonical: print the
-                           JSON the matching MCP tool returns
+  --json                   On lint, search, show, consumers, canonical and cite: print
+                           the JSON the matching MCP tool returns
   --limit <n>, --cursor <c>
                            On lint, consumers and canonical: print one page of at most
                            n results (1-50, default 50), then the page the cursor names
@@ -79,6 +83,7 @@ function parseArgs(argv: string[]): ParsedArgs & {
   set: Record<string, string>;
   preset?: string;
   agentFile?: string;
+  expectRevision?: string;
 } {
   const positional: string[] = [];
   const flags: string[] = [];
@@ -97,6 +102,7 @@ function parseArgs(argv: string[]): ParsedArgs & {
   const set: Record<string, string> = {};
   let preset: string | undefined;
   let agentFile: string | undefined;
+  let expectRevision: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     let arg = argv[i];
     if (arg === undefined) continue;
@@ -186,6 +192,10 @@ function parseArgs(argv: string[]): ParsedArgs & {
       agentFile = value();
       continue;
     }
+    if (arg === "--expect-revision") {
+      expectRevision = value();
+      continue;
+    }
     if (!arg.startsWith("-") || arg === "-") positional.push(arg);
   }
   return {
@@ -205,6 +215,7 @@ function parseArgs(argv: string[]): ParsedArgs & {
     set,
     preset,
     agentFile,
+    expectRevision,
   };
 }
 
@@ -272,6 +283,8 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
       });
     case "canonical":
       return canonical(ctx, positional.join(" "), { json, limit, cursor });
+    case "cite":
+      return cite(ctx, positional[0] ?? "", { json, expectRevision: parsed.expectRevision });
     case "mcp":
       return mcp(ctx, positional);
     default:

@@ -1132,6 +1132,33 @@ describe("accreta lint — citations", () => {
   });
 });
 
+describe("accreta cite", () => {
+  beforeEach(() => {
+    writeFileSync(
+      join(root, "accreta.config.yaml"),
+      'knowledge_base: knowledge\nprovenance:\n  format: "{source}@{rev}:{path}#{locator}"\n',
+      "utf-8",
+    );
+    mkdirSync(join(root, "sources", "docs"), { recursive: true });
+    writeFileSync(join(root, "sources", "docs", "a.md"), "one\ntwo\n", "utf-8");
+    writeFileSync(join(root, "sources", "docs.yaml"), "id: docs\ntype: fs\nroot: sources/docs\n");
+  });
+
+  test("prints the footnote first, so it can be taken from a pipe, and needs no index", async () => {
+    expect(existsSync(join(root, ".accreta", "index.sqlite"))).toBe(false);
+    expect(await cli("cite", "docs:a.md#L2")).toBe(0);
+    const [footnote, ...rest] = output;
+    expect(footnote).toMatch(/^docs@\S+:a\.md#L2$/);
+    expect(rest).toContain("canonical_source: docs:a.md#L2");
+    expect(rest).toContain("location: found");
+  });
+
+  test("a place that is not there exits 1 and says why", async () => {
+    expect(await cli("cite", "docs:a.md#L9")).toBe(1);
+    expect(stdout()).toContain("location: missing locator: cites L9-L9 but a.md has 3 line(s)");
+  });
+});
+
 describe("accreta --version", () => {
   // Read back from the manifest rather than restated here: a literal in the
   // test drifts the same way the literal in the source did.
