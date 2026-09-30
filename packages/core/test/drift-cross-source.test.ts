@@ -216,14 +216,14 @@ describe("a footnote into a source other than the page's own", () => {
     expect(report.unpinned).toEqual([{ page: "knowledge/contradiction.md", footnote: null }]);
   });
 
-  test("a canonical_source takes the pin of a footnote into the same file", async () => {
-    addPage("knowledge/contradiction.md", "ipcc", "ipcc1", "noaa:note.md#L5");
+  test("a canonical_source takes the pin of a footnote citing the same lines", async () => {
+    addPage("knowledge/contradiction.md", "ipcc", "ipcc1", "noaa:note.md#L5-L7");
     addFootnote("knowledge/contradiction.md", "b", "rev1", "note.md", "L5-L7");
     const noaa = new ScriptedSource(
       "noaa",
       "rev2",
       { rev1: ["note.md"] },
-      { "rev1 note.md": { L5: { status: "touched" } } },
+      { "rev1 note.md": { "L5-L7": { status: "touched" } } },
     );
 
     const report = await detectDrift(db, noaa);
@@ -233,8 +233,31 @@ describe("a footnote into a source other than the page's own", () => {
       report.stale[0]?.citations?.map((c) => [c.footnote, c.revision, c.change.status]),
     ).toEqual([
       [null, "rev1", "touched"],
-      ["b", "rev1", "untouched"],
+      ["b", "rev1", "touched"],
     ]);
+  });
+
+  test("a canonical_source never borrows a pin for other lines of the file", async () => {
+    // Its line numbers may belong to a later revision than a footnote elsewhere in the file.
+    addPage("knowledge/contradiction.md", "ipcc", "ipcc1", "noaa:note.md#L15-L17");
+    addFootnote("knowledge/contradiction.md", "b", "p0", "note.md", "L1");
+    addFootnote("knowledge/contradiction.md", "why", "x", "note.md", "L19-L20");
+    const noaa = new ScriptedSource(
+      "noaa",
+      "z",
+      { p0: ["note.md"], x: ["note.md"] },
+      {
+        "p0 note.md": { "L15-L17": { status: "moved", locator: "L25-L27" } },
+        "x note.md": {},
+      },
+    );
+
+    const report = await detectDrift(db, noaa);
+
+    expect(report.unpinned).toEqual([{ page: "knowledge/contradiction.md", footnote: null }]);
+    const cited = report.stale.flatMap((e) => e.citations ?? []);
+    expect(cited.filter((c) => c.footnote === null)).toEqual([]);
+    expect(noaa.asked).toEqual(["p0 note.md L1", "x note.md L19-L20"]);
   });
 
   test("an unpinned footnote is named with its id", async () => {

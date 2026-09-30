@@ -409,8 +409,10 @@ function citationsInto(db: Database, sourceId: string, ownRows: PageRow[]): Cita
     const notes = borrowed.get(page) ?? [];
     const canon = canonical.get(page);
     if (canon) {
-      // Its grammar has no revision, so it borrows the pin of a footnote into the same file.
-      const pin = notes.find((n) => n.path === canon.path && !unpinned(n.revision))?.revision;
+      // Its grammar has no revision, so it borrows the pin of a footnote citing exactly the same lines.
+      const pin = notes.find(
+        (n) => n.path === canon.path && n.locator === canon.locator && !unpinned(n.revision),
+      )?.revision;
       if (pin) lend(lent, pin, page, { ...canon, revision: pin });
       else unpinnedCites.push({ page, footnote: null });
     }

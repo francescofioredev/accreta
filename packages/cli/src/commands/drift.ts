@@ -294,7 +294,7 @@ interface DriftJson {
 /** Keys of what a base report already had in doubt or could not place. */
 type BaseKeys = Set<string>;
 
-// The revision is part of each key, so a citation re-pinned since the base and broken again is new.
+// Citation and unplaced keys carry the revision, so one re-pinned since the base and broken again is new.
 const citationKey = (source: string, page: string, c: DoubtedCitation) =>
   JSON.stringify(["cited", source, page, c.footnote, c.path, c.locator, c.cited_at]);
 // Per file there is nothing to re-pin, and a page can move between its pin and its own revision.
