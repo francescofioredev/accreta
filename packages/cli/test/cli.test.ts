@@ -248,6 +248,68 @@ describe("accreta lint", () => {
   });
 });
 
+const cursorIn = (text: string) => /--cursor (\S+)$/m.exec(text)?.[1];
+
+describe("--limit and --cursor in the text output", () => {
+  beforeEach(async () => {
+    await cli("init");
+    for (const name of ["a", "b", "c"]) {
+      writePage(
+        `${name}.md`,
+        `---\ntype: note\naliases: [shared]\nrelated: [[hub]]\n---\n\n# ${name}\n`,
+      );
+    }
+    writePage("hub.md", "---\ntype: note\n---\n\n# Hub\n");
+    await cli("reindex");
+    output = [];
+  });
+
+  for (const argv of [
+    ["lint", "--limit", "2"],
+    ["consumers", "hub", "--limit", "2"],
+    ["canonical", "shared", "--limit", "2"],
+  ]) {
+    test(`${argv.join(" ")} says more exist, and following it reaches the end`, async () => {
+      await cli(...argv);
+      const first = stdout();
+      expect(first).toMatch(/Showing 2 of \d+ /);
+      const cursor = cursorIn(first);
+      expect(cursor).toBeDefined();
+
+      let text = first;
+      let next = cursor;
+      while (next) {
+        output = [];
+        await cli(...argv, "--cursor", next);
+        text = stdout();
+        next = cursorIn(text);
+      }
+      expect(text).toMatch(/Showing \d+ of \d+ /);
+      expect(text).not.toContain("--cursor");
+    });
+  }
+
+  test("lint fails on a later page too: a page is not the whole report", async () => {
+    await cli("lint", "--limit", "1");
+    const cursor = cursorIn(stdout());
+    expect(await cli("lint", "--limit", "1", "--cursor", cursor!)).toBe(1);
+  });
+
+  test("lint's per-kind counts on a page say they are the page's, not the kind's", async () => {
+    await cli("lint", "--limit", "2");
+    expect(stdout()).toMatch(/^[a-z-]+ \(\d+ on this page\)$/m);
+    expect(stdout()).not.toMatch(/^[a-z-]+ \(\d+\)$/m);
+    output = [];
+    await cli("lint");
+    expect(stdout()).toMatch(/^[a-z-]+ \(\d+\)$/m);
+  });
+
+  test("a bad cursor is a usage error, not a finding", async () => {
+    expect(await cli("lint", "--cursor", "not-a-cursor")).toBe(2);
+    expect(stderr()).toContain("Invalid cursor");
+  });
+});
+
 describe("accreta drift", () => {
   test("a revision the source cannot place is reported, not called current", async () => {
     await cli("init");

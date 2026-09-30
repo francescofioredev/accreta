@@ -1,5 +1,11 @@
 import { existsSync } from "node:fs";
-import { openIndex, type SourceAdapter } from "@accreta/core";
+import {
+  InvalidCursorError,
+  MAX_PAGE_LIMIT,
+  openIndex,
+  type PageRequest,
+  type SourceAdapter,
+} from "@accreta/core";
 import {
   loadSources as loadDeclaredSources,
   stateDirFor,
@@ -63,15 +69,22 @@ interface CommandArgs {
 export const COMMAND_ARGS: Readonly<Record<string, CommandArgs>> = {
   init: { flags: ["--preset", "--agent-file"], maxPositional: 0 },
   reindex: { flags: [], maxPositional: 0 },
-  lint: { flags: ["--json"], maxPositional: 0 },
+  lint: { flags: ["--json", "--limit", "--cursor"], maxPositional: 0 },
   // The two positionals are the values of --format and --base; drift refuses any other.
   drift: { flags: ["--strict", "--json", "--format", "--base"], maxPositional: 2 },
   doctor: { flags: [], maxPositional: 0 },
   source: { flags: ["--set"], maxPositional: 3 },
-  search: { flags: ["--type", "--source", "--limit", "--json"], maxPositional: Infinity },
+  search: {
+    flags: ["--type", "--source", "--limit", "--json"],
+    maxPositional: Infinity,
+    pending: { "--cursor": "#183" },
+  },
   show: { flags: ["--json"], maxPositional: 1 },
-  consumers: { flags: ["--inline", "--kind", "--json"], maxPositional: 1 },
-  canonical: { flags: ["--json"], maxPositional: Infinity },
+  consumers: {
+    flags: ["--inline", "--kind", "--json", "--limit", "--cursor"],
+    maxPositional: 1,
+  },
+  canonical: { flags: ["--json", "--limit", "--cursor"], maxPositional: Infinity },
   mcp: { flags: [], maxPositional: 1 },
 };
 
@@ -125,6 +138,45 @@ export function parseLimit(raw: string | undefined, max: number): number | undef
   if (!/^\d+$/.test(raw)) return null;
   const limit = Number(raw);
   return limit >= 1 && limit <= max ? limit : null;
+}
+
+export interface PageFlags {
+  limit?: string;
+  cursor?: string;
+}
+
+/**
+ * The page `--limit` and `--cursor` ask for, as the MCP tools read `limit` and `cursor`.
+ * Undefined when neither is given, so the whole list prints as it did before paging existed;
+ * null after reporting a `--limit` the MCP schema would refuse.
+ */
+export function readPage(ctx: CommandContext, flags: PageFlags): PageRequest | undefined | null {
+  if (flags.limit === undefined && flags.cursor === undefined) return undefined;
+  const limit = parseLimit(flags.limit, MAX_PAGE_LIMIT);
+  if (limit === null) {
+    ctx.err(`--limit takes a whole number from 1 to ${MAX_PAGE_LIMIT}.`);
+    return null;
+  }
+  return { limit, cursor: flags.cursor };
+}
+
+/** A cursor the core refuses is a usage error, in the words MCP returns it with. */
+export function refuseCursor(ctx: CommandContext, error: unknown): number {
+  if (!(error instanceof InvalidCursorError)) throw error;
+  ctx.err(error.message);
+  return 2;
+}
+
+/** How a human reading a page learns there is more, and how to get it. */
+export function reportPage(
+  ctx: CommandContext,
+  shown: number,
+  total: number,
+  noun: string,
+  nextCursor: string | undefined,
+): void {
+  ctx.out(`\nShowing ${shown} of ${total} ${noun}.`);
+  if (nextCursor) ctx.out(`For the next page, repeat the command with --cursor ${nextCursor}`);
 }
 
 export function reportPreflight(ctx: CommandContext, preflight: Preflight, indent: string): void {
