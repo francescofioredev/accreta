@@ -1154,9 +1154,14 @@ describe("accreta cite", () => {
   });
 
   test("a place that is not there exits 1, says why first, and prints no footnote", async () => {
+    expect(await cli("cite", "docs:a.md#L9", "--json")).toBe(1);
+    const { footnote } = JSON.parse(stdout()) as { footnote: string };
+    expect(footnote).toMatch(/^docs@\S+:a\.md#L9$/);
+    output = [];
+
     expect(await cli("cite", "docs:a.md#L9")).toBe(1);
     expect(output[0]).toBe("location: missing locator: cites L9-L9 but a.md has 3 line(s)");
-    expect(stdout()).not.toContain("docs@");
+    expect(stdout()).not.toContain(footnote);
   });
 });
 
