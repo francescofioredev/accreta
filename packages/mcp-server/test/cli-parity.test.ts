@@ -352,62 +352,64 @@ describe("cite", () => {
     expect(JSON.parse(fromCli.stdout)).toStrictEqual(JSON.parse(fromMcp.text));
   });
 
-  // Each refusal is the same sentence on both surfaces, and never a footnote.
+  // The same sentence on both surfaces, never a footnote; the CLI exits 2 for bad input, 1 for a refusal.
   const refusals = [
     {
       name: "the source moved after the read",
       args: { target: "repo:a.md#L1", expect_revision: "0000000" },
-      says: "not 0000000: it moved after you read it",
+      says: "not 0000000: it moved since you read it, or 0000000 did not come from cite",
+      code: 1,
     },
     {
       name: "a delegated source cannot confirm a revision",
       args: { target: "wiki:design-page", expect_revision: "v7" },
       says: "read through notion, and accreta cannot tell its revision",
+      code: 1,
     },
     {
       name: "an unchecked place cannot confirm a revision",
       args: { target: "repo:dirty.md", expect_revision: "0000000" },
       says: "accreta could not check this place",
+      code: 1,
     },
     {
       name: "an unknown source",
       args: { target: "nope:a.md" },
       says: 'Unknown source "nope"',
+      code: 2,
     },
     {
       name: "a declared source that did not load",
       args: { target: "typo:a.md" },
       says: 'Source "typo" is declared in',
+      code: 1,
     },
     {
       name: "a path that is not canonical",
       args: { target: "docs:../forcing.md" },
       says: "is not canonical",
+      code: 2,
+    },
+    {
+      name: "a path with whitespace, which the grammar cannot carry",
+      args: { target: "docs:My File.md#L1" },
+      says: 'a path with "#" or whitespace in it cannot be cited',
+      code: 2,
     },
   ];
   for (const r of refusals) {
-    test(`refuses ${r.name}`, async () => {
+    test(`refuses ${r.name}, exit ${r.code}`, async () => {
       const expected = (r.args as { expect_revision?: string }).expect_revision;
       const argv = ["cite", r.args.target, "--json"];
       if (expected) argv.push("--expect-revision", expected);
       const [fromCli, fromMcp] = [await cli(argv), await mcp("cite", r.args)];
       expect(fromMcp.isError).toBe(true);
-      expect(fromCli.code).toBe(1);
+      expect(fromCli.code).toBe(r.code);
       expect(fromCli.stdout).toBe("");
       expect(fromCli.stderr).toBe(fromMcp.text);
       expect(fromMcp.text).toContain(r.says);
     });
   }
-
-  test("a target outside the grammar is a usage error on the CLI and the same sentence over MCP", async () => {
-    const [fromCli, fromMcp] = [
-      await cli(["cite", "forcing.md"]),
-      await mcp("cite", { target: "forcing.md" }),
-    ];
-    expect(fromCli.code).toBe(2);
-    expect(fromMcp.isError).toBe(true);
-    expect(fromCli.stderr).toBe(fromMcp.text);
-  });
 });
 
 describe("an argument a command cannot honour is refused, not ignored", () => {

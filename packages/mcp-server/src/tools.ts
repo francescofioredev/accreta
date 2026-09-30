@@ -405,7 +405,9 @@ export async function citeTool(
 ) {
   const target = parseCitation(input.target);
   if (!target) {
-    throw new Error(`"${input.target}" is not source:path[#locator].`);
+    throw new Error(
+      `"${input.target}" is not source:path[#locator]; a path with "#" or whitespace in it cannot be cited.`,
+    );
   }
   const why = notLoaded(ctx, target.sourceId);
   if (why) throw new Error(why);
@@ -415,7 +417,7 @@ export async function citeTool(
   if (expected !== undefined && citation.revision !== expected) {
     throw new Error(
       citation.revision !== null
-        ? `Source "${target.sourceId}" is at ${citation.revision}, not ${expected}: it moved after you read it. Re-read ${citation.canonicalSource}, then cite again.`
+        ? `Source "${target.sourceId}" is at ${citation.revision}, not ${expected}: it moved since you read it, or ${expected} did not come from cite. Re-read ${citation.canonicalSource}, then cite again.`
         : citation.delegated
           ? `Cannot confirm source "${target.sourceId}" is still at ${expected}: it is read through ${citation.delegated.via}, and accreta cannot tell its revision.`
           : `Cannot confirm source "${target.sourceId}" is still at ${expected}: accreta could not check this place. Cite it without an expected revision to see why.`,

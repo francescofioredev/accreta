@@ -13,7 +13,7 @@ export async function cite(
   if (!target) {
     ctx.err(
       raw
-        ? `"${raw}" is not source:path[#locator].`
+        ? `"${raw}" is not source:path[#locator]; a path with "#" or whitespace in it cannot be cited.`
         : "Usage: accreta cite <source>:<path>[#locator] [--expect-revision <rev>] [--json]",
     );
     return 2;
@@ -29,13 +29,23 @@ export async function cite(
     );
   }
   const sources = new Map(loaded.sources.map((adapter) => [adapter.id, adapter]));
+  // Input errors exit 2, not 1 like a refusal; the sentences are core's, which MCP returns.
+  if (!sources.has(target.sourceId)) {
+    const known = [...sources.keys()].toSorted().join(", ") || "none";
+    ctx.err(`Unknown source "${target.sourceId}". Configured sources: ${known}.`);
+    return 2;
+  }
+  if (target.path.split("/").some((part) => part === "" || part === "." || part === "..")) {
+    ctx.err(`Path "${target.path}" is not canonical: it has an empty, "." or ".." segment`);
+    return 2;
+  }
 
   const citation = await citeAt(sources, workspace.config.provenanceFormat, target);
   const expected = options.expectRevision;
   if (expected !== undefined && citation.revision !== expected) {
     throw new Error(
       citation.revision !== null
-        ? `Source "${target.sourceId}" is at ${citation.revision}, not ${expected}: it moved after you read it. Re-read ${citation.canonicalSource}, then cite again.`
+        ? `Source "${target.sourceId}" is at ${citation.revision}, not ${expected}: it moved since you read it, or ${expected} did not come from cite. Re-read ${citation.canonicalSource}, then cite again.`
         : citation.delegated
           ? `Cannot confirm source "${target.sourceId}" is still at ${expected}: it is read through ${citation.delegated.via}, and accreta cannot tell its revision.`
           : `Cannot confirm source "${target.sourceId}" is still at ${expected}: accreta could not check this place. Cite it without an expected revision to see why.`,
@@ -59,16 +69,19 @@ export async function cite(
   }
 
   const { location } = citation;
-  ctx.out(citation.footnote);
+  // Missing leads with why and prints no footnote, so `| head -1` never yields one to paste.
+  if (location.verdict === "missing") {
+    ctx.out(`location: missing ${location.part}: ${location.detail}`);
+  } else {
+    ctx.out(citation.footnote);
+  }
   ctx.out(`canonical_source: ${citation.canonicalSource}`);
   ctx.out(`revision: ${citation.revision ?? "none, so the footnote is unpinned"}`);
-  ctx.out(
-    location.verdict === "found"
-      ? "location: found"
-      : location.verdict === "missing"
-        ? `location: missing ${location.part}: ${location.detail}`
-        : `location: unknown: ${location.detail}`,
-  );
+  if (location.verdict !== "missing") {
+    ctx.out(
+      location.verdict === "found" ? "location: found" : `location: unknown: ${location.detail}`,
+    );
+  }
   if (citation.delegated) {
     ctx.out(`delegated: read through ${citation.delegated.via}; scope:`);
     ctx.out(citation.delegated.guidance.trimEnd());

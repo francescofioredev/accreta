@@ -41,7 +41,9 @@ Usage: accreta <command> [arguments]
   canonical <term>         Resolve a term to the page that defines it
   cite <source>:<path>[#locator]
                            The citation for a claim, at the source's current revision.
-                           --expect-revision <rev> fails if the source has moved since
+                           Before reading, cite the file and keep its revision; after
+                           writing, cite the place with --expect-revision <rev>, which
+                           fails if the source has moved since
 
   --json                   On lint, search, show, consumers, canonical and cite: print
                            the JSON the matching MCP tool returns
