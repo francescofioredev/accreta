@@ -21,6 +21,8 @@ export interface DriftReport {
    * about whether they are current.
    */
   unverifiable: string[];
+  /** Why each page of another source is in `unverifiable`: its citations here name no revision. */
+  unpinned?: UnpinnedCitation[];
   /**
    * Revisions the source could not place, with the pages recording them.
    *
@@ -40,6 +42,13 @@ export interface DriftReport {
    * happened is worse than telling them nothing.
    */
   delegated: DelegatedWork | null;
+}
+
+/** A citation from another source's page with no revision of this source to read its lines at. */
+export interface UnpinnedCitation {
+  page: string;
+  /** The footnote id, or null for the page's `canonical_source`. */
+  footnote: string | null;
 }
 
 /** What the agent needs in order to check a source accreta cannot. */
@@ -66,13 +75,17 @@ export interface StaleRevision {
   revision: string;
   /** Source paths that changed since, when the source can say. */
   changedPaths: string[];
-  /** Pages recording this revision, sorted by path. */
+  /** Pages recording this revision, or citing this source at it, sorted by path. */
   pages: string[];
+  /** Those of `pages` here only because a citation is pinned at this revision: not verified at it. */
+  citedOnly?: string[];
   /**
-   * Citations from these pages into `changedPaths`, and what the change did to each. Absent
-   * when the source cannot diff contents: then every page is in doubt per file, as before.
+   * Citations from these pages into paths changed since their revision, and what the change did
+   * to each. Absent when the source cannot diff contents: every page is in doubt per file.
    */
   citations?: CitedChange[];
+  /** Without `citations`: the paths among `changedPaths` each of `citedOnly` cites. */
+  citedPaths?: Record<string, string[]>;
 }
 
 /** One citation into a changed path. */
@@ -110,6 +123,8 @@ export function pageChanges(entry: StaleRevision): Map<string, PageChange> | nul
 export interface UnresolvableRevision {
   revision: string;
   pages: string[];
+  /** Those of `pages` here only because a citation is pinned at this revision. */
+  citedOnly?: string[];
 }
 
 interface PageRow {
@@ -159,6 +174,17 @@ export async function detectDrift(db: Database, adapter: SourceAdapter): Promise
     else byRevision.set(revision, [row.path]);
   }
 
+  const cited = citationsInto(db, adapter.id, rows);
+  const unpinnedPages = [...new Set(cited.unpinned.map((u) => u.page))];
+  if (unpinnedPages.length > 0) {
+    unverifiable.push(...unpinnedPages);
+    unverifiable.sort();
+  }
+  const unpinnedReport = cited.unpinned.length > 0 ? { unpinned: cited.unpinned } : {};
+  const lent = cited.lent;
+  const everyPage = (revision: string) =>
+    grouped(byRevision.get(revision) ?? [], [...(lent.get(revision)?.keys() ?? [])]);
+
   // Asked after the pages are partitioned, so a source that declines to answer
   // still produces the list of what is waiting on it. A page recording no
   // revision is unverifiable whoever holds the source.
@@ -167,37 +193,64 @@ export async function detectDrift(db: Database, adapter: SourceAdapter): Promise
     currentRevision = await adapter.revision();
   } catch (error) {
     if (error instanceof DelegatedSourceError) {
+      const revisions = new Set([...byRevision.keys(), ...lent.keys()]);
       return {
         sourceId: adapter.id,
         currentRevision: null,
         stale: [],
         unverifiable,
+        ...unpinnedReport,
         unresolvable: [],
         delegated: {
           via: error.via,
           guidance: error.guidance,
-          pending: byFirstPage([...byRevision].map(([revision, pages]) => ({ revision, pages }))),
+          pending: byFirstPage(
+            [...revisions].map((revision) => ({ revision, ...everyPage(revision) })),
+          ),
         },
       };
     }
     throw error;
   }
 
+  // Null when the source cannot place the revision. Cached: pins repeat across pages.
+  const changes = new Map<string, string[] | null>();
+  const changedSince = async (revision: string): Promise<string[] | null> => {
+    if (revision === currentRevision) return [];
+    if (!changes.has(revision)) {
+      try {
+        changes.set(revision, await adapter.changedSince(revision));
+      } catch (error) {
+        if (!(error instanceof UnknownRevisionError)) throw error;
+        changes.set(revision, null);
+      }
+    }
+    return changes.get(revision)!;
+  };
+
+  // A footnote pinned elsewhere is checked at its pin when its page's group will not check it,
+  // or when the pin cannot be placed: that is the same answer whatever else the change touched.
+  for (const [revision, pages] of byRevision) {
+    const since = await changedSince(revision);
+    if (since === null) continue;
+    for (const page of pages) {
+      for (const cite of cited.own.get(page) ?? []) {
+        if (unpinned(cite.revision) || cite.revision === revision) continue;
+        if (since.length === 0 || (await changedSince(cite.revision!)) === null) {
+          lend(lent, cite.revision!, page, cite);
+        }
+      }
+    }
+  }
+
   const stale: StaleRevision[] = [];
   const unresolvable: UnresolvableRevision[] = [];
 
-  for (const [revision, pages] of byRevision) {
-    if (revision === currentRevision) continue;
-
-    let changedPaths: string[];
-    try {
-      changedPaths = await adapter.changedSince(revision);
-    } catch (error) {
-      if (error instanceof UnknownRevisionError) {
-        unresolvable.push({ revision, pages });
-        continue;
-      }
-      throw error;
+  for (const revision of new Set([...byRevision.keys(), ...lent.keys()])) {
+    const changedPaths = await changedSince(revision);
+    if (changedPaths === null) {
+      unresolvable.push({ revision, ...everyPage(revision) });
+      continue;
     }
 
     // A revision that differs but whose diff is empty is not drift: the source
@@ -205,15 +258,32 @@ export async function detectDrift(db: Database, adapter: SourceAdapter): Promise
     // to ignore the report.
     if (changedPaths.length === 0) continue;
 
-    stale.push({ revision, changedPaths, pages });
+    // A page here only through a pinned citation rests on the files it cites, not the whole source.
+    const changed = new Set(changedPaths);
+    const touched = [...(lent.get(revision) ?? [])]
+      .filter(([, cites]) => cites.some((cite) => changed.has(cite.path)))
+      .map(([page]) => page);
+    const group = grouped(byRevision.get(revision) ?? [], touched);
+    if (group.pages.length > 0) stale.push({ revision, changedPaths, ...group });
   }
 
-  if (adapter.touchedSince && stale.length > 0) {
-    const touchedSince = adapter.touchedSince.bind(adapter);
-    const cites = citationsBySource(db, adapter.id, rows);
-    for (const entry of stale) {
-      entry.citations = await citedChanges(touchedSince, entry, cites);
+  const touchedSince = adapter.touchedSince?.bind(adapter);
+  for (const entry of stale) {
+    const borrowed = lent.get(entry.revision);
+    const citesOf = (page: string) => borrowed?.get(page) ?? cited.own.get(page) ?? [];
+    if (touchedSince) {
+      entry.citations = await citedChanges(touchedSince, entry, citesOf, changedSince);
+      continue;
     }
+    const changed = new Set(entry.changedPaths);
+    const citedPaths: Record<string, string[]> = {};
+    for (const page of entry.citedOnly ?? []) {
+      const hit = [...new Set(citesOf(page).map((cite) => cite.path))].filter((path) =>
+        changed.has(path),
+      );
+      if (hit.length > 0) citedPaths[page] = hit;
+    }
+    if (Object.keys(citedPaths).length > 0) entry.citedPaths = citedPaths;
   }
 
   return {
@@ -221,9 +291,18 @@ export async function detectDrift(db: Database, adapter: SourceAdapter): Promise
     currentRevision,
     stale: byFirstPage(stale),
     unverifiable,
+    ...unpinnedReport,
     unresolvable,
     delegated: null,
   };
+}
+
+/** A revision's own pages and the pages citing it, in path order. */
+function grouped(own: string[], citing: string[]): { pages: string[]; citedOnly?: string[] } {
+  const mine = new Set(own);
+  const citedOnly = citing.filter((page) => !mine.has(page));
+  if (citedOnly.length === 0) return { pages: own };
+  return { pages: [...own, ...citedOnly].toSorted(), citedOnly: citedOnly.toSorted() };
 }
 
 /**
@@ -248,56 +327,129 @@ interface Cite {
   locator: string | null;
 }
 
-/** Every citation into this source from its pages, `canonical_source` first, footnotes in page order. */
-function citationsBySource(db: Database, sourceId: string, rows: PageRow[]): Map<string, Cite[]> {
+type Lent = Map<string, Map<string, Cite[]>>;
+
+function lend(lent: Lent, revision: string, page: string, cite: Cite): void {
+  const pages = lent.get(revision) ?? new Map<string, Cite[]>();
+  lent.set(revision, pages);
+  const cites = pages.get(page);
+  if (cites) cites.push(cite);
+  else pages.set(page, [cite]);
+}
+
+const unpinned = (revision: string | null) => !revision || revision === UNPINNED_REVISION;
+
+interface CitationsInto {
+  /** Citations from this source's pages, `canonical_source` first, footnotes in page order. */
+  own: Map<string, Cite[]>;
+  /** Pinned citations from other sources' pages, by pin, then by page. */
+  lent: Lent;
+  /** Citations from other sources' pages that name no revision of this one. */
+  unpinned: UnpinnedCitation[];
+}
+
+/** Every citation into this source, whichever page holds it. */
+function citationsInto(db: Database, sourceId: string, ownRows: PageRow[]): CitationsInto {
   requireTable(db, "citations");
-  const out = new Map<string, Cite[]>();
-  const add = (page: string, cite: Cite) => {
-    const list = out.get(page);
-    if (list) list.push(cite);
-    else out.set(page, [cite]);
+  const own = new Map<string, Cite[]>();
+  const lent: Lent = new Map();
+  const unpinnedCites: UnpinnedCitation[] = [];
+  const addOwn = (page: string, cite: Cite) => {
+    const cites = own.get(page);
+    if (cites) cites.push(cite);
+    else own.set(page, [cite]);
   };
-  for (const row of rows) {
+
+  const ownPages = new Set(ownRows.map((row) => row.path));
+  for (const row of ownRows) {
     const parsed = row.canonical_source ? parseCitation(row.canonical_source) : null;
-    if (parsed?.sourceId === sourceId) {
-      add(row.path, {
-        footnote: null,
-        revision: null,
-        path: parsed.path,
-        locator: parsed.locator ?? null,
-      });
-    }
+    if (parsed?.sourceId !== sourceId) continue;
+    addOwn(row.path, {
+      footnote: null,
+      revision: null,
+      path: parsed.path,
+      locator: parsed.locator ?? null,
+    });
   }
+
+  // SQL only narrows to values containing "id:"; parsing decides, so drift reads them as lint does.
+  const canonicalRows = db
+    .query(
+      `SELECT path, canonical_source FROM pages
+       WHERE (source IS NULL OR source <> ?1) AND instr(canonical_source, ?1 || ':') > 0`,
+    )
+    .all(sourceId) as { path: string; canonical_source: string }[];
+  const canonical = new Map<string, Cite>();
+  for (const row of canonicalRows) {
+    const parsed = parseCitation(row.canonical_source);
+    if (ownPages.has(row.path) || parsed?.sourceId !== sourceId) continue;
+    const locator = parsed.locator ?? null;
+    canonical.set(row.path, { footnote: null, revision: null, path: parsed.path, locator });
+  }
+
   const footnotes = db
     .query(
       `SELECT page_path, footnote, revision, path, locator FROM citations
-       WHERE source = ? ORDER BY page_path, line`,
+       WHERE source = ? AND path IS NOT NULL ORDER BY page_path, line`,
     )
     .all(sourceId) as FootnoteRow[];
-  for (const f of footnotes) add(f.page_path, { ...f });
-  return out;
+  const borrowed = new Map<string, Cite[]>();
+  for (const f of footnotes) {
+    const cite: Cite = {
+      footnote: f.footnote,
+      revision: f.revision,
+      path: f.path,
+      locator: f.locator,
+    };
+    if (ownPages.has(f.page_path)) addOwn(f.page_path, cite);
+    else borrowed.set(f.page_path, [...(borrowed.get(f.page_path) ?? []), cite]);
+  }
+
+  for (const page of [...new Set([...canonical.keys(), ...borrowed.keys()])].toSorted()) {
+    const notes = borrowed.get(page) ?? [];
+    const canon = canonical.get(page);
+    if (canon) {
+      // Its grammar has no revision, so it borrows the pin of a footnote citing exactly the same lines.
+      const pin = notes.find(
+        (n) => n.path === canon.path && n.locator === canon.locator && !unpinned(n.revision),
+      )?.revision;
+      if (pin) lend(lent, pin, page, { ...canon, revision: pin });
+      else unpinnedCites.push({ page, footnote: null });
+    }
+    for (const note of notes) {
+      if (unpinned(note.revision)) unpinnedCites.push({ page, footnote: note.footnote });
+      else lend(lent, note.revision!, page, note);
+    }
+  }
+  return { own, lent, unpinned: unpinnedCites };
 }
 
 /**
- * Ask the source what the change did to each citation into a changed path. The diff starts at
- * the citation's own revision, because its line numbers belong to it; a citation naming none
- * falls back to the page's. One question per revision and path, whatever the number of pages.
+ * Ask the source what the change did to each citation into a path changed since the citation's
+ * revision. The diff starts there, because its line numbers belong to it; a citation of the
+ * source's own page that names none falls back to the page's. One question per revision and path.
  */
 async function citedChanges(
   touchedSince: NonNullable<SourceAdapter["touchedSince"]>,
   entry: StaleRevision,
-  cites: Map<string, Cite[]>,
+  citesOf: (page: string) => Cite[],
+  changedSince: (revision: string) => Promise<string[] | null>,
 ): Promise<CitedChange[]> {
-  const changed = new Set(entry.changedPaths);
   const cited: CitedChange[] = [];
   const asks = new Map<string, { revision: string; path: string; locators: Set<string> }>();
   const pending: { cited: CitedChange; key: string }[] = [];
+  const changedFrom = new Map<string, Set<string> | null>();
 
   for (const page of entry.pages) {
-    for (const cite of cites.get(page) ?? []) {
-      if (!changed.has(cite.path)) continue;
-      const from =
-        cite.revision && cite.revision !== UNPINNED_REVISION ? cite.revision : entry.revision;
+    for (const cite of citesOf(page)) {
+      const from = unpinned(cite.revision) ? entry.revision : cite.revision!;
+      if (!changedFrom.has(from)) {
+        const since = from === entry.revision ? entry.changedPaths : await changedSince(from);
+        changedFrom.set(from, since && new Set(since));
+      }
+      // A pin the source cannot place is reported as unresolvable at that pin, not here.
+      const since = changedFrom.get(from);
+      if (!since?.has(cite.path)) continue;
       // A whole-document citation into a changed document is touched by definition.
       const change: CitedChange = {
         page,

@@ -119,28 +119,59 @@ function fails(report: DriftReport, strict: boolean): boolean {
   );
 }
 
-function printText(ctx: CommandContext, report: DriftReport): void {
+// Each page once: sources and pinned revisions can name the same page more than once.
+const distinct = (pages: string[]) => new Set(pages).size;
+const distinctPages = (groups: readonly { pages: string[] }[]) =>
+  distinct(groups.flatMap((group) => group.pages));
+
+/** "verified at" for a page of the source, "cited at" for one here only through a pinned citation. */
+const atLabel = (group: { citedOnly?: string[] }, page: string) =>
+  group.citedOnly?.includes(page) ? "cited at" : "verified at";
+
+type Unpinned = NonNullable<DriftReport["unpinned"]>;
+
+/** Pages recording no revision, apart from those whose only fault is an unpinned citation. */
+function unverifiedApart(unverifiable: string[], unpinned: Unpinned = []) {
+  const pinless = new Set(unpinned.map((u) => u.page));
+  return { none: unverifiable.filter((page) => !pinless.has(page)), pinless: pinless.size };
+}
+
+const howToPin = (u: Unpinned[number]) =>
+  u.footnote === null
+    ? { cited: "canonical_source", fix: "add a pinned footnote to the same place" }
+    : { cited: `[^${u.footnote}]`, fix: "pin it to a revision" };
+
+function printUnverifiable(ctx: Pick<CommandContext, "out">, report: DriftReport): void {
+  const { none, pinless } = unverifiedApart(report.unverifiable, report.unpinned);
+  if (none.length > 0) ctx.out(`  ${none.length} page(s) record no revision at all`);
+  if (pinless === 0) return;
+  ctx.out(`  ${pinless} page(s) cite this source without a revision:`);
+  for (const u of report.unpinned ?? []) {
+    const { cited, fix } = howToPin(u);
+    ctx.out(`    ${u.page} ${cited} names no revision: ${fix}`);
+  }
+}
+
+export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport): void {
   // A source only the agent can reach produces a work order rather than a
   // verdict, so it is printed on its own terms and skips the outcomes below
   // — every one of which would imply somebody had looked.
   if (report.delegated) {
     const work = report.delegated;
-    const pageCount = work.pending.reduce((total, entry) => total + entry.pages.length, 0);
+    const pageCount = distinctPages(work.pending);
     ctx.out(`${report.sourceId} — read through ${work.via} by the agent, not by accreta`);
 
     if (pageCount > 0) {
       ctx.out(`  ${pageCount} page(s) for the agent to re-verify there:`);
       for (const entry of work.pending) {
         for (const path of entry.pages) {
-          ctx.out(`    ${path} (verified at ${entry.revision})`);
+          ctx.out(`    ${path} (${atLabel(entry, path)} ${entry.revision})`);
         }
       }
     } else {
       ctx.out("  no pages cite it yet");
     }
-    if (report.unverifiable.length > 0) {
-      ctx.out(`  ${report.unverifiable.length} page(s) record no revision at all`);
-    }
+    printUnverifiable(ctx, report);
     ctx.out("  in scope:");
     for (const line of work.guidance.trim().split("\n")) ctx.out(`    ${line}`);
     return;
@@ -149,10 +180,8 @@ function printText(ctx: CommandContext, report: DriftReport): void {
   ctx.out(`${report.sourceId} @ ${report.currentRevision}`);
 
   if (report.stale.length > 0) {
-    // Summed over the groups rather than taken from `report.stale.length`,
-    // which counts revisions now that the report is grouped. The reader is
-    // being told how many pages are in doubt.
-    const pageCount = report.stale.reduce((total, entry) => total + entry.pages.length, 0);
+    // Not `report.stale.length`, which counts revisions; and each page once, as pins can split it.
+    const pageCount = distinctPages(report.stale);
     ctx.out(`  ${pageCount} page(s) may have drifted:`);
     for (const entry of report.stale) {
       const doubt = pageChanges(entry);
@@ -163,7 +192,7 @@ function printText(ctx: CommandContext, report: DriftReport): void {
         : entry.pages;
       for (const path of pages) {
         const why = doubt ? ` — ${explainDoubt(doubt.get(path)!, entry, path)}` : "";
-        ctx.out(`    ${path} (verified at ${entry.revision})${why}`);
+        ctx.out(`    ${path} (${atLabel(entry, path)} ${entry.revision})${why}`);
       }
     }
   }
@@ -175,9 +204,7 @@ function printText(ctx: CommandContext, report: DriftReport): void {
       ctx.out(`    ${entry.revision} — ${entry.pages.length} page(s)`);
     }
   }
-  if (report.unverifiable.length > 0) {
-    ctx.out(`  ${report.unverifiable.length} page(s) record no revision at all`);
-  }
+  printUnverifiable(ctx, report);
   if (report.stale.length === 0 && report.unresolvable.length === 0) {
     ctx.out("  up to date");
   }
@@ -203,8 +230,12 @@ function explainDoubt(doubt: PageChange, entry: StaleRevision, page: string): st
 /** A page in doubt. `citations` is null when the source can only say which files changed. */
 interface DoubtedPage {
   page: string;
-  verified_at: string;
+  /** For a page of the source: the revision it was verified at. */
+  verified_at?: string;
+  /** Instead, for a page here only through a citation pinned at this revision. */
+  cited_at?: string;
   citations: DoubtedCitation[] | null;
+  /** The changed files; for a page with `cited_at`, only those it cites. */
   changed_paths?: string[];
   /** With `--base`, for a page the source can only judge per file. */
   on_base?: boolean;
@@ -223,7 +254,8 @@ interface DoubtedCitation {
 
 interface RepinPage {
   page: string;
-  verified_at: string;
+  verified_at?: string;
+  cited_at?: string;
   citations: {
     footnote: string | null;
     path: string;
@@ -242,6 +274,8 @@ interface SourceVerdict {
   other_stale_pages: number;
   unresolvable: UnresolvableRevision[];
   unverifiable: string[];
+  /** Of `unverifiable`, pages of other sources whose citations here name no revision. */
+  unpinned: Unpinned;
   delegated: { via: string; pending: UnresolvableRevision[] } | null;
 }
 
@@ -260,15 +294,15 @@ interface DriftJson {
 /** Keys of what a base report already had in doubt or could not place. */
 type BaseKeys = Set<string>;
 
-// The revision is part of each key, so a citation re-pinned since the base and broken again is new.
+// Citation and unplaced keys carry the revision, so one re-pinned since the base and broken again is new.
 const citationKey = (source: string, page: string, c: DoubtedCitation) =>
   JSON.stringify(["cited", source, page, c.footnote, c.path, c.locator, c.cited_at]);
-const fileKey = (source: string, page: string, verifiedAt: string) =>
-  JSON.stringify(["file", source, page, verifiedAt]);
+// Per file there is nothing to re-pin, and a page can move between its pin and its own revision.
+const fileKey = (source: string, page: string) => JSON.stringify(["file", source, page]);
 const unplacedKey = (source: string, page: string, revision: string) =>
   JSON.stringify(["unplaced", source, page, revision]);
 
-function readBase(path: string): BaseKeys {
+export function readBase(path: string): BaseKeys {
   let json: DriftJson;
   try {
     json = JSON.parse(readFileSync(path, "utf-8")) as DriftJson;
@@ -284,7 +318,7 @@ function readBase(path: string): BaseKeys {
   for (const source of json.sources) {
     for (const page of source.in_doubt ?? []) {
       if (page.citations === null) {
-        keys.add(fileKey(source.source_id, page.page, page.verified_at));
+        keys.add(fileKey(source.source_id, page.page));
       } else {
         for (const c of page.citations) keys.add(citationKey(source.source_id, page.page, c));
       }
@@ -300,7 +334,7 @@ const isNew = (page: DoubtedPage) =>
   page.citations === null ? !page.on_base : page.citations.some((c) => !c.on_base);
 
 /** Only pages whose cited lines changed are named; untouched ones are counted, never listed. */
-function toJson(
+export function toJson(
   reports: DriftReport[],
   base?: BaseKeys,
   unloaded: UncheckedSource[] = [],
@@ -309,14 +343,14 @@ function toJson(
   const doubted = sources.flatMap((source) => source.in_doubt);
   const unplaced = sources.flatMap((source) =>
     source.unresolvable.flatMap((e) =>
-      e.pages.map((page) => unplacedKey(source.source_id, page, e.revision)),
+      e.pages.map((page) => ({ page, key: unplacedKey(source.source_id, page, e.revision) })),
     ),
   );
   return {
-    pages_in_doubt: doubted.length,
-    pages_newly_in_doubt: doubted.filter(isNew).length,
-    pages_unplaceable: unplaced.length,
-    pages_newly_unplaceable: unplaced.filter((key) => !base?.has(key)).length,
+    pages_in_doubt: distinct(doubted.map((p) => p.page)),
+    pages_newly_in_doubt: distinct(doubted.filter(isNew).map((p) => p.page)),
+    pages_unplaceable: distinct(unplaced.map((u) => u.page)),
+    pages_newly_unplaceable: distinct(unplaced.filter((u) => !base?.has(u.key)).map((u) => u.page)),
     sources,
     unloaded_sources: unloaded,
   };
@@ -333,18 +367,21 @@ function verdict(report: DriftReport, base?: BaseKeys): SourceVerdict {
     for (const page of entry.pages) {
       const level = doubt ? doubt.get(page)! : null;
       const mine = (entry.citations ?? []).filter((c) => c.page === page);
+      const at = entry.citedOnly?.includes(page)
+        ? { cited_at: entry.revision }
+        : { verified_at: entry.revision };
       if (level === null) {
         inDoubt.push({
           page,
-          verified_at: entry.revision,
+          ...at,
           citations: null,
-          changed_paths: entry.changedPaths,
-          ...(base ? { on_base: base.has(fileKey(id, page, entry.revision)) } : {}),
+          changed_paths: entry.citedPaths?.[page] ?? entry.changedPaths,
+          ...(base ? { on_base: base.has(fileKey(id, page)) } : {}),
         });
       } else if (level === "changed") {
         inDoubt.push({
           page,
-          verified_at: entry.revision,
+          ...at,
           citations: mine.filter(isChanged).map((c) => {
             const cited: DoubtedCitation = {
               footnote: c.footnote,
@@ -360,7 +397,7 @@ function verdict(report: DriftReport, base?: BaseKeys): SourceVerdict {
       } else if (level === "moved") {
         repin.push({
           page,
-          verified_at: entry.revision,
+          ...at,
           citations: mine.flatMap((c) =>
             c.change.status === "moved" && c.locator !== null
               ? [
@@ -389,6 +426,7 @@ function verdict(report: DriftReport, base?: BaseKeys): SourceVerdict {
     other_stale_pages: other,
     unresolvable: report.unresolvable,
     unverifiable: report.unverifiable,
+    unpinned: report.unpinned ?? [],
     delegated: report.delegated && { via: report.delegated.via, pending: report.delegated.pending },
   };
 }
@@ -447,7 +485,7 @@ export function toGithub(
   for (const source of json.sources) {
     text("");
     if (source.delegated) {
-      const count = source.delegated.pending.reduce((total, e) => total + e.pages.length, 0);
+      const count = distinctPages(source.delegated.pending);
       text(
         `${code(source.source_id)} is read by the agent through ${code(source.delegated.via)}, ` +
           `not by accreta: ${count} page(s) to re-verify there.`,
@@ -472,7 +510,9 @@ export function toGithub(
     const known = source.in_doubt.flatMap((page) => doubtRows(page, true));
     if (fresh.length > 0) table(HEADER, fresh, () => 0);
     if (known.length > 0) {
-      const count = source.in_doubt.filter((page) => doubtRows(page, true).length > 0).length;
+      const count = distinct(
+        source.in_doubt.filter((page) => doubtRows(page, true).length > 0).map((p) => p.page),
+      );
       text(
         "",
         "<details>",
@@ -486,7 +526,7 @@ export function toGithub(
       text(
         "",
         "<details>",
-        `<summary>${source.repin.length} page(s) only need re-pinning: the cited lines moved, unchanged.</summary>`,
+        `<summary>${distinct(source.repin.map((p) => p.page))} page(s) only need re-pinning: the cited lines moved, unchanged.</summary>`,
       );
       table(
         ["", "| Page | Cited lines | Lines as of | Now at |", "|---|---|---|---|"],
@@ -504,25 +544,25 @@ export function toGithub(
     if (source.other_stale_pages > 0) {
       text(
         "",
-        `${source.other_stale_pages} other page(s) were verified before this change, ` +
+        `${source.other_stale_pages} other page(s) rest on this source, ` +
           "but none of the lines they cite changed.",
       );
     }
     if (source.unresolvable.length > 0) {
-      const count = source.unresolvable.reduce((total, e) => total + e.pages.length, 0);
+      const count = distinctPages(source.unresolvable);
       text(
         "",
         "<details>",
-        `<summary>${count} page(s) were verified at a revision this source cannot place.</summary>`,
+        `<summary>${count} page(s) rest on a revision this source cannot place.</summary>`,
         "",
         "A shallow clone does this: check out with `fetch-depth: 0`.",
       );
       const unplaced = source.unresolvable.flatMap((e) =>
-        e.pages.map((page) => ({ page, revision: e.revision })),
+        e.pages.map((page) => ({ page, revision: e.revision, at: atLabel(e, page) })),
       );
       table(
         [""],
-        unplaced.map((u) => `- ${code(u.page)}, verified at ${code(u.revision)}`),
+        unplaced.map((u) => `- ${code(u.page)}, ${u.at} ${code(u.revision)}`),
         (i) =>
           base?.has(unplacedKey(source.source_id, unplaced[i]!.page, unplaced[i]!.revision))
             ? 1
@@ -530,8 +570,17 @@ export function toGithub(
       );
       text("", "</details>");
     }
-    if (source.unverifiable.length > 0) {
-      text("", `${source.unverifiable.length} page(s) record no revision at all.`);
+    const { none, pinless } = unverifiedApart(source.unverifiable, source.unpinned);
+    if (none.length > 0) text("", `${none.length} page(s) record no revision at all.`);
+    if (pinless > 0) {
+      text("", `${pinless} page(s) cite this source without a revision:`);
+      table(
+        [""],
+        source.unpinned.map((u) => {
+          const { cited, fix } = howToPin(u);
+          return `- ${code(u.page)} ${code(cited)} names no revision: ${fix}.`;
+        }),
+      );
     }
   }
   return fit(lines, limit);
@@ -573,8 +622,10 @@ function doubtRows(page: DoubtedPage, onBase: boolean): string[] {
     const paths = page.changed_paths ?? [];
     const shown = paths.slice(0, 5).map(cellCode);
     if (paths.length > 5) shown.push(`and ${paths.length - 5} more`);
+    // A page of the source rests on all of it; one that only cites it, on the files it cites.
+    const files = page.cited_at === undefined ? `any of ${shown.join(", ")}` : shown.join(", ");
     return [
-      `| ${cellCode(page.page)} | any of ${shown.join(", ")} | ${cellCode(page.verified_at)} | file changed; this source cannot tell lines |`,
+      `| ${cellCode(page.page)} | ${files} | ${cellCode((page.verified_at ?? page.cited_at)!)} | file changed; this source cannot tell lines |`,
     ];
   }
   return page.citations
