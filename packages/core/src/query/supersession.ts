@@ -60,7 +60,7 @@ export function supersessionFindings(db: Database, config: AccretaConfig): LintF
   }
 
   const rows = db
-    .query(
+    .prepare(
       `SELECT l.src_path, l.dst_path, l.kind FROM links l
        JOIN pages p ON p.path = l.dst_path
        WHERE l.kind IN (?, ?)`,
@@ -69,7 +69,7 @@ export function supersessionFindings(db: Database, config: AccretaConfig): LintF
   // Such a page's links were never read, so saying it lacks one would be false.
   const unreadable = new Set(
     (
-      db.query(`SELECT path FROM pages WHERE frontmatter_error IS NOT NULL`).all() as {
+      db.prepare(`SELECT path FROM pages WHERE frontmatter_error IS NOT NULL`).all() as {
         path: string;
       }[]
     ).map((row) => row.path),

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { checkConfig, compileCitationTemplate, DEFAULT_CONFIG } from "@accreta/core";
+import { checkConfig, compileCitationTemplate, DEFAULT_CONFIG, sqliteSupport } from "@accreta/core";
 import { KNOWN_TYPES, kindFor, readDeclarationFiles, stateDirFor } from "@accreta/adapters";
 import { CONFIG_FILENAME, findWorkspace } from "../workspace.ts";
 import { reportPreflight, type CommandContext } from "./shared.ts";
@@ -36,6 +36,16 @@ export async function doctor(ctx: CommandContext, version: string): Promise<numb
   if (/\{start\}|\{end\}/.test(workspace.config.provenanceFormat)) {
     ctx.out("  stale: provenance.format still uses {start} and {end}");
     ctx.out(`    → replace them with {locator}: "${DEFAULT_CONFIG.provenanceFormat}"`);
+  }
+
+  ctx.out("\nruntime");
+  const runtime = process.versions.bun ? `bun ${process.versions.bun}` : `node ${process.version}`;
+  const unsupported = sqliteSupport();
+  if (unsupported) {
+    ctx.out(`  broken: ${runtime} — ${unsupported}`);
+    exitCode = 1;
+  } else {
+    ctx.out(`  ok: ${runtime}, SQLite with FTS5`);
   }
 
   ctx.out("\nindex");

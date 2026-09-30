@@ -19,14 +19,19 @@ import type { CommandContext } from "../src/commands.ts";
 import type { DriftReport } from "@accreta/core";
 import { GITHUB_BODY_LIMIT, toGithub } from "../src/commands/drift.ts";
 
-const MAIN = join(import.meta.dir, "..", "src", "main.ts");
+// Through the bin, as a user runs it; in the repository that means the source condition.
+const BIN = [
+  process.execPath,
+  "--conditions=@accreta/source",
+  join(import.meta.dir, "..", "src", "bin.ts"),
+];
 
 /** Spawned, not called in-process: every CLI run is a new process, as a user runs it. */
 function spawnCli(env: Record<string, string>, ...args: string[]) {
   const base = { ...process.env };
   delete base.ACCRETA_INDEX_PATH;
   delete base.ACCRETA_ROOT;
-  const proc = Bun.spawnSync([process.execPath, MAIN, ...args], {
+  const proc = Bun.spawnSync([...BIN, ...args], {
     cwd: root,
     env: { ...base, ...env },
   });
@@ -1144,6 +1149,13 @@ describe("accreta doctor", () => {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }
+  });
+
+  test("reports the runtime's SQLite, which reindex and search need FTS5 from", async () => {
+    await cli("init");
+    output = [];
+    await cli("doctor");
+    expect(stdout()).toMatch(/\nruntime\n {2}ok: (node|bun) \S+, SQLite with FTS5\n/);
   });
 
   test("a source it cannot reach fails; one it cannot check does not", async () => {

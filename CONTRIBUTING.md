@@ -44,12 +44,17 @@ are much easier to resolve in an issue than in a diff you have already written.
 
 ```bash
 bun install
-bun test
+bun run test
 bun run typecheck
 bun run lint
 ```
 
-All four must pass before a pull request is ready. CI enforces them.
+All four must pass before a pull request is ready. CI enforces them. Use Bun 1.4 or newer.
+
+`bun run test` passes `--conditions=@accreta/source`, which resolves the workspace packages to
+their `src/`. A plain `bun test` looks for the `dist/` that exists only while packing, and fails.
+Anything else you run from the repository needs the flag too, for example
+`bun --conditions=@accreta/source packages/cli/src/bin.ts lint`.
 
 ## Pull requests
 
@@ -112,7 +117,7 @@ Publishing is triggered by a tag and gated on the full suite, because a tag is n
 npm will not let a version be republished. Before tagging:
 
 ```bash
-bun test                                  # includes the packed-tarball test
+bun run test                              # includes the packed-tarball test
 bun run scripts/check-version.ts 0.1.4    # the tag you are about to push, without the v
 cd packages/cli && bun pm pack --dry-run  # eyeball the file list
 ```

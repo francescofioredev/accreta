@@ -11,3 +11,14 @@ export async function serveStdio(cwd: string = process.cwd()): Promise<void> {
   await server.connect(new StdioServerTransport());
   console.error("accreta MCP server ready on stdio");
 }
+
+/** What the `accreta-mcp` bin runs, through bin.ts. */
+export async function main(): Promise<number> {
+  try {
+    await serveStdio();
+    return 0;
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    return 1;
+  }
+}

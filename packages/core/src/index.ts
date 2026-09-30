@@ -25,8 +25,13 @@ export { INLINE_LINK_KIND, extractLinks, resolveWikilink, tryResolveWikilink } f
 
 export type { BuildOptions, BuildResult } from "./index-db/build.ts";
 export { buildIndex } from "./index-db/build.ts";
-export type { Database, OpenOptions } from "./index-db/db.ts";
-export { openIndex, sealForReading } from "./index-db/db.ts";
+export type { Database, OpenOptions, Statement } from "./index-db/db.ts";
+export {
+  openIndex,
+  sealForReading,
+  sqliteSupport,
+  UnsupportedRuntimeError,
+} from "./index-db/db.ts";
 
 export type {
   LocationVerdict,

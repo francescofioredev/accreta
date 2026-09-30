@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { Database as SqliteDatabase } from "bun:sqlite";
+import { DatabaseSync } from "node:sqlite";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -172,8 +172,8 @@ describe("findRelated, paged", () => {
 
 function dropMeta(...keys: string[]): Database {
   db?.close();
-  const writable = new SqliteDatabase(indexPath);
-  for (const key of keys) writable.run("DELETE FROM meta WHERE key = ?", [key]);
+  const writable = new DatabaseSync(indexPath);
+  for (const key of keys) writable.prepare("DELETE FROM meta WHERE key = ?").run(key);
   writable.close();
   db = openIndex(indexPath, { readonly: true });
   return db;

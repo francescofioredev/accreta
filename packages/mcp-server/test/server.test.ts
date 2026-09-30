@@ -90,7 +90,7 @@ test("search_pages names every column the FTS index searches", async () => {
 
   try {
     const { sql } = ctx.db
-      .query("SELECT sql FROM sqlite_master WHERE name = 'pages_fts'")
+      .prepare("SELECT sql FROM sqlite_master WHERE name = 'pages_fts'")
       .get() as { sql: string };
     const searched = sql
       .slice(sql.indexOf("(") + 1, sql.lastIndexOf(")"))

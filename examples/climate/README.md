@@ -11,9 +11,9 @@ drift detection work here, the `SourceAdapter` abstraction is real rather than d
 
 ```bash
 cd examples/climate
-bun run ../../packages/cli/src/main.ts reindex
-bun run ../../packages/cli/src/main.ts lint
-bun run ../../packages/cli/src/main.ts drift
+bun --conditions=@accreta/source ../../packages/cli/src/bin.ts reindex
+bun --conditions=@accreta/source ../../packages/cli/src/bin.ts lint
+bun --conditions=@accreta/source ../../packages/cli/src/bin.ts drift
 ```
 
 Expected:

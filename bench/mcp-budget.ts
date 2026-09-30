@@ -256,7 +256,9 @@ export async function measure(size: number, options: { bodyBytes?: number } = {}
       const aliasQuery = `"${corpus.sharedAlias}"`;
       const aliased = await call(client, "search_pages", { query: aliasQuery });
       const searchAliasedMatches = (
-        db.query("SELECT COUNT(*) AS n FROM pages_fts WHERE pages_fts MATCH ?").get(aliasQuery) as {
+        db
+          .prepare("SELECT COUNT(*) AS n FROM pages_fts WHERE pages_fts MATCH ?")
+          .get(aliasQuery) as {
           n: number;
         }
       ).n;

@@ -54,7 +54,7 @@ let root = "";
 let db: Database;
 
 function addPage(path: string, source: string | null, verifiedAt: string | null): void {
-  db.query(
+  db.prepare(
     `INSERT INTO pages (path, type, title, source, last_verified_revision, frontmatter_json, body, mtime)
      VALUES (?, 'note', ?, ?, ?, '{}', '', 0)`,
   ).run(path, path, source, verifiedAt);
@@ -153,7 +153,7 @@ describe("detectDrift", () => {
   test("the report grows with pages alone, not with pages times changed paths", async () => {
     const changedPaths = Array.from({ length: 50 }, (_, i) => `src/module-${i}/file-${i}.ts`);
     const sizeFor = async (pageCount: number): Promise<number> => {
-      db.query("DELETE FROM pages").run();
+      db.prepare("DELETE FROM pages").run();
       for (let i = 0; i < pageCount; i++) addPage(`knowledge/page-${i}.md`, "docs", "rev1");
       const report = await detectDrift(
         db,
@@ -268,7 +268,7 @@ function addFootnote(
   path: string,
   locator: string,
 ) {
-  db.query(
+  db.prepare(
     `INSERT INTO citations (page_path, footnote, line, text, source, revision, path, locator, claim)
      VALUES (?, ?, ?, '', 'docs', ?, ?, ?, '')`,
   ).run(page, footnote, footnote.length, revision, path, locator);
@@ -277,7 +277,7 @@ function addFootnote(
 describe("detectDrift at line granularity", () => {
   test("an index without the citations table says to reindex", async () => {
     addPage("knowledge/a.md", "docs", "rev1");
-    db.run("DROP TABLE citations");
+    db.exec("DROP TABLE citations");
     const source = new LineAwareSource("docs", "rev2", { rev1: ["ch.md"] }, {});
     await expect(detectDrift(db, source)).rejects.toThrow(
       "This index predates the citations table; run `accreta reindex`.",
@@ -356,7 +356,7 @@ describe("detectDrift at line granularity", () => {
   });
 
   test("a whole-document canonical_source into a changed document is touched", async () => {
-    db.query(
+    db.prepare(
       `INSERT INTO pages (path, type, title, source, canonical_source, last_verified_revision, frontmatter_json, body, mtime)
        VALUES ('knowledge/a.md', 'note', 'a', 'docs', 'docs:ch.md', 'rev1', '{}', '', 0)`,
     ).run();

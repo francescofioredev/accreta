@@ -27,7 +27,7 @@ Reported: recall@1, recall@5, and MRR.
 ## Running it
 
 ```bash
-bun run bench/search-bench.ts
+bun run bench
 ```
 
 ---

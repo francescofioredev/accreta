@@ -1,14 +1,56 @@
-import { Database } from "bun:sqlite";
+import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mkdirSync, readFileSync } from "node:fs";
+import { UNSUPPORTED_RUNTIME } from "../runtime.ts";
 
 const SCHEMA_PATH = join(dirname(fileURLToPath(import.meta.url)), "schema.sql");
 
-export type { Database };
+type Params = SQLInputValue[] | [Record<string, SQLInputValue>, ...SQLInputValue[]];
+
+/** What accreta uses of a node:sqlite statement; rows are unknown until a caller names them. */
+export interface Statement {
+  all(...params: Params): unknown[];
+  get(...params: Params): unknown;
+  run(...params: Params): { changes: number | bigint; lastInsertRowid: number | bigint };
+}
+
+/** What accreta uses of node:sqlite's DatabaseSync. */
+export interface Database {
+  prepare(sql: string): Statement;
+  exec(sql: string): void;
+  close(): void;
+}
 
 export interface OpenOptions {
   readonly?: boolean;
+}
+
+/** SQLite without FTS5 can open an index and never search it. */
+export class UnsupportedRuntimeError extends Error {
+  constructor() {
+    super(UNSUPPORTED_RUNTIME);
+    this.name = "UnsupportedRuntimeError";
+  }
+}
+
+function hasFts5(db: Database): boolean {
+  try {
+    db.prepare("SELECT fts5(NULL)").get();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The message a runtime without FTS5 gets, or null when this one has it. */
+export function sqliteSupport(): string | null {
+  const db = new DatabaseSync(":memory:");
+  try {
+    return hasFts5(db) ? null : UNSUPPORTED_RUNTIME;
+  } finally {
+    db.close();
+  }
 }
 
 /**
@@ -17,7 +59,12 @@ export interface OpenOptions {
 export function openIndex(path: string, opts: OpenOptions = {}): Database {
   if (!opts.readonly) mkdirSync(dirname(path), { recursive: true });
 
-  const db = new Database(path, opts.readonly ? { readonly: true } : { create: true });
+  // node:sqlite silently ignores Bun's old spelling, `readonly`, and leaves the reader writable.
+  const db = new DatabaseSync(path, { readOnly: opts.readonly === true });
+  if (!hasFts5(db)) {
+    db.close();
+    throw new UnsupportedRuntimeError();
+  }
 
   // Only writers set WAL. A read-only connection cannot create the `-shm` file a
   // WAL database needs, so asking for WAL here is what turns a perfectly good

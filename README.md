@@ -196,21 +196,20 @@ accreta init --preset research   # or codebase, or neither
 accreta reindex && accreta lint
 ```
 
-> **accreta runs on [Bun](https://bun.sh), not Node.** It ships as TypeScript and uses
-> `bun:sqlite`, so there is no build step and no Node build to fall back to. The `engines`
-> field says so, but neither npm nor Bun enforces it: installed under Node, the CLI fails on
-> the first import rather than with a useful message. This is a real limitation, not an
-> oversight — see [ADR-0005](docs/adr/0005-ship-typescript-for-bun.md).
+> **accreta runs on Node `^22.16.0 || >=24` and on Bun `>=1.4.0`.** The bins start with
+> `#!/usr/bin/env node`, so under Bun run them with `bunx --bun accreta`, and a `bun add -g`
+> install needs Node on `PATH`. An older runtime gets a message naming this range — see
+> [ADR-0016](docs/adr/0016-run-on-node-and-bun.md).
 
 ## Try it
 
 ```bash
 bun install
 cd examples/climate
-bun run ../../packages/cli/src/main.ts reindex   # 10 pages, 27 links
-bun run ../../packages/cli/src/main.ts lint      # clean
-bun run ../../packages/cli/src/main.ts drift     # up to date, both sources
-bun run ../../packages/cli/src/main.ts canonical "ECS"
+bun --conditions=@accreta/source ../../packages/cli/src/bin.ts reindex   # 10 pages, 27 links
+bun --conditions=@accreta/source ../../packages/cli/src/bin.ts lint      # clean
+bun --conditions=@accreta/source ../../packages/cli/src/bin.ts drift     # up to date, both sources
+bun --conditions=@accreta/source ../../packages/cli/src/bin.ts canonical "ECS"
 ```
 
 Those run against the repository. With `accreta` installed the same commands work anywhere,

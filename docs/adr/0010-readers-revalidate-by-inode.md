@@ -7,13 +7,14 @@ Date: 2026-08-17
 
 A rebuild stages the new index beside the live one and moves it into place with `rename(2)`.
 That is atomic, so no reader ever opens a half-rebuilt database. It says nothing about a
-connection that outlives the swap, and there the two platforms disagree:
+connection that outlives the swap, and there SQLite builds disagree
+([ADR-0016](0016-run-on-node-and-bun.md)):
 
-- **macOS** revalidates the file and fails the connection with `SQLITE_IOERR`. Measured: every
-  read throws `disk I/O error`, permanently and per-connection — three swaps and a 200ms
-  settle did not recover it.
-- **Linux** keeps the unlinked inode alive behind the open descriptor, so the stale handle
-  goes on serving pre-rebuild rows and every call *succeeds*.
+- **Apple's system SQLite**, which Bun loads on macOS, revalidates the file and fails the
+  connection with `SQLITE_IOERR`. Measured: every read throws `disk I/O error`, permanently and
+  per-connection — three swaps and a 200ms settle did not recover it.
+- **Linux**, and the SQLite Node bundles, keep the unlinked inode alive behind the open
+  descriptor, so the stale handle goes on serving pre-rebuild rows and every call *succeeds*.
 
 The MCP server opened the index once and never reopened it. So an agent that verified a page,
 reindexed, and asked for it again was either told `disk I/O error` for the rest of the session,
