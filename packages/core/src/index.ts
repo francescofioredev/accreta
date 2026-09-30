@@ -1,5 +1,16 @@
-export type { AccretaConfig, ConfigCheck } from "./config.ts";
-export { DEFAULT_CONFIG, checkConfig, configFromObject, parseConfig } from "./config.ts";
+export type {
+  AccretaConfig,
+  ConfigCheck,
+  InvalidSupersessionFields,
+  SupersessionFields,
+} from "./config.ts";
+export {
+  DEFAULT_CONFIG,
+  DEFAULT_SUPERSESSION_FIELDS,
+  checkConfig,
+  configFromObject,
+  parseConfig,
+} from "./config.ts";
 
 export type { CitationParts, CitationTemplate, Footnote, TemplateResult } from "./citations.ts";
 export { compileCitationTemplate, extractFootnotes } from "./citations.ts";

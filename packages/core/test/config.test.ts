@@ -26,3 +26,42 @@ link_fields: [cites, contradicts]
     expect(parseConfig("page_types: [unclosed")).toEqual(DEFAULT_CONFIG);
   });
 });
+
+describe("supersession_fields", () => {
+  test("names the pair lint reads as supersession", () => {
+    const config = parseConfig(`
+link_fields: [replaces, replaced_by]
+supersession_fields:
+  supersedes: replaces
+  superseded_by: replaced_by
+`);
+    expect(config.supersessionFields).toEqual({
+      supersedes: "replaces",
+      supersededBy: "replaced_by",
+    });
+  });
+
+  test("absent, it stays unset so lint can tell the default from a choice", () => {
+    expect(parseConfig("page_types: [note]")).not.toHaveProperty("supersessionFields");
+  });
+
+  test("false turns the check off", () => {
+    expect(parseConfig("supersession_fields: false").supersessionFields).toBeNull();
+  });
+
+  // Defaulting would check a pair the user did not choose; lint reports the value instead.
+  test("a malformed pair is kept as invalid, not replaced by the default", () => {
+    for (const [value, raw] of [
+      ["no", "no"],
+      ["off", "off"],
+      ["[supersedes, superseded_by]", ["supersedes", "superseded_by"]],
+      ["{ supersedes: replaces }", { supersedes: "replaces" }],
+      ["{ supersedes: same, superseded_by: same }", { supersedes: "same", superseded_by: "same" }],
+      ["", null],
+    ] as const) {
+      expect(parseConfig(`supersession_fields: ${value}`).supersessionFields).toEqual({
+        invalid: raw,
+      });
+    }
+  });
+});

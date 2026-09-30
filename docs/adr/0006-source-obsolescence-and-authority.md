@@ -4,6 +4,9 @@ Status: accepted in part. Obsolescence is declarative and lint checks the supers
 accepted. The `contested` field: still proposed, see
 [Why `contested` is not decided](#why-contested-is-not-decided).
 Date: 2026-08-10
+Implemented 2026-09-29: the supersession lint, as `inconsistent-supersession` driven by
+`supersession_fields` ([#81](https://github.com/francescofioredev/accreta/issues/81)), including
+the loop rule recorded under Decision.
 
 ## Context
 
@@ -72,6 +75,15 @@ a ranking function that resolves contradictions, and it should be reverted rathe
 key: a mutual `supersedes` pair, and a `supersedes` edge whose target does not carry the
 reciprocal `superseded_by`. Both are pure graph properties over `links`. No page types, no
 adapter knowledge, no inference.
+
+**A supersession loop of any length is a finding, not only a mutual pair.** Between pages that
+each stand for one document, supersession cannot loop: a successor is written after what it
+replaces. The likeliest real loop is a revert, where a reinstated version points back at the
+page that replaced it. That is one page standing for two revisions, and the fix is to split the
+page, not to relabel the edge under another field to hide it. The finding gives the same advice
+for a 2-page loop as for a longer one. This rule was the one #81 held with medium confidence,
+and its disproof condition stands: a corpus that uses the field for "revises", where circular
+histories are legitimate. Such a knowledge base sets `supersession_fields: false`.
 
 ## Why `contested` is not decided
 
