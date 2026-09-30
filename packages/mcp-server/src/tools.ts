@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import {
+  cite,
   DelegatedSourceError,
   detectDrift,
   findCanonicalPage,
@@ -9,6 +10,7 @@ import {
   getPage,
   lintKnowledgeBase,
   pageChanges,
+  parseCitation,
   searchPages,
   type AccretaConfig,
   type CanonicalMatch,
@@ -392,6 +394,46 @@ export async function listRecentChangesTool(
       changed: [],
     };
   }
+}
+
+// An adapter's detail may quote the source (git's stderr does); the rest is the caller's input, the config or a revision.
+const CITE_FIELDS = ["location.detail"] as const;
+
+export async function citeTool(
+  ctx: ToolContext,
+  input: { target: string; expect_revision?: string },
+) {
+  const target = parseCitation(input.target);
+  if (!target) {
+    throw new Error(
+      `"${input.target}" is not source:path[#locator]; a path with "#" or whitespace in it cannot be cited.`,
+    );
+  }
+  const why = notLoaded(ctx, target.sourceId);
+  if (why) throw new Error(why);
+
+  const citation = await cite(ctx.sources, ctx.config.provenanceFormat, target);
+  const expected = input.expect_revision;
+  if (expected !== undefined && citation.revision !== expected) {
+    throw new Error(
+      citation.revision !== null
+        ? `Source "${target.sourceId}" is at ${citation.revision}, not ${expected}: it moved since you read it, or ${expected} did not come from cite. Re-read ${citation.canonicalSource}, then cite again.`
+        : citation.delegated
+          ? `Cannot confirm source "${target.sourceId}" is still at ${expected}: it is read through ${citation.delegated.via}, and accreta cannot tell its revision.`
+          : `Cannot confirm source "${target.sourceId}" is still at ${expected}: accreta could not check this place. Cite it without an expected revision to see why.`,
+    );
+  }
+  return {
+    canonical_source: citation.canonicalSource,
+    footnote: citation.footnote,
+    revision: citation.revision,
+    location: citation.location,
+    // `scope`, as check_drift names it: the declaration's prose for the agent holding the connector.
+    ...(citation.delegated
+      ? { delegated: { via: citation.delegated.via, scope: citation.delegated.guidance } }
+      : {}),
+    _provenance: provenance(CITE_FIELDS),
+  };
 }
 
 const LINT_FIELDS = [
