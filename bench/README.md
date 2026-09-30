@@ -133,17 +133,17 @@ punctuation tokenizes worse than prose, so the estimate understates the real cou
 `test/response-budget.test.ts` runs in `bun test`, and so in CI. It calls `measure(60)`: the
 smallest round size where every list tool has more results than fit in one default page. Past
 that size a default response is still one page, so the bytes barely move: at 1,000 pages each
-figure is within 1.1% of its value at 60. The test takes about 0.3s. It fails when:
+figure is within 1.1% of its value at 60. The test takes under a second. It fails when:
 
 - a list tool returns more than 50 entries by default, the limit ADR-0007 sets;
 - a default response grows past its byte budget;
-- `check_drift` names a changed path more than once per stale revision, or its cost per page
-  or per changed path grows.
+- `check_drift` names a changed path more than once per stale revision, or grows past its
+  size, per-page or per-path budget.
 
 | response                                    | at 60 pages | budget | headroom per entry |
 | ------------------------------------------- | ----------- | ------ | ------------------ |
-| `search_pages`, body word                   | 7,004       | 7,800  | 40 B per hit       |
-| `search_pages`, shared alias                | 8,580       | 9,500  | 46 B per hit       |
+| `search_pages`, body word                   | 7,004       | 7,400  | 20 B per hit       |
+| `search_pages`, shared alias                | 8,580       | 9,000  | 21 B per hit       |
 | `find_consumers`, the hub                   | 8,430       | 9,300  | 17 B per relation  |
 | `find_consumers`, inbound and outbound      | 8,450       | 9,300  | 17 B per relation  |
 | `find_canonical`                            | 9,359       | 10,300 | 19 B per match     |
@@ -151,24 +151,43 @@ figure is within 1.1% of its value at 60. The test takes about 0.3s. It fails wh
 | `get_page`, minus its body                  | 961         | 1,100  | 139 B in all       |
 
 Bytes of the text block the server returns, darwin arm64, Bun 1.3.13. Each budget is the
-measured size plus 10%, rounded up to the next 100 bytes. The 10% is a tolerance, not room for
-noise: the output at 60 pages is deterministic, so the same code always measures the same
-bytes. It is sized so a short field added to every entry fails, as the last column shows.
-ADR-0007 states a size only for lint (8.5KB, which the measurement matches). The others take
-the same margin.
+measured size plus 10%, rounded up to the next 100 bytes. The margin is a tolerance, not room
+for noise: the output at 60 pages is deterministic, so the same code always measures the same
+bytes. `search_pages` returns 20 entries rather than 50, so 10% would leave each hit 40 B; its
+budgets allow 18 B per hit instead, in line with the other tools. A field added to every entry
+fails once it costs more than the last column: `"matched_aliases": []` on every search hit
+costs 29 B. ADR-0007 states a size only for lint (8.5KB, which the measurement matches).
 
-Three probes exist only for the gate. The aliased search matches every page, which the test
+Two probes exist only for the gate. The aliased search matches every page, which the test
 checks against the index, so every hit carries `matched_aliases`. The second `find_consumers`
 probe has 30 inbound relations and 29 outbound, so its default page holds both and the limit
 cuts the outbound ones. `get_page` is gated without its body, because the body is the caller's
 page, not accreta's overhead. `search_pages` still returns 20 results by default; aligning it
 to 50 (#183) has to raise its budget in the same change.
 
-`check_drift` is not paged, so it is gated on growth rather than size. All pages share one
-revision, as a git ingest leaves them, and a scripted source reports the changed paths. At 50
-changed paths, going from 100 to 200 pages adds 40 bytes per page. At 100 pages, going from 50
-to 100 changed paths adds 38 bytes per path. The budgets are those plus 10%. Copying the
-changed paths into every page, the multiplier ADR-0007 removed, costs 2,227 bytes per page.
+`check_drift` is not paged. It is gated on its size at 100 pages and 50 changed paths, and on
+what 100 more pages or 50 more changed paths add, each plus 10%. Pages cite into the changed
+paths, and a scripted source reports them. The size cap matters because the marginal checks
+alone would miss anything that adds a fixed amount.
+
+The gate runs `check_drift` in two modes, because the tool reports them differently. With
+diffs, the source says what each change did to each cited line, as the git adapter does, and
+every git report takes this path. Without diffs, the report lists only pages and paths.
+
+| mode                                           | size    | per page | per path |
+| ---------------------------------------------- | ------- | -------- | -------- |
+| with diffs, 1 revision, 1 citation per page    | 26,586  | 241      | 38       |
+| with diffs, 2 revisions, 2 citations per page  | 44,677  | 397      | 76       |
+| without diffs, 1 revision                      | 6,259   | 40       | 38       |
+| without diffs, 2 revisions                     | 8,288   | 40       | 76       |
+
+One revision is what a git ingest leaves: every page verified in one run records the same HEAD.
+The two-revision cases make growth by revision, and by citations times changed paths, show.
+Each of these was reproduced by rewriting the response at run time, and each fails the gate:
+
+- copying the changed paths into every page (the multiplier ADR-0007 removed);
+- copying them onto every citation;
+- adding a field for every page.
 
 A response that grows on purpose raises its budget in the same pull request, where a reviewer
 sees it. `list_recent_changes` is not gated: the benchmark does not measure it.

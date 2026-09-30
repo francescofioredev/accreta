@@ -26,6 +26,7 @@ import {
   parsePage,
   type AccretaConfig,
   type LocationVerdict,
+  type LocatorChange,
   type SourceAdapter,
 } from "@accreta/core";
 import { createServer, type ToolContext } from "@accreta/mcp-server";
@@ -332,7 +333,7 @@ export async function measure(size: number, options: { bodyBytes?: number } = {}
   }
 }
 
-/** A source that answers from a script: every page is stale against one revision. */
+/** A source that answers from a script: every page is stale, and every changed path the same. */
 class ScriptedSource implements SourceAdapter {
   readonly id = "synthetic";
   constructor(private readonly changed: string[]) {}
@@ -351,32 +352,71 @@ class ScriptedSource implements SourceAdapter {
   pinRevision(): void {}
 }
 
-export const changedPath = (i: number) => `src/changed-${String(i).padStart(6, "0")}.txt`;
-
-export interface DriftRow {
-  pages: number;
-  changed: number;
-  bytes: number;
-  text: string;
+/** Diffs contents as the git adapter does, so check_drift takes the branch git reports take. */
+class ScriptedDiffingSource extends ScriptedSource {
+  async touchedSince(
+    _revision: string,
+    _path: string,
+    locators: readonly string[],
+  ): Promise<Map<string, LocatorChange>> {
+    return new Map(locators.map((l) => [l, LOCATOR_CHANGES[l] ?? { status: "unknown" }]));
+  }
 }
 
-/**
- * check_drift over `pages` pages verified at one revision, after `changed` paths moved.
- * Every page sharing one revision is what a git ingest produces by construction (ADR-0007).
- */
-export async function measureDrift(pages: number, changed: number): Promise<DriftRow> {
+// One citation of each status check_drift reports differently: listed, listed with a move, counted.
+const LOCATOR_CHANGES: Record<string, LocatorChange> = {
+  L1: { status: "touched" },
+  L2: { status: "moved", locator: "L20" },
+  L3: { status: "untouched" },
+};
+const locatorOf = (i: number) => `L${1 + (i % 3)}`;
+
+// Pages cite only the first few changed paths, so the citations do not grow with `changed`.
+const CITED_PATHS = 10;
+
+export const changedPath = (i: number) => `src/changed-${String(i).padStart(6, "0")}.txt`;
+
+export interface DriftMode {
+  /** The source diffs contents (touchedSince), as the git adapter does. */
+  diffing: boolean;
+  /** Stale revisions the pages are split across. */
+  revisions: number;
+  /** Citations into changed paths per page. */
+  citesPerPage: 1 | 2;
+}
+
+export interface DriftRow {
+  bytes: number;
+  text: string;
+  staleRevisions: number;
+  /** Citations the report lists, by the path they cite. */
+  listedCitations: Map<string, number>;
+}
+
+/** check_drift over `pages` pages after `changed` paths moved, each page citing into them. */
+export async function measureDrift(
+  pages: number,
+  changed: number,
+  mode: DriftMode,
+): Promise<DriftRow> {
   const root = mkdtempSync(join(tmpdir(), "accreta-mcp-drift-"));
   try {
     mkdirSync(join(root, "knowledge"), { recursive: true });
     writeFileSync(join(root, "accreta.config.yaml"), CONFIG_YAML);
     for (let i = 0; i < pages; i++) {
+      const revision = `rev-old-${i % mode.revisions}`;
+      const footnote =
+        mode.citesPerPage === 2
+          ? `\nA claim.[^a]\n\n[^a]: synthetic @ ${revision} · ${changedPath((i + 1) % CITED_PATHS)}#${locatorOf(i + 1)}\n`
+          : "";
       writeFileSync(
         join(root, "knowledge", `${pageId(i)}.md`),
-        `---\ntype: concept\ntitle: Page ${i}\nsource: synthetic\nlast_verified_revision: rev-old\n---\n\nPage ${i}.\n`,
+        `---\ntype: concept\ntitle: Page ${i}\nsource: synthetic\ncanonical_source: "synthetic:${changedPath(i % CITED_PATHS)}#${locatorOf(i)}"\nlast_verified_revision: ${revision}\n---\n\nPage ${i}.\n${footnote}`,
       );
     }
     const { config, db } = indexed(root);
-    const source = new ScriptedSource(Array.from({ length: changed }, (_, i) => changedPath(i)));
+    const paths = Array.from({ length: changed }, (_, i) => changedPath(i));
+    const source = mode.diffing ? new ScriptedDiffingSource(paths) : new ScriptedSource(paths);
     const ctx: ToolContext = {
       db,
       config,
@@ -388,13 +428,37 @@ export async function measureDrift(pages: number, changed: number): Promise<Drif
     const client = await connect(ctx);
     try {
       const drift = await call(client, "check_drift", {});
-      const stale = drift.value.reports[0]?.stale ?? [];
+      const stale: {
+        pages: unknown[];
+        citations?: { path: string }[];
+        citations_untouched?: number;
+      }[] = drift.value.reports[0]?.stale ?? [];
+      const stalePages = stale.reduce((n, s) => n + s.pages.length, 0);
       expectProbe(
         "check_drift",
-        stale.length === 1 && stale[0].pages.length === pages,
-        `${stale.length} stale revisions, want 1 with ${pages} pages`,
+        stale.length === mode.revisions && stalePages === pages,
+        `${stale.length} stale revisions with ${stalePages} pages, want ${mode.revisions} with ${pages}`,
       );
-      return { pages, changed, bytes: drift.bytes, text: drift.text };
+      const citations = stale.reduce(
+        (n, s) => n + (s.citations?.length ?? 0) + (s.citations_untouched ?? 0),
+        0,
+      );
+      const wantCitations = mode.diffing ? pages * mode.citesPerPage : 0;
+      expectProbe(
+        "check_drift",
+        citations === wantCitations,
+        `${citations} citations, want ${wantCitations}`,
+      );
+      const listedCitations = new Map<string, number>();
+      for (const c of stale.flatMap((s) => s.citations ?? [])) {
+        listedCitations.set(c.path, (listedCitations.get(c.path) ?? 0) + 1);
+      }
+      return {
+        bytes: drift.bytes,
+        text: drift.text,
+        staleRevisions: stale.length,
+        listedCitations,
+      };
     } finally {
       await client.close();
       db.close();
@@ -466,16 +530,19 @@ async function main(): Promise<void> {
   }
 
   // ADR-0007's drift table: every page verified at one revision, as a git ingest leaves them.
-  console.log("\nCHECK_DRIFT (all pages stale against one revision)");
-  console.log("  pages  changed  response  share of 200k");
-  for (const [pages, changed] of [
-    [100, 10],
-    [1_000, 10],
-    [1_000, 100],
+  console.log("\nCHECK_DRIFT (all pages stale against one revision, one citation each)");
+  console.log("  pages  changed  source diffs  response  share of 200k");
+  for (const [pages, changed, diffing] of [
+    [100, 10, false],
+    [1_000, 10, false],
+    [1_000, 100, false],
+    [100, 10, true],
+    [1_000, 10, true],
+    [1_000, 100, true],
   ] as const) {
-    const d = await measureDrift(pages, changed);
+    const d = await measureDrift(pages, changed, { diffing, revisions: 1, citesPerPage: 1 });
     console.log(
-      `  ${String(pages).padStart(5)}  ${String(changed).padStart(7)}  ${kb(d.bytes).padStart(8)}  ${pct(d.bytes).padStart(12)}`,
+      `  ${String(pages).padStart(5)}  ${String(changed).padStart(7)}  ${String(diffing).padStart(12)}  ${kb(d.bytes).padStart(8)}  ${pct(d.bytes).padStart(12)}`,
     );
   }
 
