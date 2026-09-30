@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { Database as SqliteDatabase } from "bun:sqlite";
+import { DatabaseSync } from "node:sqlite";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -47,6 +47,8 @@ beforeEach(() => {
 
 afterEach(() => {
   db?.close();
+  // node:sqlite throws on a second close(), and the next test may open nothing.
+  db = undefined as unknown as Database;
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -268,8 +270,8 @@ describe("an index built before a table existed", () => {
   function dropTable(table: string): void {
     writePage("a.md", '---\ntype: note\naliases: ["x"]\n---\n\n# A\n');
     buildIndex({ root, config, indexPath });
-    const writable = new SqliteDatabase(indexPath);
-    writable.run(`DROP TABLE ${table}`);
+    const writable = new DatabaseSync(indexPath);
+    writable.exec(`DROP TABLE ${table}`);
     writable.close();
     db = openIndex(indexPath, { readonly: true });
   }
@@ -278,12 +280,12 @@ describe("an index built before a table existed", () => {
     writePage("a.md", "---\ntype: note\n---\n\n# A\n");
     reindex();
     requireTable(db, "aliases");
-    const writable = new SqliteDatabase(indexPath);
-    writable.run("DROP TABLE aliases");
+    const writable = new DatabaseSync(indexPath);
+    writable.exec("DROP TABLE aliases");
     expect(() => requireTable(db, "aliases")).not.toThrow();
 
     expect(() => requireTable(db, "later")).toThrow(StaleIndexError);
-    writable.run("CREATE TABLE later (x)");
+    writable.exec("CREATE TABLE later (x)");
     writable.close();
     expect(() => requireTable(db, "later")).not.toThrow();
   });

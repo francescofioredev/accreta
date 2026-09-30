@@ -10,8 +10,8 @@ The agent-facing surface. Exposes a knowledge base as MCP tools over stdio.
 {
   "mcpServers": {
     "accreta": {
-      "command": "bun",
-      "args": ["run", "node_modules/@accreta/mcp-server/src/main.ts"],
+      "command": "accreta",
+      "args": ["mcp"],
       "env": {
         "ACCRETA_ROOT": "../path/to/knowledge-base"
       }

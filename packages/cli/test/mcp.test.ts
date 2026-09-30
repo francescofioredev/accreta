@@ -5,7 +5,12 @@ import { join } from "node:path";
 import { run } from "../src/main.ts";
 import { COMMAND_ARGS, refuseArguments, type CommandContext } from "../src/commands/shared.ts";
 
-const MAIN = join(import.meta.dir, "..", "src", "main.ts");
+// Through the bin, as a user runs it; in the repository that means the source condition.
+const BIN = [
+  process.execPath,
+  "--conditions=@accreta/source",
+  join(import.meta.dir, "..", "src", "bin.ts"),
+];
 const MANIFEST = (dir: string) =>
   JSON.parse(readFileSync(join(import.meta.dir, "..", "..", dir, "package.json"), "utf-8")) as {
     name: string;
@@ -44,7 +49,7 @@ test("accreta mcp answers an MCP initialize on stdio, and writes nothing else to
   expect(await run(["init"], ctx())).toBe(0);
   expect(await run(["reindex"], ctx())).toBe(0);
 
-  const proc = Bun.spawn(["bun", MAIN, "mcp"], {
+  const proc = Bun.spawn([...BIN, "mcp"], {
     cwd: root,
     stdin: "pipe",
     stdout: "pipe",
@@ -81,7 +86,7 @@ test("accreta mcp answers an MCP initialize on stdio, and writes nothing else to
 }, 15_000);
 
 test("accreta mcp outside a knowledge base says so and fails", async () => {
-  const proc = Bun.spawn(["bun", MAIN, "mcp"], {
+  const proc = Bun.spawn([...BIN, "mcp"], {
     cwd: root,
     stdin: "pipe",
     stdout: "pipe",
@@ -104,7 +109,7 @@ test("accreta mcp help prints its own usage", async () => {
 
 /** Spawned with stdin left open, so a server that starts by mistake shows up as a hang, not a pass. */
 async function spawnMcp(...args: string[]) {
-  const proc = Bun.spawn(["bun", MAIN, "mcp", ...args], {
+  const proc = Bun.spawn([...BIN, "mcp", ...args], {
     cwd: root,
     stdin: "pipe",
     stdout: "pipe",

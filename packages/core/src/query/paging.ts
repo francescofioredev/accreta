@@ -86,7 +86,8 @@ export function paginate<T>(
  */
 export function indexIdentity(db: Database, request: PageRequest): string {
   const read = (key: string) =>
-    (db.query("SELECT value FROM meta WHERE key = ?").get(key) as { value: string } | null)?.value;
+    (db.prepare("SELECT value FROM meta WHERE key = ?").get(key) as { value: string } | undefined)
+      ?.value;
   const identity = read("build_id") ?? read("last_reindex_at");
   if (identity !== undefined) return identity;
   // With nothing to bind to, a cursor could outlive a rebuild unnoticed.

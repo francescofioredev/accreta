@@ -12,18 +12,34 @@
   },
   "bugs": "https://github.com/francescofioredev/accreta/issues",
   "engines": {
-    "bun": ">=1.3.13"
+    "node": "^22.16.0 || >=24",
+    "bun": ">=1.4.0"
   },
   "publishConfig": {
     "access": "public"
   },
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "@accreta/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./runtime": {
+      "@accreta/source": "./src/runtime.ts",
+      "types": "./dist/runtime.d.ts",
+      "default": "./dist/runtime.js"
+    }
   },
   "files": [
-    "src"
+    "dist"
   ],
   "dependencies": {
     "yaml": "^2.7.0"
+  },
+  "scripts": {
+    "build": "bun ../../scripts/build-package.ts",
+    "prepack": "bun ../../scripts/build-package.ts",
+    "postpack": "bun ../../scripts/build-package.ts --clean"
   }
 }

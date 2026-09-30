@@ -52,6 +52,8 @@ beforeEach(() => {
 
 afterEach(() => {
   ctx?.db.close();
+  // node:sqlite throws on a second close(), and the next test may open nothing.
+  ctx = undefined as unknown as ToolContext;
   rmSync(root, { recursive: true, force: true });
 });
 

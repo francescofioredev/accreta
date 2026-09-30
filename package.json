@@ -11,19 +11,20 @@
     "bench"
   ],
   "scripts": {
-    "test": "bun test",
+    "test": "bun --conditions=@accreta/source test",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint packages",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "bench": "bun run bench/search-bench.ts",
-    "bench:scale": "bun run bench/scale-bench.ts",
-    "bench:mcp": "bun run bench/mcp-budget.ts",
-    "bench:canonical": "bun run bench/canonical-bench.ts",
+    "bench": "bun --conditions=@accreta/source run bench/search-bench.ts",
+    "bench:scale": "bun --conditions=@accreta/source run bench/scale-bench.ts",
+    "bench:mcp": "bun --conditions=@accreta/source run bench/mcp-budget.ts",
+    "bench:canonical": "bun --conditions=@accreta/source run bench/canonical-bench.ts",
     "adoption": "bun run scripts/adoption.ts"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.14",
+    "@types/bun": "^1.4.2",
+    "@types/node": "^22.16.0",
     "oxlint": "^1.14.0",
     "prettier": "^3.4.2",
     "typescript": "^5.9.3"

@@ -12,7 +12,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "../src/main.ts";
 
-const MAIN = join(import.meta.dir, "..", "src", "main.ts");
+// Through the bin, as a user runs it; in the repository that means the source condition.
+const BIN = [
+  process.execPath,
+  "--conditions=@accreta/source",
+  join(import.meta.dir, "..", "src", "bin.ts"),
+];
 import { compareVersions } from "../src/commands/skill-floor.ts";
 
 let base = "";
@@ -193,7 +198,7 @@ describe("accreta doctor: a skill directory in a state nobody planned", () => {
     expect(Bun.spawnSync(["mkfifo", join(dir, "SKILL.md")]).exitCode).toBe(0);
 
     // A blocking open cannot be interrupted in-process, so the regression must fail by timeout here.
-    const child = Bun.spawn([process.execPath, MAIN, "doctor"], {
+    const child = Bun.spawn([...BIN, "doctor"], {
       cwd: repo,
       env: { ...process.env, HOME: home },
       stdout: "pipe",

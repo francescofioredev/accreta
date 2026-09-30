@@ -35,7 +35,7 @@ bun bench/jev/tasks/run-t3.ts                         # drift triage, RFC errata
 bun bench/jev/tasks/run-t3-ladder.ts --stage=ladder   # context ladder; then haiku, l3, batch
 bun bench/jev/tasks/run-t2-scifact.ts                 # citation support, SciFact
 bun bench/jev/tasks/run-t1.ts --stage=jev             # ingest triage, RFC sections
-bun bench/jev/tasks/run-t4.ts                         # navigation and rerank, 9,842-page KB
+bun --conditions=@accreta/source bench/jev/tasks/run-t4.ts   # navigation and rerank, 9,842-page KB
 bun bench/jev/tasks/ingest-atlas.ts                   # tier A baseline ingest (Claude Code)
 bun bench/jev/tasks/ingest-got.ts                     # tier C baseline ingest (Claude Code)
 bun bench/jev/report.ts

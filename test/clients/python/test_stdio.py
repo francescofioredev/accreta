@@ -20,8 +20,9 @@ from mcp import ClientSession, MCPError, StdioServerParameters, stdio_client
 
 REPO = Path(__file__).resolve().parents[3]
 # The one place the server launch lives; change it here when the entry point moves.
-SERVER_COMMAND = ["bun", "run", str(REPO / "packages" / "mcp-server" / "src" / "main.ts")]
-CLI = REPO / "packages" / "cli" / "src" / "main.ts"
+SOURCE = "--conditions=@accreta/source"  # in the repository, packages resolve to src/
+SERVER_COMMAND = ["bun", SOURCE, str(REPO / "packages" / "mcp-server" / "src" / "bin.ts")]
+CLI = REPO / "packages" / "cli" / "src" / "bin.ts"
 KB_ROOT = REPO / "examples" / "climate"
 PAGES = sorted(p.relative_to(KB_ROOT).as_posix() for p in (KB_ROOT / "knowledge").rglob("*.md"))
 SOURCE_IDS = {
@@ -59,7 +60,7 @@ def index_path(tmp_path_factory):
     # Built outside the corpus so the test never writes into examples/.
     path = tmp_path_factory.mktemp("index") / "index.sqlite"
     env = {**os.environ, "ACCRETA_ROOT": str(KB_ROOT), "ACCRETA_INDEX_PATH": str(path)}
-    subprocess.run(["bun", "run", str(CLI), "reindex"], env=env, check=True, timeout=120)
+    subprocess.run(["bun", SOURCE, str(CLI), "reindex"], env=env, check=True, timeout=120)
     return path
 
 

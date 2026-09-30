@@ -21,7 +21,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.13
+          bun-version: 1.4.2
 
       # Node is here only to run `npm publish`. Everything else — tests,
       # typecheck, the package contents — is bun. The split exists because bun
@@ -44,7 +44,7 @@ jobs:
       # npm refuses to republish a version, so anything that could make this
       # release unusable has to fail before the publish step, not after.
       - name: Test
-        run: bun test
+        run: bun run test
 
       - name: Typecheck
         run: bun run typecheck

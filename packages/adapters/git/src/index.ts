@@ -1,4 +1,6 @@
+import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { constants } from "node:os";
 import { relative, resolve, sep } from "node:path";
 import {
   formatCitation,
@@ -25,24 +27,26 @@ export interface GitSourceOptions {
 }
 
 /** Run a git command in the repository, returning stdout. */
-async function git(root: string, args: string[]): Promise<string> {
-  const proc = Bun.spawn(["git", ...args], {
-    cwd: root,
-    // accreta only reads; without this `status` rewrites .git/index and a user's commit can hit index.lock.
-    // GIT_DIFF_OPTS would override the -U0 that hunk parsing depends on.
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_DIFF_OPTS: undefined },
-    stdout: "pipe",
-    stderr: "pipe",
+function git(root: string, args: string[]): Promise<string> {
+  // accreta only reads; without this `status` rewrites .git/index and a user's commit can hit index.lock.
+  const env: NodeJS.ProcessEnv = { ...process.env, GIT_OPTIONAL_LOCKS: "0" };
+  // GIT_DIFF_OPTS would override the -U0 that hunk parsing depends on.
+  delete env.GIT_DIFF_OPTS;
+
+  return new Promise((resolveOutput, reject) => {
+    // Streamed, not execFile: its maxBuffer turns a large diff into an error.
+    const child = spawn("git", args, { cwd: root, env, stdio: ["ignore", "pipe", "pipe"] });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code, signal) => {
+      if (code === 0) return resolveOutput(Buffer.concat(stdout).toString("utf-8"));
+      const exitCode = code ?? 128 + (signal ? constants.signals[signal] : 0);
+      reject(new GitCommandError(args, exitCode, Buffer.concat(stderr).toString("utf-8").trim()));
+    });
   });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  if (exitCode !== 0) {
-    throw new GitCommandError(args, exitCode, stderr.trim());
-  }
-  return stdout;
 }
 
 export class GitCommandError extends Error {

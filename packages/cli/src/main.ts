@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 import { readFileSync } from "node:fs";
 
 import {
@@ -268,7 +267,8 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
   }
 }
 
-if (import.meta.main) {
+/** What the `accreta` bin runs, through bin.ts. */
+export async function main(): Promise<number> {
   const ctx: CommandContext = {
     cwd: process.cwd(),
     out: (line) => console.log(line),
@@ -276,11 +276,11 @@ if (import.meta.main) {
   };
 
   try {
-    process.exitCode = await run(process.argv.slice(2), ctx);
+    return await run(process.argv.slice(2), ctx);
   } catch (error) {
     // A message, not a stack trace: these are conditions a user can act on
     // ("no index, run reindex"), not internal failures.
     ctx.err(error instanceof Error ? error.message : String(error));
-    process.exitCode = 1;
+    return 1;
   }
 }
