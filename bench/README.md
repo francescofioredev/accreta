@@ -95,10 +95,11 @@ and a `nextCursor` (ADR-0007). `search_pages` returns at most 50 results, and it
 the number returned. `get_page` returns a whole body, and `check_drift` still returns
 everything it finds.
 
-Whether that matters is not a matter of opinion. `mcp-budget.ts` serialises each tool's
-response exactly as the server does — `JSON.stringify(value, null, 2)`, whitespace included —
-and reports bytes, estimated tokens, and the share of a 200k-token context window one call
-consumes.
+Whether that matters is not a matter of opinion. `mcp-budget.ts` connects a client to the
+server over an in-memory MCP transport, calls each tool by name, and measures the text block
+the server returns, whitespace included. It reports bytes, estimated tokens, and the share of
+a 200k-token context window one call consumes. The JSON-RPC message that carries the text
+escapes it again and adds its own framing, so the bytes on the wire are somewhat more.
 
 The failure it exists to quantify is circular: an agent calls `lint_knowledge_base` to find
 out what is wrong with the knowledge base *in order to fix it*, and the answer does not fit in
@@ -116,8 +117,10 @@ bun run bench:mcp -- --body-bytes=1000       # a page body closer to a real one
 Two figures describe the generator, not accreta, and the output says so:
 
 - **`get_page`** is the page body plus a fixed envelope. Every generated page has the same
-  body, 29,889 bytes by default; the page bodies in `examples/climate` run 462–1,488 bytes.
-  The run prints the body size, and `--body-bytes` sets it.
+  body, 29,889 bytes by default. The ten pages in `examples/climate` have bodies of 462–1,488
+  bytes as the indexer parses them, and are 756–1,782 bytes as whole files, frontmatter
+  included. The run prints the body size, and `--body-bytes` sets it; it refuses fewer than 34
+  bytes, which would cut the word `search_pages` probes for.
 - **`find_consumers`** probes a hub that every other page links to. Real link graphs are not
   stars, so its figure is an upper bound, not a typical case. `find_canonical` probes an alias
   every page shares, for the same reason.
@@ -130,26 +133,42 @@ punctuation tokenizes worse than prose, so the estimate understates the real cou
 `test/response-budget.test.ts` runs in `bun test`, and so in CI. It calls `measure(60)`: the
 smallest round size where every list tool has more results than fit in one default page. Past
 that size a default response is still one page, so the bytes barely move: at 1,000 pages each
-figure is within 1.1% of its value at 60. The test takes about 0.2s. It fails when:
+figure is within 1.1% of its value at 60. The test takes about 0.3s. It fails when:
 
 - a list tool returns more than 50 entries by default, the limit ADR-0007 sets;
-- a default response grows past its byte budget.
+- a default response grows past its byte budget;
+- `check_drift` names a changed path more than once per stale revision, or its cost per page
+  or per changed path grows.
 
-| response                      | at 60 pages | budget |
-| ----------------------------- | ----------- | ------ |
-| `search_pages`                | 7,004       | 7,800  |
-| `find_consumers`              | 8,430       | 9,300  |
-| `find_canonical`              | 9,359       | 10,300 |
-| `lint_knowledge_base`         | 8,702       | 9,600  |
-| `get_page`, minus its body    | 961         | 1,100  |
+| response                                    | at 60 pages | budget | headroom per entry |
+| ------------------------------------------- | ----------- | ------ | ------------------ |
+| `search_pages`, body word                   | 7,004       | 7,800  | 40 B per hit       |
+| `search_pages`, shared alias                | 8,580       | 9,500  | 46 B per hit       |
+| `find_consumers`, the hub                   | 8,430       | 9,300  | 17 B per relation  |
+| `find_consumers`, inbound and outbound      | 8,450       | 9,300  | 17 B per relation  |
+| `find_canonical`                            | 9,359       | 10,300 | 19 B per match     |
+| `lint_knowledge_base`                       | 8,702       | 9,600  | 18 B per finding   |
+| `get_page`, minus its body                  | 961         | 1,100  | 139 B in all       |
 
-Bytes as serialized by the server, darwin arm64, Bun 1.3.13. Each budget is the measured size
-plus 10%, rounded up to the next 100 bytes. ADR-0007 states a size only for lint (8.5KB, which
-the measurement matches). The others take the same margin. `get_page` is gated without its
-body, because the body is the caller's page, not accreta's overhead. `search_pages` still
-returns 20 results by default; aligning it to 50 (#183) has to raise its budget in the same
-change.
+Bytes of the text block the server returns, darwin arm64, Bun 1.3.13. Each budget is the
+measured size plus 10%, rounded up to the next 100 bytes. The 10% is a tolerance, not room for
+noise: the output at 60 pages is deterministic, so the same code always measures the same
+bytes. It is sized so a short field added to every entry fails, as the last column shows.
+ADR-0007 states a size only for lint (8.5KB, which the measurement matches). The others take
+the same margin.
+
+Three probes exist only for the gate. The aliased search matches every page, which the test
+checks against the index, so every hit carries `matched_aliases`. The second `find_consumers`
+probe has 30 inbound relations and 29 outbound, so its default page holds both and the limit
+cuts the outbound ones. `get_page` is gated without its body, because the body is the caller's
+page, not accreta's overhead. `search_pages` still returns 20 results by default; aligning it
+to 50 (#183) has to raise its budget in the same change.
+
+`check_drift` is not paged, so it is gated on growth rather than size. All pages share one
+revision, as a git ingest leaves them, and a scripted source reports the changed paths. At 50
+changed paths, going from 100 to 200 pages adds 40 bytes per page. At 100 pages, going from 50
+to 100 changed paths adds 38 bytes per path. The budgets are those plus 10%. Copying the
+changed paths into every page, the multiplier ADR-0007 removed, costs 2,227 bytes per page.
 
 A response that grows on purpose raises its budget in the same pull request, where a reviewer
-sees it. `check_drift` and `list_recent_changes` are not gated: they are not bounded yet, and
-the benchmark does not measure them.
+sees it. `list_recent_changes` is not gated: the benchmark does not measure it.

@@ -1,18 +1,18 @@
 import { expect, test } from "bun:test";
-import { measure, serialize } from "../mcp-budget.ts";
+import { checkText, measure } from "../mcp-budget.ts";
 
-test("serialize refuses a pending Promise", () => {
-  expect(() => serialize("tool", Promise.resolve({ count: 1 }))).toThrow(/Promise/);
+test("checkText names an unawaited Promise, which the server serializes to {}", () => {
+  expect(() => checkText("tool", JSON.stringify(Promise.resolve({ count: 1 })))).toThrow(/Promise/);
 });
 
-test("serialize refuses an empty body", () => {
-  for (const empty of [{}, [], "", null, undefined]) {
-    expect(() => serialize("tool", empty)).toThrow(/empty body/);
+test("checkText refuses an empty body", () => {
+  for (const empty of ["{}", "[]", '""', "null", undefined]) {
+    expect(() => checkText("tool", empty)).toThrow(/empty body/);
   }
 });
 
-test("serialize counts the bytes the server would send", () => {
-  expect(serialize("tool", { a: 1 })).toBe(Buffer.byteLength('{\n  "a": 1\n}'));
+test("checkText counts bytes, not characters", () => {
+  expect(checkText("tool", '{"a": "é"}')).toBe(11);
 });
 
 test("every probe hits the corpus, and lint reports one finding per page", async () => {
@@ -28,4 +28,9 @@ test("the generated body size is reported, and get_page follows it", async () =>
   expect(small.bodyBytes).toBe(1_000);
   expect(large.bodyBytes).toBe(29_889);
   expect(large.getPage - small.getPage).toBe(large.bodyBytes - small.bodyBytes);
+});
+
+test("a body too short to hold the search probe word is refused", async () => {
+  await expect(measure(2, { bodyBytes: 20 })).rejects.toThrow(/at least 34.*forcing/);
+  expect((await measure(2, { bodyBytes: 34 })).bodyBytes).toBe(34);
 });
