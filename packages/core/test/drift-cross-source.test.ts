@@ -213,6 +213,35 @@ describe("a footnote into a source other than the page's own", () => {
     const report = await detectDrift(db, noaa);
     expect(report.stale).toEqual([]);
     expect(report.unverifiable).toEqual(["knowledge/contradiction.md"]);
+    expect(report.unpinned).toEqual([{ page: "knowledge/contradiction.md", footnote: null }]);
+  });
+
+  test("a canonical_source takes the pin of a footnote into the same file", async () => {
+    addPage("knowledge/contradiction.md", "ipcc", "ipcc1", "noaa:note.md#L5");
+    addFootnote("knowledge/contradiction.md", "b", "rev1", "note.md", "L5-L7");
+    const noaa = new ScriptedSource(
+      "noaa",
+      "rev2",
+      { rev1: ["note.md"] },
+      { "rev1 note.md": { L5: { status: "touched" } } },
+    );
+
+    const report = await detectDrift(db, noaa);
+
+    expect(report.unverifiable).toEqual([]);
+    expect(
+      report.stale[0]?.citations?.map((c) => [c.footnote, c.revision, c.change.status]),
+    ).toEqual([
+      [null, "rev1", "touched"],
+      ["b", "rev1", "untouched"],
+    ]);
+  });
+
+  test("an unpinned footnote is named with its id", async () => {
+    addPage("knowledge/contradiction.md", "ipcc", "ipcc1");
+    addFootnote("knowledge/contradiction.md", "b", UNPINNED_REVISION, "note.md", "L5");
+    const report = await detectDrift(db, new ScriptedSource("noaa", "rev2", {}));
+    expect(report.unpinned).toEqual([{ page: "knowledge/contradiction.md", footnote: "b" }]);
   });
 
   test("a footnote revision the source cannot place is unresolvable, not current", async () => {
@@ -276,5 +305,23 @@ describe("a footnote pinned before its page's revision", () => {
     expect(
       report.stale[0]?.citations?.map((c) => [c.footnote, c.revision, c.change.status]),
     ).toEqual([["old", "rev0", "touched"]]);
+  });
+
+  test("a pin the source cannot place is unresolvable, whatever else changed", async () => {
+    // Pre-squash SHAs do this; an unrelated change must not turn "cannot place" into "in doubt".
+    addPage("knowledge/finding.md", "noaa", "r1");
+    addFootnote("knowledge/finding.md", "old", "gone", "y.md", "L1");
+    const expected = [
+      { revision: "gone", pages: ["knowledge/finding.md"], citedOnly: ["knowledge/finding.md"] },
+    ];
+
+    const quiet = await detectDrift(db, new ScriptedSource("noaa", "r1", {}, {}));
+    const noaa = new ScriptedSource("noaa", "r2", { r1: ["other.md"] }, {});
+    const busy = await detectDrift(db, noaa);
+
+    expect(quiet.unresolvable).toEqual(expected);
+    expect(busy.unresolvable).toEqual(expected);
+    expect(busy.stale[0]?.citations).toEqual([]);
+    expect(noaa.asked).toEqual([]);
   });
 });

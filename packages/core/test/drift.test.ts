@@ -334,7 +334,12 @@ describe("detectDrift at line granularity", () => {
   test("the diff starts at the citation's own revision, whose line numbers it uses", async () => {
     addPage("knowledge/a.md", "docs", "rev1");
     addFootnote("knowledge/a.md", "x", "rev0", "ch.md", "L1");
-    const source = new LineAwareSource("docs", "rev2", { rev1: ["ch.md"] }, { "rev0 ch.md": {} });
+    const source = new LineAwareSource(
+      "docs",
+      "rev2",
+      { rev0: ["ch.md"], rev1: ["ch.md"] },
+      { "rev0 ch.md": {} },
+    );
     const report = await detectDrift(db, source);
     expect(source.asked).toEqual(["rev0 ch.md L1"]);
     // Reported with it too, so a reader resolves the lines against the right revision.
@@ -344,7 +349,7 @@ describe("detectDrift at line granularity", () => {
   test("a citation revision the source cannot place is unknown, never untouched", async () => {
     addPage("knowledge/a.md", "docs", "rev1");
     addFootnote("knowledge/a.md", "x", "gone", "ch.md", "L1");
-    const source = new LineAwareSource("docs", "rev2", { rev1: ["ch.md"] }, {});
+    const source = new LineAwareSource("docs", "rev2", { rev1: ["ch.md"], gone: ["ch.md"] }, {});
     const report = await detectDrift(db, source);
     expect(report.stale[0]?.citations?.[0]?.change).toEqual({ status: "unknown" });
     expect(pageChanges(report.stale[0]!)?.get("knowledge/a.md")).toBe("changed");

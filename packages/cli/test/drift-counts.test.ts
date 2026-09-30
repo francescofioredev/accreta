@@ -71,6 +71,34 @@ describe("drift counts each page once", () => {
   });
 });
 
+describe("a page citing the source without a revision", () => {
+  const withUnpinned: DriftReport = {
+    ...report("noaa", []),
+    unverifiable: ["knowledge/loose.md", PAGE],
+    unpinned: [
+      { page: PAGE, footnote: "b" },
+      { page: PAGE, footnote: null },
+    ],
+  };
+
+  test("is named apart from pages that record no revision", () => {
+    const out = text(withUnpinned);
+    expect(out).toContain("1 page(s) record no revision at all");
+    expect(out).toContain("1 page(s) cite this source without a revision:");
+    expect(out).toContain(`${PAGE} [^b] names no revision: pin it to a revision`);
+    expect(out).toContain(
+      `${PAGE} canonical_source names no revision: add a pinned footnote to the same place`,
+    );
+  });
+
+  test("and in the pull request comment", () => {
+    const out = toGithub([withUnpinned]);
+    expect(out).toContain("1 page(s) record no revision at all.");
+    expect(out).toContain("1 page(s) cite this source without a revision:");
+    expect(out).toContain(`- \`${PAGE}\` \`[^b]\` names no revision: pin it to a revision.`);
+  });
+});
+
 describe("a page that only cites the source", () => {
   test("is labelled cited at, not verified at", () => {
     const noaa = report("noaa", [stale("b1", "b", true)]);
