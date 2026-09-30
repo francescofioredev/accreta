@@ -2,7 +2,16 @@ import { existsSync } from "node:fs";
 import { lintKnowledgeBase, openIndex } from "@accreta/core";
 import { countUnchecked, unloadedFindings } from "@accreta/adapters";
 import { findWorkspace } from "../workspace.ts";
-import { loadSources, printJson, provenance, type CommandContext } from "./shared.ts";
+import {
+  loadSources,
+  printJson,
+  provenance,
+  readPage,
+  refuseCursor,
+  reportPage,
+  type CommandContext,
+  type PageFlags,
+} from "./shared.ts";
 
 const LINT_FIELDS = [
   "findings[].path",
@@ -17,8 +26,10 @@ const LINT_FIELDS = [
 // `drift` has the same shape for the same reason.
 export async function runLint(
   ctx: CommandContext,
-  options: { json?: boolean } = {},
+  options: { json?: boolean } & PageFlags = {},
 ): Promise<number> {
+  const page = readPage(ctx, options);
+  if (page === null) return 2;
   const workspace = findWorkspace(ctx.cwd);
   if (!existsSync(workspace.indexPath)) {
     throw new Error(`No index at ${workspace.indexPath}. Run \`accreta reindex\` first.`);
@@ -28,23 +39,31 @@ export async function runLint(
   try {
     const loaded = loadSources(workspace);
     const sources = new Map(loaded.sources.map((adapter) => [adapter.id, adapter]));
-    // No page: the CLI prints every finding. The MCP tool pages the same list.
-    const report = await lintKnowledgeBase(db, workspace.config, sources, {
-      sourceFindings: unloadedFindings(countUnchecked(db, loaded.unloaded)),
-    });
+    // Without a page every finding prints, as before paging existed; with one, as MCP pages it.
+    let report: Awaited<ReturnType<typeof lintKnowledgeBase>>;
+    try {
+      report = await lintKnowledgeBase(db, workspace.config, sources, {
+        page,
+        sourceFindings: unloadedFindings(countUnchecked(db, loaded.unloaded)),
+      });
+    } catch (error) {
+      return refuseCursor(ctx, error);
+    }
     const findings = report.findings;
 
     if (options.json) {
       printJson(ctx, {
         pages_checked: report.pagesChecked,
-        count: findings.length,
+        count: report.total,
         citations_checked: report.citationsChecked,
         citations_unchecked: report.citationsUnchecked,
         unchecked_reasons: report.uncheckedReasons,
         findings,
+        nextCursor: report.nextCursor,
         _provenance: provenance(LINT_FIELDS),
       });
-      return findings.length > 0 ? 1 : 0;
+      // The whole list, not this page: a later page must not read as a clean pass.
+      return report.total > 0 ? 1 : 0;
     }
 
     // A count rather than findings: the citations belong to a source accreta
@@ -62,7 +81,7 @@ export async function runLint(
         : null;
 
     const checked = `${report.citationsChecked} citation(s) checked against their source.`;
-    if (findings.length === 0) {
+    if (report.total === 0) {
       ctx.out(`${report.pagesChecked} page(s) checked, nothing to report.`);
       ctx.out(checked);
       if (unchecked) ctx.out(unchecked);
@@ -80,9 +99,10 @@ export async function runLint(
       ctx.out(`\n${kind} (${group.length})`);
       for (const finding of group) ctx.out(`  ${finding.path}: ${finding.detail}`);
     }
-    ctx.out(`\n${findings.length} finding(s) across ${report.pagesChecked} page(s).`);
+    ctx.out(`\n${report.total} finding(s) across ${report.pagesChecked} page(s).`);
     ctx.out(checked);
     if (unchecked) ctx.out(unchecked);
+    if (page) reportPage(ctx, findings.length, report.total, "finding(s)", report.nextCursor);
 
     // A non-zero exit so CI can fail on an unresolvable link.
     return 1;

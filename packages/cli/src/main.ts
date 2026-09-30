@@ -41,6 +41,9 @@ Usage: accreta <command> [arguments]
 
   --json                   On lint, search, show, consumers and canonical: print the
                            JSON the matching MCP tool returns
+  --limit <n>, --cursor <c>
+                           On lint, consumers and canonical: print one page of at most
+                           n results (1-50, default 50), then the page the cursor names
 
   --version, -v            Print the version
   --help, -h               Print this usage, after any command too
@@ -71,6 +74,7 @@ function parseArgs(argv: string[]): ParsedArgs & {
   strict: boolean;
   json: boolean;
   limit?: string;
+  cursor?: string;
   source?: string;
   set: Record<string, string>;
   preset?: string;
@@ -88,6 +92,7 @@ function parseArgs(argv: string[]): ParsedArgs & {
   let strict = false;
   let json = false;
   let limit: string | undefined;
+  let cursor: string | undefined;
   let source: string | undefined;
   const set: Record<string, string> = {};
   let preset: string | undefined;
@@ -156,6 +161,10 @@ function parseArgs(argv: string[]): ParsedArgs & {
       limit = value();
       continue;
     }
+    if (arg === "--cursor") {
+      cursor = value();
+      continue;
+    }
     if (arg === "--source") {
       source = value();
       continue;
@@ -191,6 +200,7 @@ function parseArgs(argv: string[]): ParsedArgs & {
     strict,
     json,
     limit,
+    cursor,
     source,
     set,
     preset,
@@ -201,7 +211,8 @@ function parseArgs(argv: string[]): ParsedArgs & {
 export async function run(argv: string[], ctx: CommandContext): Promise<number> {
   const [command, ...rest] = argv;
   const parsed = parseArgs(rest);
-  const { positional, types, kinds, includeInline, strict, json, limit, source, set } = parsed;
+  const { positional, types, kinds, includeInline, strict, json, limit, cursor, source, set } =
+    parsed;
   const { preset, agentFile } = parsed;
 
   // Only a command this install has: `cite --help` on an older one must not look like success.
@@ -231,7 +242,7 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
     case "reindex":
       return reindex(ctx);
     case "lint":
-      return runLint(ctx, { json });
+      return runLint(ctx, { json, limit, cursor });
     case "drift":
       return drift(ctx, rest, strict);
     case "doctor":
@@ -256,9 +267,11 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
         includeInline,
         kinds: kinds.length > 0 ? kinds : undefined,
         json,
+        limit,
+        cursor,
       });
     case "canonical":
-      return canonical(ctx, positional.join(" "), { json });
+      return canonical(ctx, positional.join(" "), { json, limit, cursor });
     case "mcp":
       return mcp(ctx, positional);
     default:

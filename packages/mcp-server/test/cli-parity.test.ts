@@ -109,7 +109,11 @@ const REFUSED: { argv: string[]; says: string }[] = [
   { argv: ["search", "flux", "--bogus"], says: "search does not take --bogus" },
   { argv: ["lint", "--json=yes"], says: "--json takes no value" },
   { argv: ["drift", "--source", "nope"], says: "drift does not take --source" },
-  { argv: ["canonical", "RF", "--limit", "1"], says: "canonical does not take --limit" },
+  { argv: ["lint", "--limit", "51"], says: "--limit" },
+  { argv: ["lint", "--cursor"], says: "--cursor needs a value" },
+  { argv: ["consumers", "concepts/forcing", "--limit", "0"], says: "--limit" },
+  { argv: ["canonical", "RF", "--limit", "2.5"], says: "--limit" },
+  { argv: ["search", "flux", "--cursor", "abc"], says: "search has no --cursor yet (#183)" },
   { argv: ["show", "concepts/forcing", "--source", "docs"], says: "show does not take --source" },
   { argv: ["show", "concepts/forcing", "notes/b"], says: 'show does not take "notes/b"' },
   { argv: ["consumers", "concepts/forcing", "--kind"], says: "--kind needs a value" },
@@ -292,8 +296,11 @@ describe("an argument a command cannot honour is refused, not ignored", () => {
   }
 });
 
-// Past one page the CLI still prints everything; the MCP tool returns the first page of the same list.
-describe("past one page, MCP returns the head of the CLI's list", () => {
+const member = (i: number) =>
+  `---\ntype: note\naliases: ["everyone"]\nrelated: [[hub]]\n---\n\n# P${i}\n`;
+
+// Past one page, `--limit` and `--cursor` page the CLI exactly as `limit` and `cursor` page MCP.
+describe("past one page, the CLI pages as MCP does", () => {
   const PAGES = 60;
   let bigRoot = "";
   let bigCtx: ToolContext;
@@ -301,34 +308,35 @@ describe("past one page, MCP returns the head of the CLI's list", () => {
 
   async function bigCli(argv: string[]) {
     const out: string[] = [];
-    const code = await run(argv, { cwd: bigRoot, out: (line) => out.push(line), err: () => {} });
-    return { code, json: JSON.parse(out.join("\n")) as Record<string, unknown> };
+    const err: string[] = [];
+    const code = await run(argv, {
+      cwd: bigRoot,
+      out: (line) => out.push(line),
+      err: (line) => err.push(line),
+    });
+    return { code, stdout: out.join("\n"), stderr: err.join("\n") };
   }
 
   async function bigMcp(tool: string, args: Record<string, unknown>) {
     const result = (await bigClient.callTool({ name: tool, arguments: args })) as {
       content: { text: string }[];
+      isError?: boolean;
     };
-    return JSON.parse(result.content[0]?.text ?? "") as Record<string, unknown>;
+    return { text: result.content[0]?.text ?? "", isError: result.isError === true };
   }
 
+  const put = (path: string, contents: string) => {
+    mkdirSync(join(bigRoot, path, ".."), { recursive: true });
+    writeFileSync(join(bigRoot, path), contents, "utf-8");
+  };
   beforeAll(async () => {
     bigRoot = mkdtempSync(join(tmpdir(), "accreta-parity-big-"));
-    const put = (path: string, contents: string) => {
-      mkdirSync(join(bigRoot, path, ".."), { recursive: true });
-      writeFileSync(join(bigRoot, path), contents, "utf-8");
-    };
     put(
       "accreta.config.yaml",
       "knowledge_base: knowledge\npage_types: [note]\nlink_fields: [related]\n",
     );
     put("knowledge/hub.md", "---\ntype: note\n---\n\n# Hub\n");
-    for (let i = 0; i < PAGES; i++) {
-      put(
-        `knowledge/p${i}.md`,
-        `---\ntype: note\naliases: ["everyone"]\nrelated: [[hub]]\n---\n\n# P${i}\n`,
-      );
-    }
+    for (let i = 0; i < PAGES; i++) put(`knowledge/p${i}.md`, member(i));
     expect(await run(["reindex"], { cwd: bigRoot, out: () => {}, err: () => {} })).toBe(0);
 
     bigCtx = createContext(bigRoot);
@@ -352,30 +360,117 @@ describe("past one page, MCP returns the head of the CLI's list", () => {
       args: { target: "hub" },
       argv: ["consumers", "hub"],
       list: "results",
+      code: 0,
     },
     {
       tool: "find_canonical",
       args: { term: "everyone" },
       argv: ["canonical", "everyone"],
       list: "results",
+      code: 0,
     },
-    { tool: "lint_knowledge_base", args: {}, argv: ["lint"], list: "findings" },
+    { tool: "lint_knowledge_base", args: {}, argv: ["lint"], list: "findings", code: 1 },
   ];
+
   for (const c of cases) {
-    test(`${c.tool}: first 50 of ${c.list}, the same count, nextCursor on MCP only`, async () => {
-      const fromCli = (await bigCli([...c.argv, "--json"])).json;
-      const fromMcp = await bigMcp(c.tool, c.args);
-      const all = fromCli[c.list] as unknown[];
-      expect(all.length).toBeGreaterThan(50);
-      expect(fromCli.count).toBe(all.length);
+    test(`${c.argv[0]} without --limit still prints all of ${c.list}, and no cursor`, async () => {
+      const fromCli = await bigCli([...c.argv, "--json"]);
+      const all = JSON.parse(fromCli.stdout) as Record<string, unknown>;
+      const fromMcp = JSON.parse((await bigMcp(c.tool, c.args)).text) as Record<string, unknown>;
+      expect(fromCli.code).toBe(c.code);
+      expect((all[c.list] as unknown[]).length).toBeGreaterThan(50);
+      expect(all.count).toBe((all[c.list] as unknown[]).length);
+      expect(all).not.toHaveProperty("nextCursor");
+      expect(fromMcp[c.list]).toEqual((all[c.list] as unknown[]).slice(0, 50));
+    });
 
-      expect(fromMcp[c.list]).toEqual(all.slice(0, 50));
-      expect(fromMcp.count).toBe(fromCli.count);
-      expect(typeof fromMcp.nextCursor).toBe("string");
-      expect(fromCli).not.toHaveProperty("nextCursor");
+    test(`${c.argv[0]} --json --limit 50 prints what ${c.tool} returns, byte for byte`, async () => {
+      const fromCli = await bigCli([...c.argv, "--json", "--limit", "50"]);
+      const fromMcp = await bigMcp(c.tool, { ...c.args, limit: 50 });
+      expect(fromMcp.isError).toBe(false);
+      expect(fromCli.code).toBe(c.code);
+      expect(fromCli.stdout).toBe(fromMcp.text);
+      expect(JSON.parse(fromCli.stdout).nextCursor).toEqual(expect.any(String));
+    });
 
-      const { nextCursor: _, ...mcpRest } = fromMcp;
-      expect(mcpRest).toStrictEqual({ ...fromCli, [c.list]: all.slice(0, 50) });
+    for (const limit of [50, 7]) {
+      test(`${c.argv[0]}: following cursors at --limit ${limit} from either side rebuilds the list`, async () => {
+        const all = JSON.parse((await bigCli([...c.argv, "--json"])).stdout)[c.list];
+
+        const walk = async (side: "cli" | "mcp" | "alternate") => {
+          const seen: unknown[] = [];
+          let cursor: string | undefined;
+          for (let turn = 0; ; turn++) {
+            const viaCli = side === "cli" || (side === "alternate" && turn % 2 === 0);
+            const text = viaCli
+              ? (
+                  await bigCli([
+                    ...c.argv,
+                    "--json",
+                    "--limit",
+                    String(limit),
+                    ...(cursor ? ["--cursor", cursor] : []),
+                  ])
+                ).stdout
+              : (await bigMcp(c.tool, { ...c.args, limit, ...(cursor ? { cursor } : {}) })).text;
+            const page = JSON.parse(text) as Record<string, unknown>;
+            expect(page.count).toBe(all.length);
+            seen.push(...(page[c.list] as unknown[]));
+            cursor = page.nextCursor as string | undefined;
+            if (!cursor) return seen;
+          }
+        };
+
+        expect(await walk("cli")).toEqual(all);
+        expect(await walk("mcp")).toEqual(all);
+        // A cursor is the index's, not the surface's: one issued by either is honoured by both.
+        expect(await walk("alternate")).toEqual(all);
+      });
+    }
+
+    test(`${c.argv[0]} and ${c.tool} refuse a malformed cursor in the same words`, async () => {
+      const fromCli = await bigCli([...c.argv, "--json", "--cursor", "not-a-cursor"]);
+      const fromMcp = await bigMcp(c.tool, { ...c.args, cursor: "not-a-cursor" });
+      expect(fromMcp.isError).toBe(true);
+      expect(fromMcp.text).toContain("Invalid cursor");
+      expect(fromCli.code).toBe(2);
+      expect(fromCli.stdout).toBe("");
+      expect(fromCli.stderr).toBe(fromMcp.text);
     });
   }
+
+  test("a cursor from another query is refused the same way on both surfaces", async () => {
+    const foreign = JSON.parse(
+      (await bigCli(["consumers", "hub", "--json", "--limit", "5"])).stdout,
+    ).nextCursor as string;
+    for (const c of cases.filter((other) => other.tool !== "find_consumers")) {
+      const fromCli = await bigCli([...c.argv, "--cursor", foreign]);
+      const fromMcp = await bigMcp(c.tool, { ...c.args, cursor: foreign });
+      expect(fromMcp.isError).toBe(true);
+      expect(fromCli.code).toBe(2);
+      expect(fromCli.stderr).toBe(fromMcp.text);
+    }
+  });
+
+  // Last in this block: it changes the fixture.
+  test("a cursor gone stale after a change and a reindex is refused the same way on both", async () => {
+    const stale = new Map<string, string>();
+    for (const c of cases) {
+      const page = JSON.parse((await bigCli([...c.argv, "--json", "--limit", "5"])).stdout);
+      stale.set(c.tool, page.nextCursor as string);
+    }
+    put(`knowledge/p${PAGES}.md`, member(PAGES));
+    expect((await bigCli(["reindex"])).code).toBe(0);
+
+    for (const c of cases) {
+      const cursor = stale.get(c.tool)!;
+      const fromCli = await bigCli([...c.argv, "--json", "--cursor", cursor]);
+      const fromMcp = await bigMcp(c.tool, { ...c.args, cursor });
+      expect(fromMcp.isError).toBe(true);
+      expect(fromMcp.text).toContain("Invalid cursor");
+      expect(fromCli.code).toBe(2);
+      expect(fromCli.stdout).toBe("");
+      expect(fromCli.stderr).toBe(fromMcp.text);
+    }
+  });
 });
