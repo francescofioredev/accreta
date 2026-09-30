@@ -142,16 +142,17 @@ figure is within 1.1% of its value at 60. The test takes under a second. It fail
 
 | response                                    | at 60 pages | budget | headroom per entry |
 | ------------------------------------------- | ----------- | ------ | ------------------ |
-| `search_pages`, body word                   | 7,004       | 7,400  | 20 B per hit       |
-| `search_pages`, shared alias                | 8,580       | 9,000  | 21 B per hit       |
-| `find_consumers`, the hub                   | 8,430       | 9,300  | 17 B per relation  |
-| `find_consumers`, inbound and outbound      | 8,450       | 9,300  | 17 B per relation  |
-| `find_canonical`                            | 9,359       | 10,300 | 19 B per match     |
-| `lint_knowledge_base`                       | 8,702       | 9,600  | 18 B per finding   |
-| `get_page`, minus its body                  | 961         | 1,100  | 139 B in all       |
+| `search_pages`, body word                   | 7,120       | 7,400  | 14 B per hit       |
+| `search_pages`, shared alias                | 8,696       | 9,000  | 15 B per hit       |
+| `find_consumers`, the hub                   | 8,478       | 9,300  | 16 B per relation  |
+| `find_consumers`, inbound and outbound      | 8,498       | 9,300  | 16 B per relation  |
+| `find_canonical`                            | 9,443       | 10,300 | 17 B per match     |
+| `lint_knowledge_base`                       | 8,727       | 9,600  | 17 B per finding   |
+| `get_page`, minus its body                  | 1,069       | 1,100  | 31 B in all        |
 
 Bytes of the text block the server returns, darwin arm64, Bun 1.3.13. Each budget is the
-measured size plus 10%, rounded up to the next 100 bytes. The margin is a tolerance, not room
+size measured when the gate was added plus 10%, rounded up to the next 100 bytes; the
+`_provenance` labels added since cost the difference. The margin is a tolerance, not room
 for noise: the output at 60 pages is deterministic, so the same code always measures the same
 bytes. `search_pages` returns 20 entries rather than 50, so 10% would leave each hit 40 B; its
 budgets allow 18 B per hit instead, in line with the other tools. A field added to every entry
@@ -176,10 +177,10 @@ every git report takes this path. Without diffs, the report lists only pages and
 
 | mode                                           | size    | per page | per path |
 | ---------------------------------------------- | ------- | -------- | -------- |
-| with diffs, 1 revision, 1 citation per page    | 26,586  | 241      | 38       |
-| with diffs, 2 revisions, 2 citations per page  | 44,677  | 397      | 76       |
-| without diffs, 1 revision                      | 6,259   | 40       | 38       |
-| without diffs, 2 revisions                     | 8,288   | 40       | 76       |
+| with diffs, 1 revision, 1 citation per page    | 27,490  | 241      | 38       |
+| with diffs, 2 revisions, 2 citations per page  | 45,581  | 397      | 76       |
+| without diffs, 1 revision                      | 7,163   | 40       | 38       |
+| without diffs, 2 revisions                     | 9,192   | 40       | 76       |
 
 One revision is what a git ingest leaves: every page verified in one run records the same HEAD.
 The two-revision cases make growth by revision, and by citations times changed paths, show.

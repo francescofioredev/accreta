@@ -5,6 +5,7 @@ import { findWorkspace } from "../workspace.ts";
 import { loadSources, printJson, provenance, type CommandContext } from "./shared.ts";
 
 const LINT_FIELDS = [
+  "findings[].path",
   "findings[].detail",
   "unchecked_reasons[].detail",
   "unchecked_reasons[].paths",

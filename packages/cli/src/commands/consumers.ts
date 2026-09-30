@@ -1,7 +1,8 @@
 import { findRelated, type Relation } from "@accreta/core";
 import { printJson, provenance, withIndex, type CommandContext } from "./shared.ts";
 
-const TITLE_FIELDS = ["results[].title"] as const;
+// An outbound path is a wikilink target, so it is whatever the page wrote, file or not.
+const RELATION_FIELDS = ["results[].path", "results[].type", "results[].title"] as const;
 
 export function consumers(
   ctx: CommandContext,
@@ -23,7 +24,7 @@ export function consumers(
         target_exists: result.targetExists,
         count: result.relations.length,
         results: result.relations.map(relationOut),
-        _provenance: provenance(TITLE_FIELDS),
+        _provenance: provenance(RELATION_FIELDS),
       });
       return 0;
     }

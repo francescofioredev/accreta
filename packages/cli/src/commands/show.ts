@@ -1,7 +1,16 @@
 import { getPage, type PageRecord } from "@accreta/core";
 import { printJson, provenance, withIndex, type CommandContext } from "./shared.ts";
 
-const PAGE_FIELDS = ["page.title", "page.frontmatter", "page.body"] as const;
+// `page.path` is left out: it is the path the caller asked for, resolved.
+const PAGE_FIELDS = [
+  "page.type",
+  "page.title",
+  "page.source",
+  "page.canonical_source",
+  "page.last_verified_revision",
+  "page.frontmatter",
+  "page.body",
+] as const;
 
 export function show(
   ctx: CommandContext,

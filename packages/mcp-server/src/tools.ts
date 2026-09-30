@@ -77,9 +77,27 @@ function pageOut(page: PageRecord) {
   };
 }
 
-const PAGE_FIELDS = ["page.title", "page.frontmatter", "page.body"] as const;
+// `page.path` is left out: it is the path the caller asked for, resolved.
+const PAGE_FIELDS = [
+  "page.type",
+  "page.title",
+  "page.source",
+  "page.canonical_source",
+  "page.last_verified_revision",
+  "page.frontmatter",
+  "page.body",
+] as const;
 
-const HIT_FIELDS = ["results[].title", "results[].snippet", "results[].matched_aliases"] as const;
+// A page's path is its filename, which the author chose and which can hold any sentence.
+const HIT_FIELDS = [
+  "results[].path",
+  "results[].type",
+  "results[].title",
+  "results[].source",
+  "results[].snippet",
+  "results[].last_verified_revision",
+  "results[].matched_aliases",
+] as const;
 
 function hitOut(hit: SearchHit, matchedAliases: string[]) {
   return {
@@ -95,7 +113,15 @@ function hitOut(hit: SearchHit, matchedAliases: string[]) {
   };
 }
 
-const TITLE_FIELDS = ["results[].title"] as const;
+// An outbound path is a wikilink target, so it is whatever the page wrote, file or not.
+const RELATION_FIELDS = ["results[].path", "results[].type", "results[].title"] as const;
+
+const MATCH_FIELDS = [
+  "results[].path",
+  "results[].title",
+  "results[].type",
+  "results[].canonical_source",
+] as const;
 
 function matchOut(match: CanonicalMatch) {
   return {
@@ -185,7 +211,7 @@ export function findConsumersTool(
     count: result.total,
     results: result.relations.map(relationOut),
     nextCursor: result.nextCursor,
-    _provenance: provenance(TITLE_FIELDS),
+    _provenance: provenance(RELATION_FIELDS),
   };
 }
 
@@ -195,7 +221,7 @@ export function findCanonicalTool(ctx: ToolContext, input: { term: string } & Pa
     count: page.total,
     results: page.results.map(matchOut),
     nextCursor: page.nextCursor,
-    _provenance: provenance(TITLE_FIELDS),
+    _provenance: provenance(MATCH_FIELDS),
   };
 }
 
@@ -207,8 +233,27 @@ function notLoaded(ctx: ToolContext, id: string): string | undefined {
   );
 }
 
-// No provenance block on this tool or the next: nothing here is page prose. Revisions and
-// paths come from the adapter; `unloaded_sources` quotes sources/*.yaml, one line per file.
+// Revisions are echoed from pages, not read from the source. Changed paths are page filenames
+// whenever a source's root encloses the knowledge base, and a citation's path is one of them.
+const DRIFT_FIELDS = [
+  "reports[].stale[].revision",
+  "reports[].stale[].changed_paths",
+  "reports[].stale[].pages",
+  "reports[].stale[].pages_by_change",
+  "reports[].stale[].citations[].page",
+  "reports[].stale[].citations[].footnote",
+  "reports[].stale[].citations[].path",
+  "reports[].stale[].citations[].locator",
+  "reports[].unverifiable",
+  "reports[].unresolvable[].revision",
+  "reports[].unresolvable[].pages",
+  "reports[].unresolvable[].citedOnly",
+  "reports[].delegated.pending[].revision",
+  "reports[].delegated.pending[].pages",
+  "reports[].delegated.pending[].citedOnly",
+] as const;
+
+// The early returns carry no block: `unloaded_sources` quotes sources/*.yaml, not a page.
 export async function checkDriftTool(ctx: ToolContext, input: { source?: string }) {
   // Pinned once: the context reopens the index when a rebuild swaps it, and
   // this loop spans awaits. Re-reading it per adapter could draw one report
@@ -302,6 +347,7 @@ export async function checkDriftTool(ctx: ToolContext, input: { source?: string 
       },
     })),
     unloaded_sources,
+    _provenance: provenance(DRIFT_FIELDS),
   };
 }
 
@@ -317,7 +363,12 @@ export async function listRecentChangesTool(
     };
   }
   try {
-    return { source: adapter.id, changed: await adapter.changedSince(input.since) };
+    return {
+      source: adapter.id,
+      changed: await adapter.changedSince(input.since),
+      // A source whose root encloses the knowledge base lists page files here.
+      _provenance: provenance(["changed"]),
+    };
   } catch (error) {
     // Not unresolvable: nobody asked this source anything. The agent holding
     // the connector is the one who can answer, so it is told what to go and
@@ -344,6 +395,7 @@ export async function listRecentChangesTool(
 }
 
 const LINT_FIELDS = [
+  "findings[].path",
   "findings[].detail",
   "unchecked_reasons[].detail",
   "unchecked_reasons[].paths",
@@ -434,6 +486,7 @@ export function updateVerifiedRevisionTool(ctx: ToolContext, input: UpdateVerifi
         input.confirm_token === undefined
           ? "Dry run. Call again with this confirm_token to apply."
           : "confirm_token does not match this edit. Re-run the dry run and use the token it returns.",
+      _provenance: provenance(["current_revision"]),
     };
   }
 
@@ -448,6 +501,7 @@ export function updateVerifiedRevisionTool(ctx: ToolContext, input: UpdateVerifi
     previous_revision: page.lastVerifiedRevision,
     new_revision: input.revision,
     message: "Written. Run `accreta reindex` for the index to reflect this.",
+    _provenance: provenance(["previous_revision"]),
   };
 }
 
