@@ -295,6 +295,15 @@ describe("--limit and --cursor in the text output", () => {
     expect(await cli("lint", "--limit", "1", "--cursor", cursor!)).toBe(1);
   });
 
+  test("lint's per-kind counts on a page say they are the page's, not the kind's", async () => {
+    await cli("lint", "--limit", "2");
+    expect(stdout()).toMatch(/^[a-z-]+ \(\d+ on this page\)$/m);
+    expect(stdout()).not.toMatch(/^[a-z-]+ \(\d+\)$/m);
+    output = [];
+    await cli("lint");
+    expect(stdout()).toMatch(/^[a-z-]+ \(\d+\)$/m);
+  });
+
   test("a bad cursor is a usage error, not a finding", async () => {
     expect(await cli("lint", "--cursor", "not-a-cursor")).toBe(2);
     expect(stderr()).toContain("Invalid cursor");

@@ -96,7 +96,8 @@ export async function runLint(
     }
 
     for (const [kind, group] of byKind) {
-      ctx.out(`\n${kind} (${group.length})`);
+      // A page holds only some of each kind, so its count must not read as the kind's total.
+      ctx.out(`\n${kind} (${group.length}${page ? " on this page" : ""})`);
       for (const finding of group) ctx.out(`  ${finding.path}: ${finding.detail}`);
     }
     ctx.out(`\n${report.total} finding(s) across ${report.pagesChecked} page(s).`);

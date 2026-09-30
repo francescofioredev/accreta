@@ -299,59 +299,69 @@ describe("an argument a command cannot honour is refused, not ignored", () => {
 const member = (i: number) =>
   `---\ntype: note\naliases: ["everyone"]\nrelated: [[hub]]\n---\n\n# P${i}\n`;
 
+/** A knowledge base where every paged list runs past 50, with a CLI and an MCP client over it. */
+async function openManyPages(pages: number) {
+  const dir = mkdtempSync(join(tmpdir(), "accreta-parity-big-"));
+  const put = (path: string, contents: string) => {
+    mkdirSync(join(dir, path, ".."), { recursive: true });
+    writeFileSync(join(dir, path), contents, "utf-8");
+  };
+  put(
+    "accreta.config.yaml",
+    "knowledge_base: knowledge\npage_types: [note]\nlink_fields: [related]\n",
+  );
+  put("knowledge/hub.md", "---\ntype: note\n---\n\n# Hub\n");
+  for (let i = 0; i < pages; i++) put(`knowledge/p${i}.md`, member(i));
+  expect(await run(["reindex"], { cwd: dir, out: () => {}, err: () => {} })).toBe(0);
+
+  const toolCtx = createContext(dir);
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const mcpClient = new Client({ name: "parity-big-probe", version: "0.0.0" });
+  await Promise.all([
+    createServer(toolCtx).connect(serverTransport),
+    mcpClient.connect(clientTransport),
+  ]);
+
+  return {
+    put,
+    async cli(argv: string[]) {
+      const out: string[] = [];
+      const err: string[] = [];
+      const code = await run(argv, {
+        cwd: dir,
+        out: (line) => out.push(line),
+        err: (line) => err.push(line),
+      });
+      return { code, stdout: out.join("\n"), stderr: err.join("\n") };
+    },
+    async mcp(tool: string, args: Record<string, unknown>) {
+      const result = (await mcpClient.callTool({ name: tool, arguments: args })) as {
+        content: { text: string }[];
+        isError?: boolean;
+      };
+      return { text: result.content[0]?.text ?? "", isError: result.isError === true };
+    },
+    async close() {
+      await mcpClient.close();
+      toolCtx.db.close();
+      rmSync(dir, { recursive: true, force: true });
+    },
+  };
+}
+
 // Past one page, `--limit` and `--cursor` page the CLI exactly as `limit` and `cursor` page MCP.
 describe("past one page, the CLI pages as MCP does", () => {
   const PAGES = 60;
-  let bigRoot = "";
-  let bigCtx: ToolContext;
-  let bigClient: Client;
+  let big: Awaited<ReturnType<typeof openManyPages>>;
+  const bigCli = (argv: string[]) => big.cli(argv);
+  const bigMcp = (tool: string, args: Record<string, unknown>) => big.mcp(tool, args);
 
-  async function bigCli(argv: string[]) {
-    const out: string[] = [];
-    const err: string[] = [];
-    const code = await run(argv, {
-      cwd: bigRoot,
-      out: (line) => out.push(line),
-      err: (line) => err.push(line),
-    });
-    return { code, stdout: out.join("\n"), stderr: err.join("\n") };
-  }
-
-  async function bigMcp(tool: string, args: Record<string, unknown>) {
-    const result = (await bigClient.callTool({ name: tool, arguments: args })) as {
-      content: { text: string }[];
-      isError?: boolean;
-    };
-    return { text: result.content[0]?.text ?? "", isError: result.isError === true };
-  }
-
-  const put = (path: string, contents: string) => {
-    mkdirSync(join(bigRoot, path, ".."), { recursive: true });
-    writeFileSync(join(bigRoot, path), contents, "utf-8");
-  };
   beforeAll(async () => {
-    bigRoot = mkdtempSync(join(tmpdir(), "accreta-parity-big-"));
-    put(
-      "accreta.config.yaml",
-      "knowledge_base: knowledge\npage_types: [note]\nlink_fields: [related]\n",
-    );
-    put("knowledge/hub.md", "---\ntype: note\n---\n\n# Hub\n");
-    for (let i = 0; i < PAGES; i++) put(`knowledge/p${i}.md`, member(i));
-    expect(await run(["reindex"], { cwd: bigRoot, out: () => {}, err: () => {} })).toBe(0);
-
-    bigCtx = createContext(bigRoot);
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    bigClient = new Client({ name: "parity-big-probe", version: "0.0.0" });
-    await Promise.all([
-      createServer(bigCtx).connect(serverTransport),
-      bigClient.connect(clientTransport),
-    ]);
+    big = await openManyPages(PAGES);
   });
 
   afterAll(async () => {
-    await bigClient?.close();
-    bigCtx?.db.close();
-    rmSync(bigRoot, { recursive: true, force: true });
+    await big?.close();
   });
 
   const cases = [
@@ -452,25 +462,30 @@ describe("past one page, the CLI pages as MCP does", () => {
     }
   });
 
-  // Last in this block: it changes the fixture.
+  // Its own knowledge base: the change it makes would break any cursor walk running beside it.
   test("a cursor gone stale after a change and a reindex is refused the same way on both", async () => {
-    const stale = new Map<string, string>();
-    for (const c of cases) {
-      const page = JSON.parse((await bigCli([...c.argv, "--json", "--limit", "5"])).stdout);
-      stale.set(c.tool, page.nextCursor as string);
-    }
-    put(`knowledge/p${PAGES}.md`, member(PAGES));
-    expect((await bigCli(["reindex"])).code).toBe(0);
+    const own = await openManyPages(PAGES);
+    try {
+      const stale = new Map<string, string>();
+      for (const c of cases) {
+        const page = JSON.parse((await own.cli([...c.argv, "--json", "--limit", "5"])).stdout);
+        stale.set(c.tool, page.nextCursor as string);
+      }
+      own.put(`knowledge/p${PAGES}.md`, member(PAGES));
+      expect((await own.cli(["reindex"])).code).toBe(0);
 
-    for (const c of cases) {
-      const cursor = stale.get(c.tool)!;
-      const fromCli = await bigCli([...c.argv, "--json", "--cursor", cursor]);
-      const fromMcp = await bigMcp(c.tool, { ...c.args, cursor });
-      expect(fromMcp.isError).toBe(true);
-      expect(fromMcp.text).toContain("Invalid cursor");
-      expect(fromCli.code).toBe(2);
-      expect(fromCli.stdout).toBe("");
-      expect(fromCli.stderr).toBe(fromMcp.text);
+      for (const c of cases) {
+        const cursor = stale.get(c.tool)!;
+        const fromCli = await own.cli([...c.argv, "--json", "--cursor", cursor]);
+        const fromMcp = await own.mcp(c.tool, { ...c.args, cursor });
+        expect(fromMcp.isError).toBe(true);
+        expect(fromMcp.text).toContain("Invalid cursor");
+        expect(fromCli.code).toBe(2);
+        expect(fromCli.stdout).toBe("");
+        expect(fromCli.stderr).toBe(fromMcp.text);
+      }
+    } finally {
+      await own.close();
     }
   });
 });
