@@ -22,6 +22,7 @@ import {
   type Relation,
   type SearchHit,
   type SourceAdapter,
+  type UnresolvableRevision,
 } from "@accreta/core";
 import { countUnchecked, unloadedFindings, type UnloadedSource } from "@accreta/adapters";
 
@@ -241,19 +242,31 @@ const DRIFT_FIELDS = [
   "reports[].stale[].revision",
   "reports[].stale[].changed_paths",
   "reports[].stale[].pages",
+  "reports[].stale[].cited_only",
+  // Keyed by page path, so the keys are page-authored as well as the changed paths under them.
+  "reports[].stale[].cited_paths",
   "reports[].stale[].pages_by_change",
   "reports[].stale[].citations[].page",
   "reports[].stale[].citations[].footnote",
   "reports[].stale[].citations[].path",
   "reports[].stale[].citations[].locator",
   "reports[].unverifiable",
+  "reports[].unpinned[].page",
+  "reports[].unpinned[].footnote",
   "reports[].unresolvable[].revision",
   "reports[].unresolvable[].pages",
-  "reports[].unresolvable[].citedOnly",
+  "reports[].unresolvable[].cited_only",
   "reports[].delegated.pending[].revision",
   "reports[].delegated.pending[].pages",
-  "reports[].delegated.pending[].citedOnly",
+  "reports[].delegated.pending[].cited_only",
 ] as const;
+
+// The cross-source fields are left undefined when core omits them, so the JSON omits them too.
+const groupOut = (group: UnresolvableRevision) => ({
+  revision: group.revision,
+  pages: group.pages,
+  cited_only: group.citedOnly,
+});
 
 // The early returns carry no block: `unloaded_sources` quotes sources/*.yaml, not a page.
 export async function checkDriftTool(ctx: ToolContext, input: { source?: string }) {
@@ -308,6 +321,8 @@ export async function checkDriftTool(ctx: ToolContext, input: { source?: string 
             revision: entry.revision,
             changed_paths: entry.changedPaths,
             pages: entry.pages,
+            cited_only: entry.citedOnly,
+            cited_paths: entry.citedPaths,
           };
         }
         const byChange = (change: PageChange) => entry.pages.filter((p) => doubt.get(p) === change);
@@ -316,6 +331,7 @@ export async function checkDriftTool(ctx: ToolContext, input: { source?: string 
           revision: entry.revision,
           changed_paths: entry.changedPaths,
           pages: entry.pages,
+          cited_only: entry.citedOnly,
           // Grouped by how much doubt each is in; none of them is verified.
           pages_by_change: {
             changed: byChange("changed"),
@@ -338,14 +354,15 @@ export async function checkDriftTool(ctx: ToolContext, input: { source?: string 
         };
       }),
       unverifiable: report.unverifiable,
-      unresolvable: report.unresolvable,
+      unpinned: report.unpinned,
+      unresolvable: report.unresolvable.map(groupOut),
       // Present only when accreta cannot reach the source. Kept out of
       // `unresolvable`, which says the recorded revision is gone and the work
       // has to start over — a different instruction entirely.
       delegated: report.delegated && {
         via: report.delegated.via,
         scope: report.delegated.guidance,
-        pending: report.delegated.pending,
+        pending: report.delegated.pending.map(groupOut),
       },
     })),
     unloaded_sources,
@@ -486,6 +503,8 @@ function confirmToken(path: string, revision: string, currentValue: string): str
 
 export interface UpdateVerifiedInput {
   path: string;
+  /** The source the revision belongs to; it must be the page's own. */
+  source: string;
   revision: string;
   confirm_token?: string;
 }
@@ -511,6 +530,20 @@ export function updateVerifiedRevisionTool(ctx: ToolContext, input: UpdateVerifi
   const page = getPage(ctx.db, input.path, ctx.config);
   if (!page) {
     return { ok: false as const, message: `No page matches "${input.path}".` };
+  }
+
+  // Drift diffs a page's own source from this field, so another source's revision here skips changes silently.
+  if (page.source !== input.source) {
+    return {
+      ok: false as const,
+      path: page.path,
+      page_source: page.source,
+      message:
+        page.source === null
+          ? "This page names no source, so no revision can be recorded on it. Set its `source` first."
+          : `This page belongs to page_source, not "${input.source}". A page that only cites "${input.source}" is re-pinned in its footnotes, not here.`,
+      _provenance: provenance(["page_source"]),
+    };
   }
 
   const current = page.lastVerifiedRevision ?? "";
