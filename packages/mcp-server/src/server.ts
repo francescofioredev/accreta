@@ -18,8 +18,12 @@ import { z } from "zod/v3";
  * at runtime before a handler ever sees the input — so the narrowing lost here
  * is narrowing that was never load-bearing.
  */
-type ToolResult = { content: { type: "text"; text: string }[] };
+type ToolResult = {
+  content: { type: "text"; text: string }[];
+  structuredContent?: Record<string, unknown>;
+};
 type ToolHandler<I> = (input: I) => Promise<ToolResult>;
+import { getPageOutput, searchPagesOutput } from "./schemas.ts";
 import type { ToolContext } from "./tools.ts";
 import {
   checkDriftTool,
@@ -52,6 +56,20 @@ const VERSION = (
     version: string;
   }
 ).version;
+
+/**
+ * Wrap a result as structuredContent, with the same JSON as compact text for clients that read only text.
+ *
+ * Compact because the text now duplicates the structured copy; parsed back so both carry exactly
+ * the JSON the text does, a YAML date in frontmatter included.
+ */
+function structured(value: Record<string, unknown>) {
+  const text = JSON.stringify(value);
+  return {
+    content: [{ type: "text" as const, text }],
+    structuredContent: JSON.parse(text) as Record<string, unknown>,
+  };
+}
 
 /** Wrap a result as MCP tool content. */
 function json(value: unknown) {
@@ -91,7 +109,11 @@ export function createServer(ctx: ToolContext): McpServer {
   const server = new McpServer({ name: "accreta", version: VERSION });
   const register = server.registerTool.bind(server) as <I>(
     name: string,
-    config: { description: string; inputSchema: Record<string, unknown> },
+    config: {
+      description: string;
+      inputSchema: Record<string, unknown>;
+      outputSchema?: z.AnyZodObject;
+    },
     handler: ToolHandler<I>,
   ) => void;
 
@@ -110,9 +132,10 @@ export function createServer(ctx: ToolContext): McpServer {
         source: z.string().optional().describe("Restrict to pages derived from this source."),
         limit: z.number().int().positive().max(50).optional().describe("Max results; default 20."),
       },
+      outputSchema: searchPagesOutput,
     },
     async (input: { query: string; types?: string[]; source?: string; limit?: number }) =>
-      json(searchPagesTool(ctx, input)),
+      structured(searchPagesTool(ctx, input)),
   );
 
   register(
@@ -127,8 +150,9 @@ export function createServer(ctx: ToolContext): McpServer {
           .min(1)
           .describe("Page path ('knowledge/concepts/x.md') or wikilink target ('concepts/x')."),
       },
+      outputSchema: getPageOutput,
     },
-    async (input: { path: string }) => json(getPageTool(ctx, input)),
+    async (input: { path: string }) => structured(getPageTool(ctx, input)),
   );
 
   register(
