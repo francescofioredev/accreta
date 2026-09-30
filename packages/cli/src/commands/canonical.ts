@@ -1,7 +1,12 @@
 import { findCanonical, type CanonicalMatch } from "@accreta/core";
 import { printJson, provenance, withIndex, type CommandContext } from "./shared.ts";
 
-const TITLE_FIELDS = ["results[].title"] as const;
+const MATCH_FIELDS = [
+  "results[].path",
+  "results[].title",
+  "results[].type",
+  "results[].canonical_source",
+] as const;
 
 export function canonical(
   ctx: CommandContext,
@@ -18,7 +23,7 @@ export function canonical(
       printJson(ctx, {
         count: matches.length,
         results: matches.map(matchOut),
-        _provenance: provenance(TITLE_FIELDS),
+        _provenance: provenance(MATCH_FIELDS),
       });
       return 0;
     }

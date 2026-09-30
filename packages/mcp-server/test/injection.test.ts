@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { buildIndex, parseConfig, type SourceAdapter } from "@accreta/core";
+import { buildIndex, DelegatedSourceError, parseConfig, type SourceAdapter } from "@accreta/core";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createContext, createServer, type ToolContext } from "../src/index.ts";
@@ -29,9 +29,12 @@ const PROBES: Record<string, Probe[]> = {
     { target: "notes/neighbour", include_inline: true },
     { target: "concepts/injected", include_inline: true },
   ],
-  find_canonical: [{ term: "concepts/injected" }],
+  find_canonical: [{ term: "concepts/injected" }, { term: "filename probe" }],
   check_drift: [{}],
-  list_recent_changes: [{ source: "docs", since: "0" }],
+  list_recent_changes: [
+    { source: "docs", since: "0" },
+    { source: "lines", since: "rev1" },
+  ],
   lint_knowledge_base: [{}],
   [WRITE_TOOL]: [
     { path: "concepts/injected", revision: "deadbeef" },
@@ -43,57 +46,40 @@ const PROBES: Record<string, Probe[]> = {
   ],
 };
 
-// Tools whose responses come from a source adapter, never from a page.
-const CARRIES_NO_PAGE_TEXT = new Set(["list_recent_changes"]);
-
 // Declared fields that name a whole author-written object rather than one text value.
-const SUBTREE_FIELDS = ["page.frontmatter"];
+// pages_by_change is keyed by accreta's four doubt levels, and every value under them is a page path.
+const SUBTREE_FIELDS = ["page.frontmatter", "reports[].stale[].pages_by_change"];
 
-// Page-derived text unmarked today, as "tool path CHANNEL". The fix belongs in src/tools.ts; delete entries as it lands.
-const KNOWN_UNMARKED: string[] = [
-  "check_drift reports[].stale[].citations[].footnote FOOTNOTE",
-  "check_drift reports[].stale[].citations[].locator LOCATOR",
-  "check_drift reports[].stale[].revision REVISION",
-  "check_drift reports[].unresolvable[].revision REVISION",
-  "find_canonical results[].canonical_source CANONICAL",
-  "find_canonical results[].type TYPE",
-  "find_consumers results[].type TYPE",
-  "get_page page.canonical_source CANONICAL",
-  "get_page page.last_verified_revision REVISION",
-  "get_page page.source SOURCE",
-  "get_page page.type TYPE",
-  "search_pages results[].last_verified_revision REVISION",
-  "search_pages results[].source SOURCE",
-  "search_pages results[].type TYPE",
-  "update_verified_revision current_revision REVISION",
-  "update_verified_revision previous_revision REVISION",
-];
+// Page-derived text unmarked today, as "tool path CHANNEL". The fix belongs in src/tools.ts, not here.
+const KNOWN_UNMARKED: string[] = [];
 
-// Surfaced but accepted for now, with why. Whether paths get marked is the surfaces lane's decision.
-const PAGE_PATH =
-  "a page's path: its author picks the filename, but it is also the id every tool keys on";
-const ACCEPTED_IDENTIFIERS: Record<string, string> = {
-  "check_drift reports[].stale[].changed_paths[] CITEPATH":
-    "adapter-authored: the stub echoes the cited path",
-  "check_drift reports[].stale[].citations[].path CITEPATH":
-    "a citation's path, reported only when the source says that path changed",
-  "find_consumers results[].path FILENAME": PAGE_PATH,
-  "lint_knowledge_base findings[].path FILENAME": PAGE_PATH,
-  "search_pages results[].path FILENAME": PAGE_PATH,
-};
+// Surfaced but not page-authored, as "tool path CHANNEL" with why. Empty: a page's path is marked wherever it is not the caller's echo.
+const ACCEPTED_IDENTIFIERS: Record<string, string> = {};
 
 // check_drift reports per citation only for a source that diffs contents, and the fixture's fs source does not.
 const DIFFING_SOURCE: SourceAdapter = {
   id: "lines",
   revision: async () => "rev2",
-  // Echoes the path diffed.md cites, since drift only reports citations into changed paths.
-  changedSince: async () => ["CANARY-CITEPATH.md"],
+  // A page file, as any source whose root encloses the knowledge base reports; the notes cite it.
+  changedSince: async () => ["knowledge/notes/CANARY-FILENAME.md"],
   // Unknown, with the cited path in its detail as an adapter's may be, so lint's unchecked_reasons carry it.
   locate: async (path) => ({ verdict: "unknown", detail: `${path} cannot be checked here` }),
   citation: () => "",
   pinRevision: () => {},
   touchedSince: async (_revision, _path, locators) =>
     new Map(locators.map((locator) => [locator, { status: "touched" as const }])),
+};
+
+// A source only the agent can reach, so check_drift lists what waits on it.
+const DELEGATED_SOURCE: SourceAdapter = {
+  id: "agent",
+  revision: async () => {
+    throw new DelegatedSourceError("agent", "a connector", "every ticket the notes cite");
+  },
+  changedSince: async () => [],
+  locate: async () => ({ verdict: "unknown", detail: "only the agent can read this source" }),
+  citation: () => "",
+  pinRevision: () => {},
 };
 
 function canariesIn(text: string): string[] {
@@ -243,6 +229,7 @@ describe("every tool response, against pages that try to give instructions", () 
     // Writes on, so the write tool is enumerated and swept like the rest.
     const ctx = contextWith("1");
     ctx.sources.set("lines", DIFFING_SOURCE);
+    ctx.sources.set("agent", DELEGATED_SOURCE);
     const client = await connect(ctx);
     try {
       capabilities = client.getServerCapabilities() ?? {};
@@ -290,11 +277,9 @@ describe("every tool response, against pages that try to give instructions", () 
     expect(tools.filter((name) => !(name in PROBES))).toEqual([]);
   });
 
-  test("every tool that can carry page text surfaced some", () => {
+  test("every tool surfaced some page text", () => {
     // A blind probe sees nothing, so an unmarked field on that tool would pass unnoticed.
-    const blind = tools.filter(
-      (name) => !CARRIES_NO_PAGE_TEXT.has(name) && (seenBy.get(name)?.size ?? 0) === 0,
-    );
+    const blind = tools.filter((name) => (seenBy.get(name)?.size ?? 0) === 0);
     expect(blind).toEqual([]);
   });
 
@@ -313,7 +298,8 @@ describe("every tool response, against pages that try to give instructions", () 
       return [...(declaredBy.get(name) ?? [])]
         .filter((field) => !SUBTREE_FIELDS.includes(field))
         .filter((field) => {
-          const at = [...(shapes.get(field) ?? [])];
+          // Null is a text field left empty, as a page with no source has.
+          const at = [...(shapes.get(field) ?? [])].filter((k) => k !== "null");
           const items = [...(shapes.get(`${field}[]`) ?? [])];
           const text = at.length > 0 && at.every((k) => k === "string");
           const list =
@@ -351,7 +337,7 @@ describe("every tool response, against pages that try to give instructions", () 
 
   test("the known-gap list does not grow", () => {
     // Adding a gap takes two edits, so it is a decision rather than a convenience.
-    expect(KNOWN_UNMARKED.length).toBeLessThanOrEqual(16);
+    expect(KNOWN_UNMARKED.length).toBeLessThanOrEqual(0);
   });
 });
 

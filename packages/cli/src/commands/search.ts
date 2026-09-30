@@ -4,7 +4,16 @@ import { parseLimit, printJson, provenance, withIndex, type CommandContext } fro
 // search_pages refuses a limit above this rather than letting the core clamp it silently.
 const MAX_LIMIT = 50;
 
-const HIT_FIELDS = ["results[].title", "results[].snippet", "results[].matched_aliases"] as const;
+// A page's path is its filename, which the author chose and which can hold any sentence.
+const HIT_FIELDS = [
+  "results[].path",
+  "results[].type",
+  "results[].title",
+  "results[].source",
+  "results[].snippet",
+  "results[].last_verified_revision",
+  "results[].matched_aliases",
+] as const;
 
 export interface SearchOptions {
   types?: string[];
