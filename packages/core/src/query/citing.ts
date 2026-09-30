@@ -1,11 +1,13 @@
 import type { Database } from "../index-db/db.ts";
 import { parseCitation } from "../source/adapter.ts";
+import { requireTable } from "./tables.ts";
 
 /**
  * How many pages cite a source by any route lint checks: `source`, a footnote, or
  * `canonical_source`. What went unchecked when that source did not load.
  */
 export function countPagesCiting(db: Database, sourceId: string): number {
+  requireTable(db, "citations");
   const pages = new Set<string>();
   const bySource = db.query(`SELECT path FROM pages WHERE source = ?`).all(sourceId);
   for (const row of bySource as { path: string }[]) pages.add(row.path);

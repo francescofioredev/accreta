@@ -57,6 +57,35 @@ bun run bench:scale -- --sizes=100,1000      # pick your own
 
 The 100,000-page case takes about twelve minutes, most of it in corpus generation.
 
+# Canonical lookup
+
+`canonical-bench.ts` times `findCanonical` with five probes: an alias on one page, an alias on
+a tenth of the pages, a word in every page's frontmatter that no page declares as an alias, a
+term that is nowhere, and a title. Each probe checks its match count before it is timed, and
+each figure is the median of `--runs` calls (31 by default). It also reports the full rebuild.
+
+```bash
+bun run bench:canonical                                  # 1000, 10000
+bun run bench:canonical -- --sizes=1000,10000,100000 --builds=5
+bun run bench:canonical -- --inserts --builds=9          # insert-only rebuild cost
+```
+
+A full rebuild is dominated by file reads and varied by ±17% between runs on one machine, which
+hides a cost of a few milliseconds. `--inserts` times only the SQL inserts, in one transaction,
+for three schemas taken in alternating order: the whole schema, without the title key, and
+without alias rows. The differences are what those two structures add to a rebuild.
+
+**Comparing commits.** The numbers in #82's PR came from this method:
+- Extract each commit into its own directory with `git archive <commit> | tar -x -C <dir>`,
+  and run `bun install` there.
+- Copy this file into each directory. It uses only the public API, so it runs against older
+  commits too. `--inserts` needs the current schema.
+- Run the commits in rotation, A B C A B C A B C, with the same flags. The corpus is seeded, so
+  every run sees the same pages. Report the median of each cell across the rotations.
+
+The machine these ran on had a load average of 7 to 10. Treat the ratios between commits as the
+result; absolute times will differ on a quieter machine.
+
 # MCP response budget
 
 The consumer of the MCP server is a language model with a finite context window, so every

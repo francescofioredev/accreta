@@ -11,6 +11,7 @@ import {
   type SourceAdapter,
 } from "../src/source/adapter.ts";
 import { openIndex } from "../src/index-db/db.ts";
+import { StaleIndexError } from "../src/query/tables.ts";
 import type { Database } from "../src/index-db/db.ts";
 
 /**
@@ -274,6 +275,16 @@ function addFootnote(
 }
 
 describe("detectDrift at line granularity", () => {
+  test("an index without the citations table says to reindex", async () => {
+    addPage("knowledge/a.md", "docs", "rev1");
+    db.run("DROP TABLE citations");
+    const source = new LineAwareSource("docs", "rev2", { rev1: ["ch.md"] }, {});
+    await expect(detectDrift(db, source)).rejects.toThrow(
+      "This index predates the citations table; run `accreta reindex`.",
+    );
+    await expect(detectDrift(db, source)).rejects.toThrow(StaleIndexError);
+  });
+
   test("a source that cannot diff contents reports exactly what it did before", async () => {
     addPage("knowledge/a.md", "docs", "rev1");
     addFootnote("knowledge/a.md", "x", "rev1", "ch.md", "L1-L5");

@@ -1,6 +1,8 @@
 import type { AccretaConfig } from "../config.ts";
 import type { Database } from "../index-db/db.ts";
 import { tryResolveWikilink } from "../links.ts";
+import { nameKey } from "../name-key.ts";
+import { requireTable } from "./tables.ts";
 import {
   clampLimit,
   cursorOffset,
@@ -205,11 +207,15 @@ export interface CanonicalMatch {
  * should reach the same place.
  */
 export function findCanonical(db: Database, term: string, config: AccretaConfig): CanonicalMatch[] {
-  const needle = term.trim().toLowerCase();
+  requireTable(db, "aliases");
+  const needle = nameKey(term);
   const out: CanonicalMatch[] = [];
   const seen = new Set<string>();
 
-  const push = (row: PageRow, matchedOn: CanonicalMatch["matchedOn"]) => {
+  const push = (
+    row: Pick<PageRow, "path" | "title" | "type" | "canonical_source">,
+    matchedOn: CanonicalMatch["matchedOn"],
+  ) => {
     if (seen.has(row.path)) return;
     seen.add(row.path);
     out.push({
@@ -228,29 +234,26 @@ export function findCanonical(db: Database, term: string, config: AccretaConfig)
   }
 
   const byTitle = db
-    .query(`${SELECT} WHERE LOWER(title) = ? ORDER BY path`)
-    .all(needle) as PageRow[];
+    .query(
+      `SELECT path, title, type, canonical_source FROM pages WHERE title_key = ? ORDER BY path`,
+    )
+    .all(needle) as Pick<PageRow, "path" | "title" | "type" | "canonical_source">[];
   for (const row of byTitle) push(row, "title");
 
-  // Aliases live in frontmatter_json rather than a column, because which fields
-  // matter is configuration. The LIKE narrows the candidates; the JSON is parsed
-  // to confirm, so a page merely containing the word is not a false positive.
-  const candidates = db
-    .query(`${SELECT} WHERE LOWER(frontmatter_json) LIKE ? ORDER BY path`)
-    .all(`%${needle}%`) as PageRow[];
-  for (const row of candidates) {
-    const frontmatter = JSON.parse(row.frontmatter_json) as Record<string, unknown>;
-    const aliases = frontmatter.aliases;
-    if (!Array.isArray(aliases)) continue;
-    if (aliases.some((a) => typeof a === "string" && a.trim().toLowerCase() === needle)) {
-      push(row, "alias");
-    }
-  }
+  // Equality on whole declared aliases, so a page merely containing the words elsewhere never matches.
+  const byAlias = db
+    .query(
+      `SELECT p.path, p.title, p.type, p.canonical_source
+       FROM aliases a JOIN pages p ON p.path = a.path
+       WHERE a.alias = ? ORDER BY a.path`,
+    )
+    .all(needle) as Pick<PageRow, "path" | "title" | "type" | "canonical_source">[];
+  for (const row of byAlias) push(row, "alias");
 
   return out;
 }
 
-/** Paged in memory: an exact total needs every alias candidate parsed anyway, until #82. */
+/** Paged in memory: the cursor binds to the matches, so an exact total needs them all. */
 export function findCanonicalPage(
   db: Database,
   term: string,

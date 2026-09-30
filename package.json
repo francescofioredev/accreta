@@ -19,6 +19,7 @@
     "bench": "bun run bench/search-bench.ts",
     "bench:scale": "bun run bench/scale-bench.ts",
     "bench:mcp": "bun run bench/mcp-budget.ts",
+    "bench:canonical": "bun run bench/canonical-bench.ts",
     "adoption": "bun run scripts/adoption.ts"
   },
   "devDependencies": {

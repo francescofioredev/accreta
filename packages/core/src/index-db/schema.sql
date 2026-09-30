@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS pages (
   path TEXT PRIMARY KEY,
   type TEXT NOT NULL,
   title TEXT NOT NULL,
+  -- nameKey(title): SQLite's LOWER() folds only ASCII, and an ICU build would fold differently.
+  title_key TEXT,
 
   -- The columns below are the vocabulary-independent ones. Everything a
   -- particular knowledge base cares about lives in frontmatter_json: promoting
@@ -32,6 +34,7 @@ CREATE TABLE IF NOT EXISTS pages (
 
 CREATE INDEX IF NOT EXISTS idx_pages_type ON pages(type);
 CREATE INDEX IF NOT EXISTS idx_pages_source ON pages(source);
+CREATE INDEX IF NOT EXISTS idx_pages_title_key ON pages(title_key, path);
 
 -- `aliases` is indexed alongside title and body because the name a question
 -- arrives under is rarely the name the page was filed under. Leaving it out
@@ -49,6 +52,14 @@ CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
   source UNINDEXED,
   tokenize = 'porter unicode61'
 );
+
+-- nameKey() of each entry of a list-valued `aliases`, as findCanonical compares it.
+-- Its own table because a LIKE over frontmatter_json can use no index and scans every page.
+CREATE TABLE IF NOT EXISTS aliases (
+  alias TEXT NOT NULL,
+  path TEXT NOT NULL,
+  PRIMARY KEY (alias, path)
+) WITHOUT ROWID;
 
 CREATE TABLE IF NOT EXISTS links (
   src_path TEXT NOT NULL,

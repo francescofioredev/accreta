@@ -1,4 +1,5 @@
 import type { Database } from "../index-db/db.ts";
+import { requireTable } from "../query/tables.ts";
 import {
   DelegatedSourceError,
   parseCitation,
@@ -249,6 +250,7 @@ interface Cite {
 
 /** Every citation into this source from its pages, `canonical_source` first, footnotes in page order. */
 function citationsBySource(db: Database, sourceId: string, rows: PageRow[]): Map<string, Cite[]> {
+  requireTable(db, "citations");
   const out = new Map<string, Cite[]>();
   const add = (page: string, cite: Cite) => {
     const list = out.get(page);

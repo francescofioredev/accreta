@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { Database as SqliteDatabase } from "bun:sqlite";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +9,8 @@ import { openIndex, type Database } from "../src/index-db/db.ts";
 import { findCanonical, findRelated, getPage } from "../src/query/page.ts";
 import { searchPages } from "../src/query/search.ts";
 import { lint, lintCitations } from "../src/query/lint.ts";
+import { countPagesCiting } from "../src/query/citing.ts";
+import { requireTable, StaleIndexError } from "../src/query/tables.ts";
 import {
   parseCitation,
   parseLineLocator,
@@ -194,6 +197,111 @@ describe("findCanonical", () => {
 
   test("an unknown term yields no matches", () => {
     expect(findCanonical(db, "not a concept here", config)).toEqual([]);
+  });
+
+  test("the term as the whole value of another frontmatter field is not an alias", () => {
+    writePage("notes/field.md", "---\ntype: note\nsummary: climate forcing\n---\n\n# Field\n");
+    reindex();
+    const matches = findCanonical(db, "climate forcing", config);
+    expect(matches.map((m) => m.path)).toEqual(["knowledge/concepts/forcing.md"]);
+  });
+
+  test("an alias JSON would escape still resolves", () => {
+    // The old LIKE ran over JSON text, where this alias reads `the \"greenhouse\" effect`.
+    writePage(
+      "concepts/greenhouse.md",
+      "---\ntype: concept\naliases: ['the \"greenhouse\" effect']\n---\n\n# Greenhouse\n",
+    );
+    reindex();
+    const [match] = findCanonical(db, 'The "greenhouse" effect', config);
+    expect(match?.path).toBe("knowledge/concepts/greenhouse.md");
+  });
+
+  test("a non-ASCII alias resolves case-insensitively, as the comparison always said", () => {
+    writePage("concepts/emission.md", '---\ntype: concept\naliases: ["Émissions"]\n---\n\n# E\n');
+    reindex();
+    const [match] = findCanonical(db, "émissions", config);
+    expect(match?.path).toBe("knowledge/concepts/emission.md");
+  });
+
+  test("a non-ASCII title resolves case-insensitively", () => {
+    writePage("concepts/emission.md", "---\ntype: concept\n---\n\n# Émissions\n");
+    reindex();
+    const [match] = findCanonical(db, "émissions", config);
+    expect(match?.path).toBe("knowledge/concepts/emission.md");
+    expect(match?.matchedOn).toBe("title");
+  });
+
+  test("a decomposed É matches a composed one, in titles and aliases", () => {
+    const composed = "Été";
+    const decomposed = "Été";
+    writePage("concepts/title.md", `---\ntype: concept\n---\n\n# ${decomposed}\n`);
+    writePage(
+      "concepts/alias.md",
+      `---\ntype: concept\naliases: ["${decomposed} x"]\n---\n\n# A\n`,
+    );
+    reindex();
+    expect(findCanonical(db, composed, config).map((m) => m.path)).toEqual([
+      "knowledge/concepts/title.md",
+    ]);
+    expect(findCanonical(db, `${composed} x`, config).map((m) => m.path)).toEqual([
+      "knowledge/concepts/alias.md",
+    ]);
+    expect(findCanonical(db, `${decomposed} x`, config)).toHaveLength(1);
+  });
+
+  test("aliases differing only in case yield one match", () => {
+    writePage("concepts/rf.md", '---\ntype: concept\naliases: ["RF", "rf"]\n---\n\n# R\n');
+    reindex();
+    expect(findCanonical(db, "Rf", config)).toHaveLength(1);
+  });
+
+  test("a removed alias stops resolving after a rebuild", () => {
+    writePage("concepts/forcing.md", "---\ntype: concept\n---\n\n# Radiative forcing\n");
+    db.close();
+    reindex();
+    expect(findCanonical(db, "climate forcing", config)).toEqual([]);
+  });
+});
+
+describe("an index built before a table existed", () => {
+  function dropTable(table: string): void {
+    writePage("a.md", '---\ntype: note\naliases: ["x"]\n---\n\n# A\n');
+    buildIndex({ root, config, indexPath });
+    const writable = new SqliteDatabase(indexPath);
+    writable.run(`DROP TABLE ${table}`);
+    writable.close();
+    db = openIndex(indexPath, { readonly: true });
+  }
+
+  test("a table found once is not looked up again, and a missing one always is", () => {
+    writePage("a.md", "---\ntype: note\n---\n\n# A\n");
+    reindex();
+    requireTable(db, "aliases");
+    const writable = new SqliteDatabase(indexPath);
+    writable.run("DROP TABLE aliases");
+    expect(() => requireTable(db, "aliases")).not.toThrow();
+
+    expect(() => requireTable(db, "later")).toThrow(StaleIndexError);
+    writable.run("CREATE TABLE later (x)");
+    writable.close();
+    expect(() => requireTable(db, "later")).not.toThrow();
+  });
+
+  test("findCanonical says to reindex when aliases is missing", () => {
+    dropTable("aliases");
+    expect(() => findCanonical(db, "x", config)).toThrow(StaleIndexError);
+    expect(() => findCanonical(db, "x", config)).toThrow(
+      "This index predates the aliases table; run `accreta reindex`.",
+    );
+  });
+
+  test("citation readers say to reindex when citations is missing", async () => {
+    dropTable("citations");
+    expect(() => countPagesCiting(db, "s")).toThrow(
+      "This index predates the citations table; run `accreta reindex`.",
+    );
+    await expect(lintCitations(db, new Map())).rejects.toThrow(StaleIndexError);
   });
 });
 
