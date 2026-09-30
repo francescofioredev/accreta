@@ -74,7 +74,7 @@ describe("read tools", () => {
   test("get_page accepts a wikilink target", () => {
     const result = getPageTool(ctx, { path: "concepts/forcing" });
     expect(result.found).toBe(true);
-    if (result.found) expect(result.page.title).toBe("Radiative forcing");
+    if (result.found) expect(result.page?.title).toBe("Radiative forcing");
   });
 
   test("get_page reports a miss rather than throwing", () => {
@@ -427,11 +427,11 @@ describe("page-derived fields are named as such", () => {
     const result = getPageTool(ctx, { path: "knowledge/concepts/carrier.md" });
     expect(result.found).toBe(true);
     if (!result.found) return;
-    expect(result.page.body).toContain("entropy budget");
+    expect(result.page?.body).toContain("entropy budget");
     // frontmatter is passed through whole, so every key an author invents
     // arrives with it — the channel the original enumeration did not name.
-    expect(result._provenance.page_derived_fields).toContain("page.frontmatter");
-    expect(result._provenance.page_derived_fields).toContain("page.body");
+    expect(result._provenance?.page_derived_fields).toContain("page.frontmatter");
+    expect(result._provenance?.page_derived_fields).toContain("page.body");
   });
 
   test("lint names its details, and still quotes the link target verbatim", async () => {
