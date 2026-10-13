@@ -1,7 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { checkConfig, compileCitationTemplate, DEFAULT_CONFIG, sqliteSupport } from "@accreta/core";
-import { KNOWN_TYPES, kindFor, readDeclarationFiles, stateDirFor } from "@accreta/adapters";
+import {
+  clashingIds,
+  KNOWN_TYPES,
+  kindFor,
+  readDeclarationFiles,
+  stateDirFor,
+} from "@accreta/adapters";
 import { CONFIG_FILENAME, findWorkspace } from "../workspace.ts";
 import { reportPreflight, type CommandContext } from "./shared.ts";
 import { compareVersions, findInstalledSkills, SKILL_NAME } from "./skill-floor.ts";
@@ -56,6 +62,7 @@ export async function doctor(ctx: CommandContext, version: string): Promise<numb
   );
 
   const declarations = readDeclarationFiles(workspace.root);
+  const clashes = clashingIds(declarations);
   ctx.out(`\nsources (${declarations.length})`);
   if (declarations.length === 0) ctx.out("  none declared in sources/");
 
@@ -66,8 +73,15 @@ export async function doctor(ctx: CommandContext, version: string): Promise<numb
       exitCode = 1;
       continue;
     }
-    const { declaration } = entry;
-    ctx.out(`  ${declaration.id} — ${declaration.type}`);
+    const { file, declaration } = entry;
+    ctx.out(`  ${declaration.id} — ${declaration.type} — ${file}`);
+    const others = clashes.get(declaration.id)?.filter((other) => other !== file) ?? [];
+    if (others.length > 0) {
+      ctx.out(`    no: id \`${declaration.id}\` is also declared in ${others.join(", ")}`);
+      ctx.out("      → give each a distinct id or remove all but one");
+      exitCode = 1;
+      continue;
+    }
     const kind = kindFor(declaration.type);
     if (!kind) {
       ctx.out(`    no: unknown source type. Known: ${KNOWN_TYPES.join(", ")}.`);

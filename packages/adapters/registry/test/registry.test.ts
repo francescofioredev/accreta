@@ -13,6 +13,7 @@ import { dirname, join } from "node:path";
 import { snapshotDirFor } from "@accreta/adapter-fs";
 import {
   buildRegistry,
+  clashingIds,
   kindFor,
   loadSources,
   readDeclarationFiles,
@@ -155,6 +156,27 @@ describe("readDeclarations", () => {
   test("options besides id and type are passed through untouched", () => {
     writeSource("docs.yaml", 'id: docs\ntype: fs\nroot: corpus\nextensions: [".md"]\n');
     expect(readDeclarations(root)[0]?.options).toEqual({ root: "corpus", extensions: [".md"] });
+  });
+});
+
+describe("clashingIds", () => {
+  test("names every file of a shared id, and only shared ids", () => {
+    writeSource("a.yaml", "id: docs\ntype: fs\nroot: one\n");
+    writeSource("b.yaml", "id: repo\ntype: git\nroot: .\n");
+    writeSource("c.yaml", "id: docs\ntype: notion\n");
+    writeSource("d.yaml", "type: fs\n");
+    writeSource("e.yaml", "id: docs\ntype: fs\nroot: two\n");
+
+    expect(clashingIds(readDeclarationFiles(root))).toEqual(
+      new Map([["docs", ["a.yaml", "c.yaml", "e.yaml"].map((f) => join("sources", f))]]),
+    );
+  });
+
+  test("no shared id, no clash", () => {
+    writeSource("a.yaml", "id: docs\ntype: fs\nroot: one\n");
+    writeSource("b.yaml", "id: repo\ntype: git\nroot: .\n");
+
+    expect(clashingIds(readDeclarationFiles(root)).size).toBe(0);
   });
 });
 

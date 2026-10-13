@@ -1385,4 +1385,28 @@ describe("accreta doctor", () => {
     expect(await cli("doctor")).toBe(1);
     expect(stdout()).toContain("unknown source type");
   });
+
+  test("two declarations sharing an id are both named, and neither wins", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    mkdirSync(join(root, "sources", "docs"), { recursive: true });
+    for (const name of ["a.yaml", "b.yaml"]) {
+      writeFileSync(join(root, "sources", name), "id: docs\ntype: fs\nroot: sources/docs\n");
+    }
+    output = [];
+
+    expect(await cli("doctor")).toBe(1);
+    expect(stdout()).toContain("docs — fs — sources/a.yaml");
+    expect(stdout()).toContain("docs — fs — sources/b.yaml");
+    expect(stdout()).toContain("id `docs` is also declared in sources/b.yaml");
+    expect(stdout()).toContain("id `docs` is also declared in sources/a.yaml");
+
+    // The checks already fail here; doctor must not be the one command that passes.
+    await cli("reindex");
+    for (const command of ["lint", "drift"]) {
+      const result = spawnCli({}, command);
+      expect(result.code).toBe(1);
+      expect(result.out).toContain('declared with id "docs"');
+    }
+  });
 });

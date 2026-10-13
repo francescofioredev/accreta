@@ -63,6 +63,17 @@ export function readDeclarationFiles(root: string): DeclarationFile[] {
   });
 }
 
+/** Each id more than one file declares, with those files in order: a citation can name only one. */
+export function clashingIds(entries: readonly DeclarationFile[]): Map<string, string[]> {
+  const filesById = new Map<string, string[]>();
+  for (const entry of entries) {
+    if ("error" in entry) continue;
+    const id = entry.declaration.id;
+    filesById.set(id, [...(filesById.get(id) ?? []), entry.file]);
+  }
+  return new Map([...filesById].filter(([, files]) => files.length > 1));
+}
+
 /** A declaration in `sources/` that did not become an adapter. */
 export interface UnloadedSource {
   /** Relative to the workspace root: the file somebody has to open. */
@@ -87,21 +98,22 @@ export function loadSources(ctx: SourceContext): LoadedSources {
   const registry = buildRegistry(ctx);
   const sources = new Map<string, SourceAdapter>();
   const unloaded: UnloadedSource[] = [];
-  const seen = new Set<string>();
+  const entries = readDeclarationFiles(ctx.root);
+  const clashes = clashingIds(entries);
 
-  for (const entry of readDeclarationFiles(ctx.root)) {
+  for (const entry of entries) {
     if ("error" in entry) {
       unloaded.push({ file: entry.file, reason: entry.error });
       continue;
     }
     const { file, declaration } = entry;
-    if (seen.has(declaration.id)) {
+    const first = clashes.get(declaration.id)?.[0];
+    if (first !== undefined && first !== file) {
       throw new Error(
         `Two sources in sources/ are declared with id "${declaration.id}". ` +
           `An id names a source in every citation, so it has to name only one.`,
       );
     }
-    seen.add(declaration.id);
     try {
       sources.set(declaration.id, registry.create(declaration));
     } catch (error) {
