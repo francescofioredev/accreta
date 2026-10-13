@@ -359,7 +359,7 @@ export async function lintCitations(
       findings.push({
         kind: "unparseable-citation",
         path: row.page_path,
-        detail: `${label} "${row.text}" does not read as the configured provenance.format`,
+        detail: `${label} "${row.text}" does not read as the current provenance.format; re-cite it with \`accreta cite\``,
       });
       continue;
     }

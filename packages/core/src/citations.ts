@@ -12,7 +12,10 @@ export interface CitationParts {
 export interface CitationTemplate {
   /** The parts of a footnote written in this format, or null if it is not. */
   read(text: string): CitationParts | null;
-  /** Whether a footnote carries the format's literals: prose footnotes are not broken citations. */
+  /**
+   * Whether a footnote is meant as a citation: it carries the format's literals, or a
+   * `path#locator` as one written in an earlier format does. Prose footnotes are not broken citations.
+   */
   attempts(text: string): boolean;
 }
 
@@ -28,6 +31,9 @@ const CAPTURE: Record<string, string> = {
   path: "[^\\s#]+?",
   locator: "\\S+?",
 };
+
+// A bare `path#locator` token; URLs, wikilinks and markdown links break it with `:`, `[` or `(`.
+const POINTER_RE = /(?:^|\s)[\w./@+~-]+#\w[\w.:-]*(?=[.,;:!?)]*(?:\s|$))/;
 
 function escapeLiteral(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
@@ -109,7 +115,7 @@ export function compileCitationTemplate(format: string): TemplateResult {
         };
         return groups.locator ? { ...parts, locator: groups.locator } : parts;
       },
-      attempts: (text) => markers.every((marker) => text.includes(marker)),
+      attempts: (text) => markers.every((marker) => text.includes(marker)) || POINTER_RE.test(text),
     },
   };
 }

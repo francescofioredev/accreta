@@ -1123,6 +1123,23 @@ describe("accreta lint — citations", () => {
     expect(report._provenance.page_derived_fields).toContain("unchecked_reasons[].paths");
   });
 
+  test("footnotes in a format the config no longer uses fail lint (#249)", async () => {
+    writeSource("doc.md", "one\ntwo\nthree\n");
+    writePage(
+      "a.md",
+      "---\ntype: note\n---\n\n# A\n\nOne.[^one] Two.[^two]\n\n" +
+        "[^one]: docs · doc.md#L1\n[^two]: docs · doc.md#L2\n",
+    );
+    await cli("init");
+    await cli("reindex");
+    output = [];
+
+    expect(await cli("lint")).toBe(1);
+    expect(stdout()).toContain("unparseable-citation (2)");
+    expect(stdout()).toContain("[^one] (line 9)");
+    expect(stdout()).toContain("accreta cite");
+  });
+
   test("a citation that resolves is not reported", async () => {
     writeSource("doc.md", "one\ntwo\nthree\n");
     writePage(
