@@ -17,8 +17,8 @@ page_types:
   - synthesis # a page that reads across several of the above
 
 link_fields:
-  - consumers # who calls this
-  - consumed_by # what this calls
+  - consumers # what calls this page's subject
+  - consumed_by # what this page's subject calls, despite the name
   - delegates_to # what this hands work to
   - implements # the interface or contract this realizes
   - supersedes
@@ -65,6 +65,11 @@ untouched by a hundred commits is not stale.
 **Beware the rename.** A moved or renamed file shows up as a change to both paths. The page
 is usually still correct and the citation is not; fix the path rather than re-verifying the
 whole page.
+
+## Disagreements
+
+There is no `contradiction` type here: a disagreement, such as code that contradicts its docs,
+goes inline in the contested page, per base rule 3.
 
 ## Concepts are where the value is
 

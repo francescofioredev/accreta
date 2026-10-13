@@ -17,9 +17,9 @@ page_types:
 link_fields:
   - cites # a source this draws on
   - cited_by
-  - supports # evidence that strengthens a finding
-  - contradicts # evidence that conflicts with it
-  - supersedes # a later result that replaces an earlier one
+  - supports # a finding this page's evidence strengthens
+  - contradicts # a finding this page's evidence conflicts with
+  - supersedes # an earlier result this page's result replaces
   - superseded_by
   - related
   - discussed_in
@@ -36,7 +36,7 @@ often the most valuable thing you can write, and it deserves to be findable on i
 ```markdown
 ---
 type: contradiction
-contradicts: [[findings/permafrost-feedback-strength]]
+contradicts: ["[[findings/permafrost-feedback-strength]]"]
 ---
 
 # Disagreement on permafrost feedback strength

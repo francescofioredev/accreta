@@ -32,6 +32,9 @@ blocks; a mail thread has messages. Cite what the source can actually be pointed
 rather than inventing a range. An invented locator is worse than a missing one: it reads as
 precision and cannot be checked.
 
+An absence has no locator either. For "no record 7 exists", cite the file that would list it,
+whole, and state the absence in the claim. `cite` takes files, not directories.
+
 The revision is the part people drop, and it is the part that matters. Without it the
 citation says where the claim came from but not *when*, and drift detection has nothing to
 compare against. A page with citations that omit revisions is a page that can never be
@@ -62,6 +65,11 @@ No reconciliation is attempted here; the disagreement is the current state of th
 A knowledge base that presents contested things as settled is worse than one that says
 nothing, because it is confidently wrong and reads as authoritative.
 
+Record it inline, in the page whose claim is contested. It gets a page of its own only if the
+vocabulary has a type for one and it spans pages or matters in its own right; those pages link
+to it. Search first: link to an existing record rather than write a second. When writers split
+the work, the one writing the contested page records it.
+
 ---
 
 ## What a page is
@@ -76,7 +84,7 @@ source: ipcc-ar6-wg1
 aliases: ["radiative forcing", "climate forcing"]
 canonical_source: "ipcc-ar6-wg1:chapter-07.md#L142"
 last_verified_revision: 9a4f2c1e8b03d5f7a6c2e9b1d4f8a0c3e5b7d9f2
-related: [[concepts/climate-sensitivity]]
+related: ["[[concepts/climate-sensitivity]]", "[[concepts/feedback]]"]
 ---
 
 # Radiative forcing
@@ -106,8 +114,10 @@ Two kinds, both indexed into one graph:
   `supersedes`, `discussed_in`, whatever this knowledge base declares.
 - **Inline `[[wikilinks]]`** in prose, untyped.
 
-Prefer a typed relation when the relationship has a name. `related: [[x]]` says something
-`[[x]]` in a sentence does not.
+Prefer a typed relation when the relationship has a name: it says something `[[x]]` in a
+sentence does not. Quote each target, as above; unquoted, `[[x]]` is a nested list to other
+YAML readers. A field reads from the page it is on: `supersedes` on page a names what a
+supersedes.
 
 Link targets are knowledge-base-relative. `[[concepts/forcing]]` and
 `[[../concepts/forcing]]` resolve to the same page, so write whichever reads better in
