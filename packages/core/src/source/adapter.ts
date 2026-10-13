@@ -1,4 +1,4 @@
-import { realpathSync, statSync } from "node:fs";
+import { lstatSync, realpathSync, statSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import { PLACEHOLDER_RE } from "../citations.ts";
 
@@ -249,7 +249,27 @@ export function resolveCitedFile(
   }
   // A symlink on the way, or a case the disk does not use, names bytes no revision holds.
   if (real !== join(base, spelled)) {
-    return missing(`is a symlink or a different spelling in source "${sourceId}"`);
+    // Only a path inside the source is ever named back: lint output may travel further than the disk.
+    const onDisk = real.startsWith(base + sep) ? relative(base, real).split(sep).join("/") : null;
+    if (!throughSymlink(resolve(root), spelled)) {
+      if (onDisk !== null && onDisk.normalize("NFC") === spelled.normalize("NFC")) {
+        return missing(
+          `differs only in Unicode normalisation from how source "${sourceId}" names it`,
+        );
+      }
+      return missing(`is not how source "${sourceId}" names it${onDisk ? `: "${onDisk}"` : ""}`);
+    }
+    if (onDisk === null) {
+      return missing(`is reached through a symlink to nothing source "${sourceId}" can cite`);
+    }
+    const stat = statSync(real, { throwIfNoEntry: false });
+    if (!stat) return missing(`does not exist in source "${sourceId}"`);
+    if (stat.isDirectory()) return missing(`is a symlink to a directory in source "${sourceId}"`);
+    if (!stat.isFile()) return missing(`is not a regular file in source "${sourceId}"`);
+    // A revision records the link, not its target, so an edit behind it would never drift the page.
+    return missing(
+      `is reached through a symlink in source "${sourceId}": cite "${onDisk}" instead`,
+    );
   }
   try {
     if (!statSync(real).isFile()) return missing(`is not a regular file in source "${sourceId}"`);
@@ -257,6 +277,20 @@ export function resolveCitedFile(
     return missing(`does not exist in source "${sourceId}"`);
   }
   return full;
+}
+
+/** Whether a component of `path` below `root` is a symlink; `lstat` never reads past one. */
+function throughSymlink(root: string, path: string): boolean {
+  let at = root;
+  for (const part of path.split("/")) {
+    at = join(at, part);
+    try {
+      if (lstatSync(at).isSymbolicLink()) return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }
 
 /**
