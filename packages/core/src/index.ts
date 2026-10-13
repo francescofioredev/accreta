@@ -57,6 +57,7 @@ export type {
   PageChange,
   DriftReport,
   StaleRevision,
+  UnpinnedCitation,
   UnresolvableRevision,
 } from "./source/drift.ts";
 export { detectDrift, pageChanges } from "./source/drift.ts";

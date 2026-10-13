@@ -49,8 +49,9 @@ for (const dir of packages) {
 }
 
 if (!process.argv.includes("--clean")) {
+  // tsc reports errors on stdout; pack callers keep only stderr, so a failed build said nothing.
   const built = spawnSync(process.execPath, [TSC, "-b", "--force", "tsconfig.build.json"], {
-    stdio: "inherit",
+    stdio: ["ignore", 2, 2],
   });
   if (built.status !== 0) process.exit(built.status ?? 1);
   for (const dir of packages) {
