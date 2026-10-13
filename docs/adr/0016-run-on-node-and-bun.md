@@ -109,8 +109,8 @@ set of rules. The last column is what a two-driver design would have had to make
 the double-quoted literal could not have been.
 
 Numbered parameters are the exception to one set of rules: Bun 1.4 binds `?1` and Node 22.16
-refuses it. CI runs the unit suite under Bun, so a passing test does not show that a query binds
-on Node 22.16.
+refuses it. CI runs the unit suite under Bun, and only the packaging test under Node 22.16, so a
+passing unit test does not show that a query binds on Node 22.16.
 
 [`0016-entry/`](0016-entry/) reproduces the bin entry shape. Run `node` or `bun` on
 `entry.mjs` or on `static-entry.mjs`. The directory has four modules:
@@ -206,7 +206,8 @@ invalidation rules.
   truthiness.
 - Rows have a null prototype, which `bun test` equality accepts.
 - Booleans are never bound. Node 22 and Bun 1.4 refuse them, while Node 24 binds them.
-- Parameters are `?` or `$name`, never numbered. Node 22.16 through 22.19 refuse `?1`.
+- Parameters are `?` or `$name`, never numbered. Node 22.16 through 22.19 refuse `?1`. #214
+  renames the one in `drift.ts`.
 
 **Spawn git with async `execFile` from `node:child_process`, with an explicit `maxBuffer`.**
 `execFileSync` is rejected: its default 1 MiB buffer threw `ENOBUFS` on every runtime, and it

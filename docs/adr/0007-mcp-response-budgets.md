@@ -1,7 +1,8 @@
 # ADR-0007: A tool response is a context-window budget, and four of ours have none
 
 Status: accepted, with a provisional default limit: see
-[The default is provisional](#the-default-is-provisional).
+[The default is provisional](#the-default-is-provisional). Amended 2026-10-13 (CLI paging,
+figures re-measured).
 Date: 2026-08-10
 
 ## Context
@@ -139,10 +140,10 @@ and `cursor`. They differ from the Decision above in these ways:
   `count` is the filtered total. `pages_checked`, `citations_checked`, `citations_unchecked` and
   `unchecked_reasons` stay whole-pass values under a filter. `unloaded-source` findings, which
   the caller supplies because only it loaded the sources, are paged and filtered with the rest.
-- **The CLI pages on request.** Since [#207](https://github.com/francescofioredev/accreta/pull/207),
+- **The CLI pages on request.** _Amended 2026-10-13._ Since [#207](https://github.com/francescofioredev/accreta/pull/207),
   `accreta lint`, `consumers` and `canonical` take `--limit` (1 to 50, default 50) and
   `--cursor`. With either flag, `--json` carries `count` and `nextCursor` exactly as the MCP tool
-  does, and a cursor from one surface works on the other. Without either flag the commands still
+  does, and a cursor from one surface works on the other for the same query. Without either flag the commands still
   return the whole list, because core calls without a page return everything. A bad limit or a
   refused cursor exits 2.
 
@@ -152,7 +153,7 @@ Measured by `bench/mcp-budget.ts` at 1,000 pages: `lint_knowledge_base` went fro
 ## Figures, re-measured 2026-10-13
 
 The tables in the Context were measured on 2026-08-10 and record what the decision was made on.
-They no longer describe the code. Re-measured with `bun run bench:mcp` on `main` at `f79e6de`,
+They, and the 2026-09-29 figures just above, no longer describe the code. Re-measured with `bun run bench:mcp` on `main` at `f79e6de`,
 Bun 1.3.13, darwin arm64, with the default 29,889-byte generated body:
 
 | pages | search | get_page | find_consumers | find_canonical | lint  |
@@ -176,7 +177,7 @@ Bun 1.3.13, darwin arm64, with the default 29,889-byte generated body:
   2026-08-10 report grew from 663KB to 4.9MB.
   [#55](https://github.com/francescofioredev/accreta/pull/55) grouped the report by revision.
 - **`check_drift` is still unbounded in pages.** It has no `limit`. With content diffs, which is
-  the path git sources take, each stale page lists its citations, and 1,000 pages cost 30% of a
+  the path git sources take, each stale page lists its changed and moved citations, and 1,000 pages cost 30% of a
   200k window. That cost is per page, so it grows with the knowledge base.
 - **Real page sizes.** The ten pages in `examples/climate` are 756 to 1,782 bytes as files, and
   their bodies 462 to 1,488 bytes as the indexer parses them. The Context's 1,783 predates

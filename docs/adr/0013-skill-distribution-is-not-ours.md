@@ -97,8 +97,8 @@ a `skill` section that finds installed copies of `accreta-setup` and compares ea
 **Where it looks.** Four directories, two in the project and two global:
 
 - `.agents/skills/` and `.claude/skills/`, in the current directory and in each parent up to the
-  repository root (the first directory holding `.git`). The walk stops before the home directory,
-  which the global pair covers;
+  repository root (the first directory holding `.git`), or the filesystem root when there is no
+  repository. The walk stops before the home directory, which the global pair covers;
 - `~/.agents/skills/`, and `~/.claude/skills/`, or `$CLAUDE_CONFIG_DIR/skills/` when that is set.
 
 **Why those.** They are where `npx skills` 1.7.0 writes, and where the agents that read them look.
@@ -119,8 +119,8 @@ both on the path:
   skill pinned to this release's tag. `npx skills update` cannot help, since the skill is already
   ahead of the CLI;
 - `unknown` when no copy is found, when a copy cannot be read (a dangling symlink, no `SKILL.md`,
-  a permission error), when its frontmatter declares no release, or when a directory on the path
-  could not be listed. A copy that cannot be read is reported as found, never as absent.
+  a permission error), when it has no readable release in its frontmatter, when the CLI's own
+  version cannot be compared, or when a directory on the path could not be listed. A copy that cannot be read is reported as found, never as absent.
 
 **It never fails.** The section never changes `doctor`'s exit code, `stale` included. The copy it
 finds may not be the one the agent loads, and finding none proves nothing.
