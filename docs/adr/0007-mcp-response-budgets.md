@@ -1,7 +1,8 @@
 # ADR-0007: A tool response is a context-window budget, and four of ours have none
 
 Status: accepted, with a provisional default limit: see
-[The default is provisional](#the-default-is-provisional).
+[The default is provisional](#the-default-is-provisional). Amended 2026-10-13 (CLI paging,
+figures re-measured).
 Date: 2026-08-10
 
 ## Context
@@ -139,9 +140,50 @@ and `cursor`. They differ from the Decision above in these ways:
   `count` is the filtered total. `pages_checked`, `citations_checked`, `citations_unchecked` and
   `unchecked_reasons` stay whole-pass values under a filter. `unloaded-source` findings, which
   the caller supplies because only it loaded the sources, are paged and filtered with the rest.
-- **The CLI returns everything for now.** Core calls without a page return the whole list, and
-  `accreta lint`, `consumers` and `canonical` make those calls. CLI paging belongs to the CLI
-  lane.
+- **The CLI pages on request.** _Amended 2026-10-13._ Since [#207](https://github.com/francescofioredev/accreta/pull/207),
+  `accreta lint`, `consumers` and `canonical` take `--limit` (1 to 50, default 50) and
+  `--cursor`. With either flag, `--json` carries `count` and `nextCursor` exactly as the MCP tool
+  does, and a cursor from one surface works on the other for the same query. Without either flag the commands still
+  return the whole list, because core calls without a page return everything. A bad limit or a
+  refused cursor exits 2.
 
 Measured by `bench/mcp-budget.ts` at 1,000 pages: `lint_knowledge_base` went from 159.6KB to
 8.4KB and `find_consumers` from 157.3KB to 8.2KB. Both are the same at 100 pages.
+
+## Figures, re-measured 2026-10-13
+
+The tables in the Context were measured on 2026-08-10 and record what the decision was made on.
+They, and the 2026-09-29 figures just above, no longer describe the code. Re-measured with `bun run bench:mcp` on `main` at `f79e6de`,
+Bun 1.3.13, darwin arm64, with the default 29,889-byte generated body:
+
+| pages | search | get_page | find_consumers | find_canonical | lint  |
+| ----- | ------ | -------- | -------------- | -------------- | ----- |
+| 10    | 3.7KB  | 30.2KB   | 1.8KB          | 2.1KB          | 2.1KB |
+| 100   | 6.9KB  | 30.2KB   | 8.3KB          | 9.2KB          | 8.5KB |
+| 1,000 | 7.0KB  | 30.2KB   | 8.3KB          | 9.2KB          | 8.5KB |
+
+`check_drift`, every page stale against one revision and citing into the changed paths:
+
+| pages | changed | content diffs | response | share of a 200k window |
+| ----- | ------- | ------------- | -------- | ---------------------- |
+| 100   | 10      | no            | 5.5KB    | 0.7%                   |
+| 1,000 | 10      | no            | 40.7KB   | 5.2%                   |
+| 1,000 | 100     | no            | 44.0KB   | 5.6%                   |
+| 100   | 10      | yes           | 25.4KB   | 3.2%                   |
+| 1,000 | 10      | yes           | 236.3KB  | 30.2%                  |
+| 1,000 | 100     | yes           | 239.6KB  | 30.7%                  |
+
+- **The normalisation holds.** Ten times the changed paths adds 3.3KB at 1,000 pages, where the
+  2026-08-10 report grew from 663KB to 4.9MB.
+  [#55](https://github.com/francescofioredev/accreta/pull/55) grouped the report by revision.
+- **`check_drift` is still unbounded in pages.** It has no `limit`. With content diffs, which is
+  the path git sources take, each stale page lists its changed and moved citations, and 1,000 pages cost 30% of a
+  200k window. That cost is per page, so it grows with the knowledge base.
+- **Real page sizes.** The ten pages in `examples/climate` are 756 to 1,782 bytes as files, and
+  their bodies 462 to 1,488 bytes as the indexer parses them. The Context's 1,783 predates
+  [#157](https://github.com/francescofioredev/accreta/pull/157), which edited the examples.
+- **What the bench covers.** [#193](https://github.com/francescofioredev/accreta/pull/193) added
+  `check_drift`, declared the body size, and made every call go through the server.
+  `list_recent_changes` is still not measured.
+- **The default page.** 50 lint findings still serialise to 8.5KB, as the Decision states.
+  `bench/test/response-budget.test.ts` fails CI when a default response grows past its budget.
