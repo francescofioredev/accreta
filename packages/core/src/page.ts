@@ -263,6 +263,15 @@ function preprocessFrontmatter(yamlSource: string): string {
   return out.join("\n");
 }
 
+function serialises(value: unknown): boolean {
+  try {
+    JSON.stringify(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Split a page into frontmatter, body and title.
  *
@@ -283,7 +292,9 @@ export function parsePage(raw: string, fallbackTitle: string): ParsedPage {
       const proto =
         loaded && typeof loaded === "object" ? Object.getPrototypeOf(loaded) : undefined;
       if (proto === Object.prototype || proto === null) {
-        frontmatter = loaded as Frontmatter;
+        // The index stores frontmatter as JSON; a recursive alias would throw there and stop every page.
+        if (serialises(loaded)) frontmatter = loaded as Frontmatter;
+        else frontmatterError = "frontmatter has a recursive alias or a value JSON cannot hold";
       } else if (loaded !== null && loaded !== undefined) {
         // A fence that parses to a scalar or a sequence is the quieter of the
         // two failures: nothing throws, and the page simply arrives with no
