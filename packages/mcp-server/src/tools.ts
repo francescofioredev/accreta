@@ -525,7 +525,7 @@ export async function updateVerifiedRevisionTool(ctx: ToolContext, input: Update
     };
   }
 
-  if (/\p{Cc}/u.test(input.revision)) {
+  if (/[\p{Cc}\p{Zl}\p{Zp}]/u.test(input.revision)) {
     return { ok: false as const, message: "A revision is one line with no control characters." };
   }
 
@@ -566,8 +566,7 @@ export async function updateVerifiedRevisionTool(ctx: ToolContext, input: Update
       current_revision: page.lastVerifiedRevision,
       revision: input.revision,
       source_revision: sourceRevision,
-      message:
-        "This page belongs to page_source, which is at source_revision. Record source_revision only after re-checking what this page takes from page_source since current_revision. If you came here from another source's `cited_only`, re-pin the page's footnotes with `cite` instead and record no revision.",
+      message: `This page belongs to page_source, which is at source_revision. Record source_revision only after re-checking ${page.lastVerifiedRevision === null ? "everything this page takes from page_source: it records no verified revision" : "what this page takes from page_source since current_revision"}. If you came here from another source's \`cited_only\`, re-pin the page's footnotes with \`cite\` instead and record no revision.`,
       _provenance: provenance(["page_source", "current_revision"]),
     };
   }
@@ -628,10 +627,11 @@ export function setFrontmatterField(raw: string, field: string, value: string): 
   }
 
   const block = match[1] ?? "";
-  const lineRe = new RegExp(`^(\\s*)${field}\\s*:.*$`, "m");
+  // Lines end at \n only: `m`, `.` and `\s` also break at U+2028, which YAML keeps inside a value.
+  const lineRe = new RegExp(`(^|\\n)([ \\t]*)${field}[ \\t]*:[^\\r\\n]*`);
   // A function, so `$` sequences in the value are not read as replacement patterns.
   const newBlock = lineRe.test(block)
-    ? block.replace(lineRe, (_, indent: string) => `${indent}${line}`)
+    ? block.replace(lineRe, (_, lead: string, indent: string) => `${lead}${indent}${line}`)
     : `${block}\n${line}`;
 
   return (

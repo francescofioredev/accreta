@@ -574,6 +574,15 @@ describe("setFrontmatterField", () => {
     }
   });
 
+  test("a line separator inside a value does not cut the next write short", () => {
+    const before = "---\ntype: note\nsource: agent\n---\n\n# A\n";
+    const once = setFrontmatterField(before, "last_verified_revision", "a k: v");
+    const twice = setFrontmatterField(once, "last_verified_revision", "r2");
+    const parsed = parsePage(twice, "A");
+    expect(parsed.frontmatterError).toBeUndefined();
+    expect(parsed.frontmatter).toMatchObject({ source: "agent", last_verified_revision: "r2" });
+  });
+
   test("replacement patterns in the value are written literally", () => {
     const before = "---\ntype: note\nlast_verified_revision: old\n---\n\n# A\n";
     const after = setFrontmatterField(before, "last_verified_revision", "$`$&");
