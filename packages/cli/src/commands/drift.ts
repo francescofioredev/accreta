@@ -180,21 +180,26 @@ export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport)
   ctx.out(`${report.sourceId} @ ${report.currentRevision}`);
 
   if (report.stale.length > 0) {
-    // Not `report.stale.length`, which counts revisions; and each page once, as pins can split it.
-    const pageCount = distinctPages(report.stale);
-    ctx.out(`  ${pageCount} page(s) may have drifted:`);
-    for (const entry of report.stale) {
-      const doubt = pageChanges(entry);
-      const pages = doubt
-        ? entry.pages.toSorted(
-            (a, b) => DOUBT_ORDER.indexOf(doubt.get(a)!) - DOUBT_ORDER.indexOf(doubt.get(b)!),
-          )
-        : entry.pages;
-      for (const path of pages) {
-        const why = doubt ? ` — ${explainDoubt(doubt.get(path)!, entry, path)}` : "";
-        ctx.out(`    ${path} (${atLabel(entry, path)} ${entry.revision})${why}`);
-      }
-    }
+    // null: the source can only say which files changed, so the page is in doubt, as in --json.
+    const rows = report.stale
+      .flatMap((entry) => {
+        const doubt = pageChanges(entry);
+        return entry.pages.map((page) => ({ entry, page, doubt: doubt ? doubt.get(page)! : null }));
+      })
+      .toSorted((a, b) => DOUBT_ORDER.indexOf(a.doubt!) - DOUBT_ORDER.indexOf(b.doubt!));
+    const inDoubt = rows.filter((row) => row.doubt === null || row.doubt === "changed");
+    if (inDoubt.length === 0) ctx.out("  no page in doubt");
+    printStale(ctx, "page(s) in doubt", inDoubt);
+    printStale(
+      ctx,
+      "page(s) to re-pin, cited lines moved",
+      rows.filter((row) => row.doubt === "moved"),
+    );
+    printStale(
+      ctx,
+      "page(s) on an older revision, no cited line changed",
+      rows.filter((row) => row.doubt === "untouched" || row.doubt === "uncited"),
+    );
   }
   // Reported separately because "I cannot tell" is not "out of date", and
   // collapsing them would misrepresent what the system actually knows.
@@ -212,6 +217,22 @@ export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport)
 
 const DOUBT_ORDER: PageChange[] = ["changed", "moved", "untouched", "uncited"];
 
+interface StaleRow {
+  entry: StaleRevision;
+  page: string;
+  doubt: PageChange | null;
+}
+
+/** Each page counted once, as pins can split it across revisions. */
+function printStale(ctx: Pick<CommandContext, "out">, label: string, rows: StaleRow[]): void {
+  if (rows.length === 0) return;
+  ctx.out(`  ${distinct(rows.map((row) => row.page))} ${label}:`);
+  for (const { entry, page, doubt } of rows) {
+    const why = doubt ? ` — ${explainDoubt(doubt, entry, page)}` : "";
+    ctx.out(`    ${page} (${atLabel(entry, page)} ${entry.revision})${why}`);
+  }
+}
+
 function explainDoubt(doubt: PageChange, entry: StaleRevision, page: string): string {
   const mine = (entry.citations ?? []).filter((c) => c.page === page);
   const count = (status: string) => mine.filter((c) => c.change.status === status).length;
@@ -219,7 +240,7 @@ function explainDoubt(doubt: PageChange, entry: StaleRevision, page: string): st
     case "changed":
       return `${count("touched") + count("unknown")} cited range(s) changed`;
     case "moved":
-      return `cited lines moved, not changed: re-pin ${count("moved")} locator(s)`;
+      return `re-pin ${count("moved")} locator(s)`;
     case "untouched":
       return "cited lines unchanged";
     case "uncited":

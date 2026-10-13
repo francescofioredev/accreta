@@ -366,7 +366,7 @@ describe("accreta drift", () => {
     utimesSync(join(docs, "a.md"), 2000, 2000);
 
     const second = accreta("drift");
-    expect(second.out).toContain("1 page(s) may have drifted");
+    expect(second.out).toContain("1 page(s) in doubt");
     expect(second.out).toContain(`knowledge/a.md (verified at ${revision})`);
     expect(second.out).not.toContain("cannot place");
     expect(second.code).toBe(1);
@@ -420,7 +420,7 @@ describe("accreta drift", () => {
       utimesSync(join(docs, "a.md"), 2000, 2000);
 
       const second = spawnCli(env, "drift");
-      expect(second.out).toContain("1 page(s) may have drifted");
+      expect(second.out).toContain("1 page(s) in doubt");
       expect(second.out).not.toContain("cannot place");
     } finally {
       delete process.env.ACCRETA_INDEX_PATH;
@@ -542,7 +542,7 @@ describe("accreta drift", () => {
 
     expect(await cli("drift")).toBe(1);
     // Three pages, one revision: the count must be the pages.
-    expect(stdout()).toContain("3 page(s) may have drifted");
+    expect(stdout()).toContain("3 page(s) on an older revision, no cited line changed");
     for (const name of ["one", "two", "three"]) {
       expect(stdout()).toContain(`knowledge/${name}.md`);
     }
@@ -596,13 +596,73 @@ describe("accreta drift at line granularity", () => {
 
     expect(await cli("drift")).toBe(1);
     const out = stdout();
-    expect(out).toContain("3 page(s) may have drifted");
+    expect(out).toContain("1 page(s) in doubt");
     expect(out).toContain("knowledge/changed.md (verified at");
     expect(out).toContain("1 cited range(s) changed");
     expect(out).toContain("cited lines unchanged");
     expect(out).toContain("cites none of the changed files");
     expect(out.indexOf("knowledge/changed.md")).toBeLessThan(out.indexOf("knowledge/still.md"));
     expect(out.indexOf("knowledge/still.md")).toBeLessThan(out.indexOf("knowledge/elsewhere.md"));
+  });
+
+  test("the header counts only pages in doubt, as --json does", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+
+    const docs = join(root, "sources", "docs");
+    mkdirSync(docs, { recursive: true });
+    const git = async (...args: string[]) => {
+      const proc = Bun.spawn(["git", ...args], { cwd: docs, stdout: "pipe", stderr: "pipe" });
+      if ((await proc.exited) !== 0) throw new Error(await new Response(proc.stderr).text());
+    };
+    writeFileSync(join(docs, "a.md"), twentyLines(), "utf-8");
+    writeFileSync(join(docs, "b.md"), "untouched\n", "utf-8");
+    await git("init", "-q");
+    await git("config", "user.email", "t@example.invalid");
+    await git("config", "user.name", "Test");
+    await git("add", ".");
+    await git("commit", "-qm", "first");
+    const revision = headOf(docs);
+
+    writeFileSync(
+      join(root, "sources", "docs.yaml"),
+      "id: docs\ntype: git\nroot: sources/docs\n",
+      "utf-8",
+    );
+    const page = (name: string, citation: string) =>
+      writePage(
+        `${name}.md`,
+        `---\ntype: note\nsource: docs\nlast_verified_revision: ${revision}\n---\n\n# ${name}\n\n` +
+          `A claim.[^c]\n\n[^c]: docs @ ${revision.slice(0, 7)} · ${citation}\n`,
+      );
+    page("changed", "a.md#L3-L5");
+    page("moved", "a.md#L12-L14");
+    page("still", "a.md#L1-L2");
+    page("elsewhere", "b.md#L1");
+    await cli("reindex");
+
+    // Line 4 rewritten, and a line inserted at 8 pushes 12-14 down unchanged.
+    const lines = twentyLines({ 4: "rewritten" }).split("\n");
+    lines.splice(7, 0, "inserted");
+    writeFileSync(join(docs, "a.md"), lines.join("\n"), "utf-8");
+    await git("commit", "-qam", "second");
+
+    output = [];
+    expect(await cli("drift", "--json")).toBe(1);
+    const json = JSON.parse(stdout()) as { pages_in_doubt: number };
+    expect(json.pages_in_doubt).toBe(1);
+
+    output = [];
+    expect(await cli("drift")).toBe(1);
+    const out = stdout();
+    expect(out).toContain(`  ${json.pages_in_doubt} page(s) in doubt:`);
+    expect(out).toContain("  1 page(s) to re-pin, cited lines moved:");
+    expect(out).toContain("  2 page(s) on an older revision, no cited line changed:");
+    expect(out).not.toContain("may have drifted");
+
+    output = [];
+    await cli("drift", "--format", "github");
+    expect(stdout()).toContain(`**${json.pages_in_doubt} page in doubt:**`);
   });
 });
 

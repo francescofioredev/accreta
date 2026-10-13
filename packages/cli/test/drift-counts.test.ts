@@ -57,7 +57,7 @@ describe("drift counts each page once", () => {
   test("a page with footnotes pinned at two stale revisions", () => {
     const noaa = report("noaa", [stale("b0", "old", true), stale("b1", "new", true)]);
     expect(toJson([noaa]).pages_in_doubt).toBe(1);
-    expect(text(noaa)).toContain("1 page(s) may have drifted");
+    expect(text(noaa)).toContain("1 page(s) in doubt");
   });
 
   test("a page no source can place, twice", () => {
