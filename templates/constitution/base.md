@@ -222,7 +222,7 @@ damaging thing you can do here.
 The loop is **drift → re-verify → cite → lint**: for each page drift names, re-read the changed
 parts, then follow Ingesting 4–6 with `--expect-revision` set to drift's revision for that source
 (`source @ rev`; `current_revision` in JSON). If that fails, the source moved again: rerun drift.
-Repeat until drift names no page in doubt.
+Repeat until drift exits 0.
 
 A page can appear under a source it only cites (`cited_only`; "cited at" in `accreta drift`):
 re-check the cited lines and re-pin those footnotes with `cite`, then skip step 5: record no

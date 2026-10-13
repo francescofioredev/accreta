@@ -180,21 +180,35 @@ export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport)
   ctx.out(`${report.sourceId} @ ${report.currentRevision}`);
 
   if (report.stale.length > 0) {
-    // Not `report.stale.length`, which counts revisions; and each page once, as pins can split it.
-    const pageCount = distinctPages(report.stale);
-    ctx.out(`  ${pageCount} page(s) may have drifted:`);
-    for (const entry of report.stale) {
-      const doubt = pageChanges(entry);
-      const pages = doubt
-        ? entry.pages.toSorted(
-            (a, b) => DOUBT_ORDER.indexOf(doubt.get(a)!) - DOUBT_ORDER.indexOf(doubt.get(b)!),
-          )
-        : entry.pages;
-      for (const path of pages) {
-        const why = doubt ? ` — ${explainDoubt(doubt.get(path)!, entry, path)}` : "";
-        ctx.out(`    ${path} (${atLabel(entry, path)} ${entry.revision})${why}`);
-      }
+    const rows = report.stale
+      .flatMap((entry) => {
+        const doubt = pageChanges(entry);
+        return entry.pages.map((page) => ({ entry, page, doubt: doubt ? doubt.get(page)! : null }));
+      })
+      .toSorted((a, b) => rank(a.doubt) - rank(b.doubt));
+    // A page pinned at several revisions goes under its worst one, so each page counts once.
+    const worst = new Map<string, number>();
+    for (const row of rows) {
+      worst.set(row.page, Math.min(worst.get(row.page) ?? Infinity, rank(row.doubt)));
     }
+    const group = (...ranks: number[]) =>
+      rows.filter((row) => ranks.includes(worst.get(row.page)!));
+    const inDoubt = group(rank("changed"));
+    const rest = group(rank("moved"), rank("untouched"), rank("uncited"));
+    if (inDoubt.length === 0) {
+      // Drift still fails on these, so the line must not read as all clear.
+      const count = distinct(rest.map((row) => row.page));
+      ctx.out(
+        count > 0 ? `  no page in doubt; ${count} to re-pin or re-verify` : "  no page in doubt",
+      );
+    }
+    printStale(ctx, "page(s) in doubt", inDoubt);
+    printStale(ctx, "page(s) to re-pin, cited lines moved", group(rank("moved")));
+    printStale(
+      ctx,
+      "page(s) behind the source, no cited line changed",
+      group(rank("untouched"), rank("uncited")),
+    );
   }
   // Reported separately because "I cannot tell" is not "out of date", and
   // collapsing them would misrepresent what the system actually knows.
@@ -212,6 +226,26 @@ export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport)
 
 const DOUBT_ORDER: PageChange[] = ["changed", "moved", "untouched", "uncited"];
 
+// null: the source can only say which files changed, so the page is in doubt, as in --json.
+const rank = (doubt: PageChange | null) =>
+  doubt === null ? DOUBT_ORDER.indexOf("changed") : DOUBT_ORDER.indexOf(doubt);
+
+interface StaleRow {
+  entry: StaleRevision;
+  page: string;
+  doubt: PageChange | null;
+}
+
+/** Each page counted once, as pins can split it across revisions. */
+function printStale(ctx: Pick<CommandContext, "out">, label: string, rows: StaleRow[]): void {
+  if (rows.length === 0) return;
+  ctx.out(`  ${distinct(rows.map((row) => row.page))} ${label}:`);
+  for (const { entry, page, doubt } of rows) {
+    const why = doubt ? ` — ${explainDoubt(doubt, entry, page)}` : "";
+    ctx.out(`    ${page} (${atLabel(entry, page)} ${entry.revision})${why}`);
+  }
+}
+
 function explainDoubt(doubt: PageChange, entry: StaleRevision, page: string): string {
   const mine = (entry.citations ?? []).filter((c) => c.page === page);
   const count = (status: string) => mine.filter((c) => c.change.status === status).length;
@@ -219,7 +253,11 @@ function explainDoubt(doubt: PageChange, entry: StaleRevision, page: string): st
     case "changed":
       return `${count("touched") + count("unknown")} cited range(s) changed`;
     case "moved":
-      return `cited lines moved, not changed: re-pin ${count("moved")} locator(s)`;
+      return `re-pin ${mine
+        .flatMap((c) =>
+          c.change.status === "moved" ? [`${c.path}#${c.locator} → ${c.change.locator}`] : [],
+        )
+        .join(", ")}`;
     case "untouched":
       return "cited lines unchanged";
     case "uncited":

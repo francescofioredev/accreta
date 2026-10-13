@@ -57,7 +57,28 @@ describe("drift counts each page once", () => {
   test("a page with footnotes pinned at two stale revisions", () => {
     const noaa = report("noaa", [stale("b0", "old", true), stale("b1", "new", true)]);
     expect(toJson([noaa]).pages_in_doubt).toBe(1);
-    expect(text(noaa)).toContain("1 page(s) may have drifted");
+    expect(text(noaa)).toContain("1 page(s) in doubt");
+  });
+
+  test("a page pinned at revisions in doubt, moved and untouched counts only as in doubt", () => {
+    const at = (revision: string, change: CitedChange["change"]): StaleRevision => ({
+      ...stale(revision, revision, true),
+      citations: [{ ...touched(revision, revision), change }],
+    });
+    const noaa = report("noaa", [
+      at("b0", { status: "untouched" }),
+      at("b1", { status: "moved", locator: "L6-L8" }),
+      at("b2", { status: "touched" }),
+    ]);
+    expect(toJson([noaa]).pages_in_doubt).toBe(1);
+    const out = text(noaa);
+    expect(out).toContain("  1 page(s) in doubt:");
+    expect(out).not.toContain("to re-pin");
+    expect(out).not.toContain("behind the source");
+    // Every revision's detail stays, under the one group.
+    expect(out).toContain(`${PAGE} (cited at b0) — cited lines unchanged`);
+    expect(out).toContain(`${PAGE} (cited at b1) — re-pin note.md#L5-L7 → L6-L8`);
+    expect(out).toContain(`${PAGE} (cited at b2) — 1 cited range(s) changed`);
   });
 
   test("a page no source can place, twice", () => {
