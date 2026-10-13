@@ -64,7 +64,11 @@ export type {
 } from "./source/drift.ts";
 export { detectDrift, pageChanges } from "./source/drift.ts";
 export type { SourceDeclaration, SourceFactory } from "./source/registry.ts";
-export { SourceRegistry, parseSourceDeclaration } from "./source/registry.ts";
+export {
+  SourceDeclarationError,
+  SourceRegistry,
+  parseSourceDeclaration,
+} from "./source/registry.ts";
 
 export type { SearchHit, SearchOptions } from "./query/search.ts";
 export { searchPages } from "./query/search.ts";
