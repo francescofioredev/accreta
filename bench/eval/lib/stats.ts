@@ -81,6 +81,22 @@ export function mcnemarThreshold(discordant: number, alpha = 0.05): number | nul
   return null;
 }
 
+export interface Interval {
+  k: number;
+  n: number;
+  rate: number;
+  wilson: [number, number];
+  clopperPearson: [number, number];
+}
+
+export const interval = (k: number, n: number): Interval => ({
+  k,
+  n,
+  rate: n ? k / n : NaN,
+  wilson: wilson(k, n),
+  clopperPearson: clopperPearson(k, n),
+});
+
 /** The three-way verdict the protocol pre-registers for a rate against a floor. */
 export type GateVerdict = "met" | "not shown" | "failed" | "no data";
 
