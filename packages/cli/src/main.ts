@@ -7,6 +7,7 @@ import {
   type ParsedArgs,
 } from "./commands/shared.ts";
 import { canonical } from "./commands/canonical.ts";
+import { cite } from "./commands/cite.ts";
 import { consumers } from "./commands/consumers.ts";
 import { doctor } from "./commands/doctor.ts";
 import { drift } from "./commands/drift.ts";
@@ -37,9 +38,17 @@ Usage: accreta <command> [arguments]
   consumers <path>         What links to this page, and what it links to (--inline;
                            --kind <field>, repeatable)
   canonical <term>         Resolve a term to the page that defines it
+  cite <source>:<path>[#locator]
+                           The citation for a claim, at the source's current revision.
+                           Before reading, cite the file and keep its revision; after
+                           writing, cite the place with --expect-revision <rev>, which
+                           fails if the source has moved since
 
-  --json                   On lint, search, show, consumers and canonical: print the
-                           JSON the matching MCP tool returns
+  --json                   On lint, search, show, consumers, canonical and cite: print
+                           the JSON the matching MCP tool returns
+  --limit <n>, --cursor <c>
+                           On lint, consumers and canonical: print one page of at most
+                           n results (1-50, default 50), then the page the cursor names
 
   --version, -v            Print the version
   --help, -h               Print this usage, after any command too
@@ -70,10 +79,12 @@ function parseArgs(argv: string[]): ParsedArgs & {
   strict: boolean;
   json: boolean;
   limit?: string;
+  cursor?: string;
   source?: string;
   set: Record<string, string>;
   preset?: string;
   agentFile?: string;
+  expectRevision?: string;
 } {
   const positional: string[] = [];
   const flags: string[] = [];
@@ -87,10 +98,12 @@ function parseArgs(argv: string[]): ParsedArgs & {
   let strict = false;
   let json = false;
   let limit: string | undefined;
+  let cursor: string | undefined;
   let source: string | undefined;
   const set: Record<string, string> = {};
   let preset: string | undefined;
   let agentFile: string | undefined;
+  let expectRevision: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     let arg = argv[i];
     if (arg === undefined) continue;
@@ -155,6 +168,10 @@ function parseArgs(argv: string[]): ParsedArgs & {
       limit = value();
       continue;
     }
+    if (arg === "--cursor") {
+      cursor = value();
+      continue;
+    }
     if (arg === "--source") {
       source = value();
       continue;
@@ -176,6 +193,10 @@ function parseArgs(argv: string[]): ParsedArgs & {
       agentFile = value();
       continue;
     }
+    if (arg === "--expect-revision") {
+      expectRevision = value();
+      continue;
+    }
     if (!arg.startsWith("-") || arg === "-") positional.push(arg);
   }
   return {
@@ -190,17 +211,20 @@ function parseArgs(argv: string[]): ParsedArgs & {
     strict,
     json,
     limit,
+    cursor,
     source,
     set,
     preset,
     agentFile,
+    expectRevision,
   };
 }
 
 export async function run(argv: string[], ctx: CommandContext): Promise<number> {
   const [command, ...rest] = argv;
   const parsed = parseArgs(rest);
-  const { positional, types, kinds, includeInline, strict, json, limit, source, set } = parsed;
+  const { positional, types, kinds, includeInline, strict, json, limit, cursor, source, set } =
+    parsed;
   const { preset, agentFile } = parsed;
 
   // Only a command this install has: `cite --help` on an older one must not look like success.
@@ -230,7 +254,7 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
     case "reindex":
       return reindex(ctx);
     case "lint":
-      return runLint(ctx, { json });
+      return runLint(ctx, { json, limit, cursor });
     case "drift":
       return drift(ctx, rest, strict);
     case "doctor":
@@ -255,9 +279,13 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
         includeInline,
         kinds: kinds.length > 0 ? kinds : undefined,
         json,
+        limit,
+        cursor,
       });
     case "canonical":
-      return canonical(ctx, positional.join(" "), { json });
+      return canonical(ctx, positional.join(" "), { json, limit, cursor });
+    case "cite":
+      return cite(ctx, positional[0] ?? "", { json, expectRevision: parsed.expectRevision });
     case "mcp":
       return mcp(ctx, positional);
     default:

@@ -16,6 +16,7 @@ const CLI_TWIN: Record<string, string> = {
   find_canonical: "canonical",
   lint_knowledge_base: "lint",
   check_drift: "drift",
+  cite: "cite",
 };
 
 // Twins whose `--json` is another issue's work, so their shape is not compared yet.
@@ -98,6 +99,26 @@ const CASES: Case[] = [
   },
   { tool: "find_canonical", args: { term: "nothing" }, argv: ["canonical", "nothing"], code: 0 },
   { tool: "lint_knowledge_base", args: {}, argv: ["lint"], code: 1 },
+  {
+    tool: "cite",
+    args: { target: "docs:forcing.md#L2" },
+    argv: ["cite", "docs:forcing.md#L2"],
+    code: 0,
+  },
+  {
+    tool: "cite",
+    args: { target: "docs:forcing.md#L9" },
+    argv: ["cite", "docs:forcing.md#L9"],
+    code: 1,
+  },
+  { tool: "cite", args: { target: "repo:a.md#L1" }, argv: ["cite", "repo:a.md#L1"], code: 0 },
+  { tool: "cite", args: { target: "repo:dirty.md" }, argv: ["cite", "repo:dirty.md"], code: 0 },
+  {
+    tool: "cite",
+    args: { target: "wiki:design-page#block-a1" },
+    argv: ["cite", "wiki:design-page#block-a1"],
+    code: 0,
+  },
 ];
 
 // Each would once have been ignored or misread, and answered as if it had run.
@@ -109,7 +130,11 @@ const REFUSED: { argv: string[]; says: string }[] = [
   { argv: ["search", "flux", "--bogus"], says: "search does not take --bogus" },
   { argv: ["lint", "--json=yes"], says: "--json takes no value" },
   { argv: ["drift", "--source", "nope"], says: "drift does not take --source" },
-  { argv: ["canonical", "RF", "--limit", "1"], says: "canonical does not take --limit" },
+  { argv: ["lint", "--limit", "51"], says: "--limit" },
+  { argv: ["lint", "--cursor"], says: "--cursor needs a value" },
+  { argv: ["consumers", "concepts/forcing", "--limit", "0"], says: "--limit" },
+  { argv: ["canonical", "RF", "--limit", "2.5"], says: "--limit" },
+  { argv: ["search", "flux", "--cursor", "abc"], says: "search has no --cursor yet (#183)" },
   { argv: ["show", "concepts/forcing", "--source", "docs"], says: "show does not take --source" },
   { argv: ["show", "concepts/forcing", "notes/b"], says: 'show does not take "notes/b"' },
   { argv: ["consumers", "concepts/forcing", "--kind"], says: "--kind needs a value" },
@@ -124,9 +149,18 @@ const REFUSED: { argv: string[]; says: string }[] = [
   { argv: ["source", "add", "fs", "x", "--set", "novalue"], says: "--set takes key=value" },
   { argv: ["source", "add", "nosuchtype", "x"], says: "Unknown source type" },
   { argv: ["source", "remove", "docs"], says: "Usage: accreta source add" },
+  { argv: ["cite"], says: "Usage: accreta cite" },
+  { argv: ["cite", "forcing.md"], says: "is not source:path[#locator]" },
+  { argv: ["cite", "docs:forcing.md", "repo:a.md"], says: 'cite does not take "repo:a.md"' },
+  { argv: ["cite", "docs:forcing.md", "--limit", "1"], says: "cite does not take --limit" },
+  {
+    argv: ["cite", "docs:forcing.md", "--expect-revision"],
+    says: "--expect-revision needs a value",
+  },
 ];
 
 let root = "";
+let head = "";
 let ctx: ToolContext;
 let client: Client;
 
@@ -139,11 +173,13 @@ function write(relativePath: string, contents: string): void {
 async function cli(argv: string[]) {
   const out: string[] = [];
   const err: string[] = [];
-  const code = await run(argv, {
+  const io = {
     cwd: root,
-    out: (line) => out.push(line),
-    err: (line) => err.push(line),
-  });
+    out: (line: string) => out.push(line),
+    err: (line: string) => err.push(line),
+  };
+  // As main.ts does outside `run`: a thrown refusal is its message on stderr and exit 1.
+  const code = await run(argv, io).catch((error: Error) => (io.err(error.message), 1));
   return { code, stdout: out.join("\n"), stderr: err.join("\n") };
 }
 
@@ -168,6 +204,24 @@ beforeAll(async () => {
   write("sources/docs.yaml", "id: docs\ntype: fs\nroot: src-docs\n");
   write("sources/typo.yaml", "id: typo\ntype: fss\n");
   write("src-docs/forcing.md", "one\ntwo\nthree\n");
+  write("sources/repo.yaml", "id: repo\ntype: git\nroot: src-repo\n");
+  write("src-repo/a.md", "alpha\n");
+  write("src-repo/dirty.md", "committed\n");
+  const repo = join(root, "src-repo");
+  for (const args of [
+    ["init", "-q"],
+    ["add", "."],
+    ["commit", "-qm", "first"],
+  ]) {
+    const identity = ["-c", "user.name=T", "-c", "user.email=t@example.invalid"];
+    expect(Bun.spawnSync(["git", ...identity, ...args], { cwd: repo }).exitCode).toBe(0);
+  }
+  head = Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: repo }).stdout.toString().trim();
+  write("src-repo/dirty.md", "edited, not committed\n");
+  write(
+    "sources/wiki.yaml",
+    "id: wiki\ntype: delegated\nvia: notion\nscope: |\n  The design pages.\n",
+  );
   write(
     "knowledge/concepts/forcing.md",
     '---\ntype: concept\nsource: docs\naliases: [RF, radiative forcing, "-O2"]\n' +
@@ -263,6 +317,101 @@ describe("--json matches the MCP tool field for field", () => {
   });
 });
 
+describe("cite", () => {
+  const cited = async (argv: string[]) => JSON.parse((await cli([...argv, "--json"])).stdout);
+
+  // Fixture guard: the parity cases above are only worth something if each source answers as its kind should.
+  test("fs and git pin a revision where they could check the place", async () => {
+    const fs = await cited(["cite", "docs:forcing.md#L2"]);
+    expect(fs.location).toEqual({ verdict: "found" });
+    expect(fs.revision).toMatch(/\S/);
+    expect(fs.footnote).toBe(`docs @ ${fs.revision} · forcing.md#L2`);
+
+    const git = await cited(["cite", "repo:a.md#L1"]);
+    expect(git.revision).toBe(head);
+    expect(git.canonical_source).toBe("repo:a.md#L1");
+
+    const dirty = await cited(["cite", "repo:dirty.md"]);
+    expect(dirty.revision).toBeNull();
+    expect(dirty.location.verdict).toBe("unknown");
+  });
+
+  test("a delegated source says it cannot pin a revision rather than inventing one", async () => {
+    const out = await cited(["cite", "wiki:design-page#block-a1"]);
+    expect(out.revision).toBeNull();
+    expect(out.footnote).toBe("wiki @ unknown · design-page#block-a1");
+    expect(out.location.verdict).toBe("unknown");
+    expect(out.delegated).toEqual({ via: "notion", scope: "The design pages.\n" });
+  });
+
+  test("the expected revision passes when the source has not moved", async () => {
+    const fromCli = await cli(["cite", "repo:a.md#L1", "--expect-revision", head, "--json"]);
+    const fromMcp = await mcp("cite", { target: "repo:a.md#L1", expect_revision: head });
+    expect(fromCli.code).toBe(0);
+    expect(fromMcp.isError).toBe(false);
+    expect(JSON.parse(fromCli.stdout)).toStrictEqual(JSON.parse(fromMcp.text));
+  });
+
+  // The same sentence on both surfaces, never a footnote; the CLI exits 2 for bad input, 1 for a refusal.
+  const refusals = [
+    {
+      name: "the source moved after the read",
+      args: { target: "repo:a.md#L1", expect_revision: "0000000" },
+      says: "not 0000000: it moved since you read it, or 0000000 did not come from cite",
+      code: 1,
+    },
+    {
+      name: "a delegated source cannot confirm a revision",
+      args: { target: "wiki:design-page", expect_revision: "v7" },
+      says: "read through notion, and accreta cannot tell its revision",
+      code: 1,
+    },
+    {
+      name: "an unchecked place cannot confirm a revision",
+      args: { target: "repo:dirty.md", expect_revision: "0000000" },
+      says: "accreta could not check this place",
+      code: 1,
+    },
+    {
+      name: "an unknown source",
+      args: { target: "nope:a.md" },
+      says: 'Unknown source "nope"',
+      code: 2,
+    },
+    {
+      name: "a declared source that did not load",
+      args: { target: "typo:a.md" },
+      says: 'Source "typo" is declared in',
+      code: 1,
+    },
+    {
+      name: "a path that is not canonical",
+      args: { target: "docs:../forcing.md" },
+      says: "is not canonical",
+      code: 2,
+    },
+    {
+      name: "a path with whitespace, which the grammar cannot carry",
+      args: { target: "docs:My File.md#L1" },
+      says: 'a path with "#" or whitespace in it cannot be cited',
+      code: 2,
+    },
+  ];
+  for (const r of refusals) {
+    test(`refuses ${r.name}, exit ${r.code}`, async () => {
+      const expected = (r.args as { expect_revision?: string }).expect_revision;
+      const argv = ["cite", r.args.target, "--json"];
+      if (expected) argv.push("--expect-revision", expected);
+      const [fromCli, fromMcp] = [await cli(argv), await mcp("cite", r.args)];
+      expect(fromMcp.isError).toBe(true);
+      expect(fromCli.code).toBe(r.code);
+      expect(fromCli.stdout).toBe("");
+      expect(fromCli.stderr).toBe(fromMcp.text);
+      expect(fromMcp.text).toContain(r.says);
+    });
+  }
+});
+
 describe("an argument a command cannot honour is refused, not ignored", () => {
   for (const r of REFUSED) {
     test(`${r.argv.join(" ")} exits 2`, async () => {
@@ -292,58 +441,72 @@ describe("an argument a command cannot honour is refused, not ignored", () => {
   }
 });
 
-// Past one page the CLI still prints everything; the MCP tool returns the first page of the same list.
-describe("past one page, MCP returns the head of the CLI's list", () => {
+const member = (i: number) =>
+  `---\ntype: note\naliases: ["everyone"]\nrelated: [[hub]]\n---\n\n# P${i}\n`;
+
+/** A knowledge base where every paged list runs past 50, with a CLI and an MCP client over it. */
+async function openManyPages(pages: number) {
+  const dir = mkdtempSync(join(tmpdir(), "accreta-parity-big-"));
+  const put = (path: string, contents: string) => {
+    mkdirSync(join(dir, path, ".."), { recursive: true });
+    writeFileSync(join(dir, path), contents, "utf-8");
+  };
+  put(
+    "accreta.config.yaml",
+    "knowledge_base: knowledge\npage_types: [note]\nlink_fields: [related]\n",
+  );
+  put("knowledge/hub.md", "---\ntype: note\n---\n\n# Hub\n");
+  for (let i = 0; i < pages; i++) put(`knowledge/p${i}.md`, member(i));
+  expect(await run(["reindex"], { cwd: dir, out: () => {}, err: () => {} })).toBe(0);
+
+  const toolCtx = createContext(dir);
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const mcpClient = new Client({ name: "parity-big-probe", version: "0.0.0" });
+  await Promise.all([
+    createServer(toolCtx).connect(serverTransport),
+    mcpClient.connect(clientTransport),
+  ]);
+
+  return {
+    put,
+    async cli(argv: string[]) {
+      const out: string[] = [];
+      const err: string[] = [];
+      const code = await run(argv, {
+        cwd: dir,
+        out: (line) => out.push(line),
+        err: (line) => err.push(line),
+      });
+      return { code, stdout: out.join("\n"), stderr: err.join("\n") };
+    },
+    async mcp(tool: string, args: Record<string, unknown>) {
+      const result = (await mcpClient.callTool({ name: tool, arguments: args })) as {
+        content: { text: string }[];
+        isError?: boolean;
+      };
+      return { text: result.content[0]?.text ?? "", isError: result.isError === true };
+    },
+    async close() {
+      await mcpClient.close();
+      toolCtx.db.close();
+      rmSync(dir, { recursive: true, force: true });
+    },
+  };
+}
+
+// Past one page, `--limit` and `--cursor` page the CLI exactly as `limit` and `cursor` page MCP.
+describe("past one page, the CLI pages as MCP does", () => {
   const PAGES = 60;
-  let bigRoot = "";
-  let bigCtx: ToolContext;
-  let bigClient: Client;
-
-  async function bigCli(argv: string[]) {
-    const out: string[] = [];
-    const code = await run(argv, { cwd: bigRoot, out: (line) => out.push(line), err: () => {} });
-    return { code, json: JSON.parse(out.join("\n")) as Record<string, unknown> };
-  }
-
-  async function bigMcp(tool: string, args: Record<string, unknown>) {
-    const result = (await bigClient.callTool({ name: tool, arguments: args })) as {
-      content: { text: string }[];
-    };
-    return JSON.parse(result.content[0]?.text ?? "") as Record<string, unknown>;
-  }
+  let big: Awaited<ReturnType<typeof openManyPages>>;
+  const bigCli = (argv: string[]) => big.cli(argv);
+  const bigMcp = (tool: string, args: Record<string, unknown>) => big.mcp(tool, args);
 
   beforeAll(async () => {
-    bigRoot = mkdtempSync(join(tmpdir(), "accreta-parity-big-"));
-    const put = (path: string, contents: string) => {
-      mkdirSync(join(bigRoot, path, ".."), { recursive: true });
-      writeFileSync(join(bigRoot, path), contents, "utf-8");
-    };
-    put(
-      "accreta.config.yaml",
-      "knowledge_base: knowledge\npage_types: [note]\nlink_fields: [related]\n",
-    );
-    put("knowledge/hub.md", "---\ntype: note\n---\n\n# Hub\n");
-    for (let i = 0; i < PAGES; i++) {
-      put(
-        `knowledge/p${i}.md`,
-        `---\ntype: note\naliases: ["everyone"]\nrelated: [[hub]]\n---\n\n# P${i}\n`,
-      );
-    }
-    expect(await run(["reindex"], { cwd: bigRoot, out: () => {}, err: () => {} })).toBe(0);
-
-    bigCtx = createContext(bigRoot);
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    bigClient = new Client({ name: "parity-big-probe", version: "0.0.0" });
-    await Promise.all([
-      createServer(bigCtx).connect(serverTransport),
-      bigClient.connect(clientTransport),
-    ]);
+    big = await openManyPages(PAGES);
   });
 
   afterAll(async () => {
-    await bigClient?.close();
-    bigCtx?.db.close();
-    rmSync(bigRoot, { recursive: true, force: true });
+    await big?.close();
   });
 
   const cases = [
@@ -352,30 +515,122 @@ describe("past one page, MCP returns the head of the CLI's list", () => {
       args: { target: "hub" },
       argv: ["consumers", "hub"],
       list: "results",
+      code: 0,
     },
     {
       tool: "find_canonical",
       args: { term: "everyone" },
       argv: ["canonical", "everyone"],
       list: "results",
+      code: 0,
     },
-    { tool: "lint_knowledge_base", args: {}, argv: ["lint"], list: "findings" },
+    { tool: "lint_knowledge_base", args: {}, argv: ["lint"], list: "findings", code: 1 },
   ];
+
   for (const c of cases) {
-    test(`${c.tool}: first 50 of ${c.list}, the same count, nextCursor on MCP only`, async () => {
-      const fromCli = (await bigCli([...c.argv, "--json"])).json;
-      const fromMcp = await bigMcp(c.tool, c.args);
-      const all = fromCli[c.list] as unknown[];
-      expect(all.length).toBeGreaterThan(50);
-      expect(fromCli.count).toBe(all.length);
+    test(`${c.argv[0]} without --limit still prints all of ${c.list}, and no cursor`, async () => {
+      const fromCli = await bigCli([...c.argv, "--json"]);
+      const all = JSON.parse(fromCli.stdout) as Record<string, unknown>;
+      const fromMcp = JSON.parse((await bigMcp(c.tool, c.args)).text) as Record<string, unknown>;
+      expect(fromCli.code).toBe(c.code);
+      expect((all[c.list] as unknown[]).length).toBeGreaterThan(50);
+      expect(all.count).toBe((all[c.list] as unknown[]).length);
+      expect(all).not.toHaveProperty("nextCursor");
+      expect(fromMcp[c.list]).toEqual((all[c.list] as unknown[]).slice(0, 50));
+    });
 
-      expect(fromMcp[c.list]).toEqual(all.slice(0, 50));
-      expect(fromMcp.count).toBe(fromCli.count);
-      expect(typeof fromMcp.nextCursor).toBe("string");
-      expect(fromCli).not.toHaveProperty("nextCursor");
+    test(`${c.argv[0]} --json --limit 50 prints what ${c.tool} returns, byte for byte`, async () => {
+      const fromCli = await bigCli([...c.argv, "--json", "--limit", "50"]);
+      const fromMcp = await bigMcp(c.tool, { ...c.args, limit: 50 });
+      expect(fromMcp.isError).toBe(false);
+      expect(fromCli.code).toBe(c.code);
+      expect(fromCli.stdout).toBe(fromMcp.text);
+      expect(JSON.parse(fromCli.stdout).nextCursor).toEqual(expect.any(String));
+    });
 
-      const { nextCursor: _, ...mcpRest } = fromMcp;
-      expect(mcpRest).toStrictEqual({ ...fromCli, [c.list]: all.slice(0, 50) });
+    for (const limit of [50, 7]) {
+      test(`${c.argv[0]}: following cursors at --limit ${limit} from either side rebuilds the list`, async () => {
+        const all = JSON.parse((await bigCli([...c.argv, "--json"])).stdout)[c.list];
+
+        const walk = async (side: "cli" | "mcp" | "alternate") => {
+          const seen: unknown[] = [];
+          let cursor: string | undefined;
+          for (let turn = 0; ; turn++) {
+            const viaCli = side === "cli" || (side === "alternate" && turn % 2 === 0);
+            const text = viaCli
+              ? (
+                  await bigCli([
+                    ...c.argv,
+                    "--json",
+                    "--limit",
+                    String(limit),
+                    ...(cursor ? ["--cursor", cursor] : []),
+                  ])
+                ).stdout
+              : (await bigMcp(c.tool, { ...c.args, limit, ...(cursor ? { cursor } : {}) })).text;
+            const page = JSON.parse(text) as Record<string, unknown>;
+            expect(page.count).toBe(all.length);
+            seen.push(...(page[c.list] as unknown[]));
+            cursor = page.nextCursor as string | undefined;
+            if (!cursor) return seen;
+          }
+        };
+
+        expect(await walk("cli")).toEqual(all);
+        expect(await walk("mcp")).toEqual(all);
+        // A cursor is the index's, not the surface's: one issued by either is honoured by both.
+        expect(await walk("alternate")).toEqual(all);
+      });
+    }
+
+    test(`${c.argv[0]} and ${c.tool} refuse a malformed cursor in the same words`, async () => {
+      const fromCli = await bigCli([...c.argv, "--json", "--cursor", "not-a-cursor"]);
+      const fromMcp = await bigMcp(c.tool, { ...c.args, cursor: "not-a-cursor" });
+      expect(fromMcp.isError).toBe(true);
+      expect(fromMcp.text).toContain("Invalid cursor");
+      expect(fromCli.code).toBe(2);
+      expect(fromCli.stdout).toBe("");
+      expect(fromCli.stderr).toBe(fromMcp.text);
     });
   }
+
+  test("a cursor from another query is refused the same way on both surfaces", async () => {
+    const foreign = JSON.parse(
+      (await bigCli(["consumers", "hub", "--json", "--limit", "5"])).stdout,
+    ).nextCursor as string;
+    for (const c of cases.filter((other) => other.tool !== "find_consumers")) {
+      const fromCli = await bigCli([...c.argv, "--cursor", foreign]);
+      const fromMcp = await bigMcp(c.tool, { ...c.args, cursor: foreign });
+      expect(fromMcp.isError).toBe(true);
+      expect(fromCli.code).toBe(2);
+      expect(fromCli.stderr).toBe(fromMcp.text);
+    }
+  });
+
+  // Its own knowledge base: the change it makes would break any cursor walk running beside it.
+  test("a cursor gone stale after a change and a reindex is refused the same way on both", async () => {
+    const own = await openManyPages(PAGES);
+    try {
+      const stale = new Map<string, string>();
+      for (const c of cases) {
+        const page = JSON.parse((await own.cli([...c.argv, "--json", "--limit", "5"])).stdout);
+        stale.set(c.tool, page.nextCursor as string);
+      }
+      own.put(`knowledge/p${PAGES}.md`, member(PAGES));
+      expect((await own.cli(["reindex"])).code).toBe(0);
+
+      for (const c of cases) {
+        const cursor = stale.get(c.tool)!;
+        const fromCli = await own.cli([...c.argv, "--json", "--cursor", cursor]);
+        const fromMcp = await own.mcp(c.tool, { ...c.args, cursor });
+        expect(fromMcp.isError).toBe(true);
+        expect(fromMcp.text).toContain("Invalid cursor");
+        expect(fromCli.code).toBe(2);
+        expect(fromCli.stdout).toBe("");
+        expect(fromCli.stderr).toBe(fromMcp.text);
+      }
+    } finally {
+      await own.close();
+    }
+  });
 });

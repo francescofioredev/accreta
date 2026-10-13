@@ -253,6 +253,68 @@ describe("accreta lint", () => {
   });
 });
 
+const cursorIn = (text: string) => /--cursor (\S+)$/m.exec(text)?.[1];
+
+describe("--limit and --cursor in the text output", () => {
+  beforeEach(async () => {
+    await cli("init");
+    for (const name of ["a", "b", "c"]) {
+      writePage(
+        `${name}.md`,
+        `---\ntype: note\naliases: [shared]\nrelated: [[hub]]\n---\n\n# ${name}\n`,
+      );
+    }
+    writePage("hub.md", "---\ntype: note\n---\n\n# Hub\n");
+    await cli("reindex");
+    output = [];
+  });
+
+  for (const argv of [
+    ["lint", "--limit", "2"],
+    ["consumers", "hub", "--limit", "2"],
+    ["canonical", "shared", "--limit", "2"],
+  ]) {
+    test(`${argv.join(" ")} says more exist, and following it reaches the end`, async () => {
+      await cli(...argv);
+      const first = stdout();
+      expect(first).toMatch(/Showing 2 of \d+ /);
+      const cursor = cursorIn(first);
+      expect(cursor).toBeDefined();
+
+      let text = first;
+      let next = cursor;
+      while (next) {
+        output = [];
+        await cli(...argv, "--cursor", next);
+        text = stdout();
+        next = cursorIn(text);
+      }
+      expect(text).toMatch(/Showing \d+ of \d+ /);
+      expect(text).not.toContain("--cursor");
+    });
+  }
+
+  test("lint fails on a later page too: a page is not the whole report", async () => {
+    await cli("lint", "--limit", "1");
+    const cursor = cursorIn(stdout());
+    expect(await cli("lint", "--limit", "1", "--cursor", cursor!)).toBe(1);
+  });
+
+  test("lint's per-kind counts on a page say they are the page's, not the kind's", async () => {
+    await cli("lint", "--limit", "2");
+    expect(stdout()).toMatch(/^[a-z-]+ \(\d+ on this page\)$/m);
+    expect(stdout()).not.toMatch(/^[a-z-]+ \(\d+\)$/m);
+    output = [];
+    await cli("lint");
+    expect(stdout()).toMatch(/^[a-z-]+ \(\d+\)$/m);
+  });
+
+  test("a bad cursor is a usage error, not a finding", async () => {
+    expect(await cli("lint", "--cursor", "not-a-cursor")).toBe(2);
+    expect(stderr()).toContain("Invalid cursor");
+  });
+});
+
 describe("accreta drift", () => {
   test("a revision the source cannot place is reported, not called current", async () => {
     await cli("init");
@@ -1072,6 +1134,39 @@ describe("accreta lint — citations", () => {
 
     await cli("lint");
     expect(stdout()).not.toContain("citation-");
+  });
+});
+
+describe("accreta cite", () => {
+  beforeEach(() => {
+    writeFileSync(
+      join(root, "accreta.config.yaml"),
+      'knowledge_base: knowledge\nprovenance:\n  format: "{source}@{rev}:{path}#{locator}"\n',
+      "utf-8",
+    );
+    mkdirSync(join(root, "sources", "docs"), { recursive: true });
+    writeFileSync(join(root, "sources", "docs", "a.md"), "one\ntwo\n", "utf-8");
+    writeFileSync(join(root, "sources", "docs.yaml"), "id: docs\ntype: fs\nroot: sources/docs\n");
+  });
+
+  test("prints the footnote first, so it can be taken from a pipe, and needs no index", async () => {
+    expect(existsSync(join(root, ".accreta", "index.sqlite"))).toBe(false);
+    expect(await cli("cite", "docs:a.md#L2")).toBe(0);
+    const [footnote, ...rest] = output;
+    expect(footnote).toMatch(/^docs@\S+:a\.md#L2$/);
+    expect(rest).toContain("canonical_source: docs:a.md#L2");
+    expect(rest).toContain("location: found");
+  });
+
+  test("a place that is not there exits 1, says why first, and prints no footnote", async () => {
+    expect(await cli("cite", "docs:a.md#L9", "--json")).toBe(1);
+    const { footnote } = JSON.parse(stdout()) as { footnote: string };
+    expect(footnote).toMatch(/^docs@\S+:a\.md#L9$/);
+    output = [];
+
+    expect(await cli("cite", "docs:a.md#L9")).toBe(1);
+    expect(output[0]).toBe("location: missing locator: cites L9-L9 but a.md has 3 line(s)");
+    expect(stdout()).not.toContain(footnote);
   });
 });
 
