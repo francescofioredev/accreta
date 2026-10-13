@@ -58,7 +58,7 @@ The only token is the workflow's own `GITHUB_TOKEN`, with `pull-requests: write`
 | `pages-unplaceable` | Pages verified at a revision the source cannot place. |
 | `pages-newly-unplaceable` | Those the base branch did not have at the same revision. |
 | `sources-unloaded` | Source declarations that did not load, so nothing citing them was checked. |
-| `sources-newly-unloaded` | Those the base branch loaded, or did not have. |
+| `sources-newly-unloaded` | Those the base branch did not already fail to load with the same `id` and at least as many citing pages. |
 
 With a token other than the workflow's, set `comment-author` to the login it posts as. The action
 warns when the two differ, because the comment would not be found again on the next push.
@@ -99,10 +99,13 @@ Run the same comparison locally with `accreta drift --format github --base base.
   comment is always updated, so it turns clean when the pages are re-verified.
 - `fail-on-drift` keys on the same three counts, not on drift's exit code, so drift the base
   branch already had does not fail every pull request.
-- A source declaration counts as new when the base branch loaded it or did not have it, matched
-  by file: one already broken there stays inherited even if its error changes. Inherited ones are
-  still listed, folded, because nothing citing them is checked until the declaration is fixed.
-  Without `--base`, `accreta drift` still exits 1 on any declaration that did not load.
+- A source declaration that did not load counts as new unless the base branch already failed to
+  load the same file with the same `id` and at least as many pages citing it. Its error can change and it
+  stays inherited; a new `id` or more citing pages make it new. One page removed and another added
+  keeps the count, so that swap goes unnoticed. Inherited ones are still listed, in the headline
+  and folded, because nothing citing them is checked until the declaration is fixed.
+- `accreta drift` itself still exits 1 on any declaration that did not load, with or without
+  `--base`.
 
 ## Pull requests from forks
 

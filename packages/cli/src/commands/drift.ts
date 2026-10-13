@@ -104,8 +104,7 @@ export async function drift(
   }
 
   // "I cannot tell", like `unresolvable`: a typo in `type` must not turn a failing run green.
-  const failed =
-    reports.some((report) => fails(report, strict)) || unloaded.some((u) => !u.on_base);
+  const failed = reports.some((report) => fails(report, strict)) || unloaded.length > 0;
   return failed ? 1 : 0;
 }
 
@@ -295,11 +294,13 @@ interface DriftJson {
   sources_newly_unloaded: number;
 }
 
-/** With `--base`, `on_base` says the base branch already failed to load the same file. */
+/** With `--base`, `on_base` says the base branch already failed to load the same declaration. */
 type UnloadedEntry = UncheckedSource & { on_base?: boolean };
 
-/** Keys of what a base report already had in doubt or could not place. */
-type BaseKeys = Set<string>;
+/** Keys of what a base report already had in doubt or could not place, and what it did not load. */
+type BaseKeys = Set<string> & {
+  unloaded?: Map<string, Pick<UncheckedSource, "id" | "pages">>;
+};
 
 // Citation and unplaced keys carry the revision, so one re-pinned since the base and broken again is new.
 const citationKey = (source: string, page: string, c: DoubtedCitation) =>
@@ -308,8 +309,6 @@ const citationKey = (source: string, page: string, c: DoubtedCitation) =>
 const fileKey = (source: string, page: string) => JSON.stringify(["file", source, page]);
 const unplacedKey = (source: string, page: string, revision: string) =>
   JSON.stringify(["unplaced", source, page, revision]);
-// By file, not reason: a declaration broken on the base stays inherited when its error changes.
-const unloadedKey = (file: string) => JSON.stringify(["unloaded", file]);
 
 export function readBase(path: string): BaseKeys {
   let json: DriftJson;
@@ -323,7 +322,8 @@ export function readBase(path: string): BaseKeys {
   if (!Array.isArray(json.sources)) {
     throw new Error(`--base ${path} is not a \`drift --json\` report: it has no sources.`);
   }
-  const keys: BaseKeys = new Set();
+  const unloaded: NonNullable<BaseKeys["unloaded"]> = new Map();
+  const keys: BaseKeys = Object.assign(new Set<string>(), { unloaded });
   for (const source of json.sources) {
     for (const page of source.in_doubt ?? []) {
       if (page.citations === null) {
@@ -337,24 +337,38 @@ export function readBase(path: string): BaseKeys {
     }
   }
   // Absent from reports written before unloaded sources were reported: then none is inherited.
-  for (const source of json.unloaded_sources ?? []) keys.add(unloadedKey(source.file));
+  for (const u of json.unloaded_sources ?? []) {
+    unloaded.set(u.file, { id: u.id, pages: u.pages ?? null });
+  }
   return keys;
 }
 
-function markUnloaded(unloaded: UnloadedEntry[], base?: BaseKeys): UnloadedEntry[] {
-  return base ? unloaded.map((u) => ({ ...u, on_base: base.has(unloadedKey(u.file)) })) : unloaded;
+/**
+ * Inherited by file, not reason, so a new error on the same declaration is not new; but not when
+ * its id changed or more pages now cite it, since the change then hides more than the base did.
+ */
+function unloadedOnBase(u: UncheckedSource, base: BaseKeys): boolean {
+  const was = base.unloaded?.get(u.file);
+  if (!was || was.id !== u.id) return false;
+  return u.pages === null ? was.pages === null : was.pages !== null && u.pages <= was.pages;
+}
+
+function markUnloaded(unloaded: UncheckedSource[], base?: BaseKeys): UnloadedEntry[] {
+  return base ? unloaded.map((u) => ({ ...u, on_base: unloadedOnBase(u, base) })) : unloaded;
 }
 
 const isNew = (page: DoubtedPage) =>
   page.citations === null ? !page.on_base : page.citations.some((c) => !c.on_base);
 
-/** Only pages whose cited lines changed are named; untouched ones are counted, never listed. */
+/**
+ * Only pages whose cited lines changed are named; untouched ones are counted, never listed.
+ * `unloaded` comes marked against `base` by the caller; one unmarked counts as new.
+ */
 export function toJson(
   reports: DriftReport[],
   base?: BaseKeys,
   unloaded: UnloadedEntry[] = [],
 ): DriftJson {
-  const marked = markUnloaded(unloaded, base);
   const sources = reports.map((report) => verdict(report, base));
   const doubted = sources.flatMap((source) => source.in_doubt);
   const unplaced = sources.flatMap((source) =>
@@ -368,8 +382,8 @@ export function toJson(
     pages_unplaceable: distinct(unplaced.map((u) => u.page)),
     pages_newly_unplaceable: distinct(unplaced.filter((u) => !base?.has(u.key)).map((u) => u.page)),
     sources,
-    unloaded_sources: marked,
-    sources_newly_unloaded: marked.filter((u) => !u.on_base).length,
+    unloaded_sources: unloaded,
+    sources_newly_unloaded: unloaded.filter((u) => !u.on_base).length,
   };
 }
 
@@ -615,12 +629,18 @@ export function toGithub(
 
 function headline(json: DriftJson, compared: boolean): string {
   const n = json.sources_newly_unloaded;
-  if (n === 0) return pagesHeadline(json, compared);
+  const kept = json.unloaded_sources.length - n;
   const cause = compared ? " because of this change" : "";
-  return (
-    `**${n} source declaration(s) did not load${cause}; pages citing them were not checked.** ` +
-    pagesHeadline(json, compared)
-  );
+  // In the headline so the counts-only fallback keeps it, though it does not count as new.
+  const clauses = [
+    n > 0
+      ? `**${n} source declaration(s) did not load${cause}; pages citing them were not checked.**`
+      : "",
+    kept > 0
+      ? `**${kept} source declaration(s) still do not load, as on the base branch; pages citing them were not checked.**`
+      : "",
+  ];
+  return [...clauses.filter(Boolean), pagesHeadline(json, compared)].join(" ");
 }
 
 function pagesHeadline(json: DriftJson, compared: boolean): string {

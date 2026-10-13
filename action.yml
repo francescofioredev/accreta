@@ -39,7 +39,7 @@ outputs:
     description: Source declarations that did not load, so nothing citing them was checked.
     value: ${{ steps.drift.outputs.sources-unloaded }}
   sources-newly-unloaded:
-    description: Unloaded declarations the base branch loaded, or did not have.
+    description: Unloaded declarations the base branch did not already fail to load with the same id and at least as many citing pages.
     value: ${{ steps.drift.outputs.sources-newly-unloaded }}
 
 runs:
