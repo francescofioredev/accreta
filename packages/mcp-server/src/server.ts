@@ -101,7 +101,7 @@ const PAGE_DERIVED =
   LABEL_LIMITS;
 // cite reads a source, not a page; the source is no more trusted.
 const SOURCE_DERIVED =
-  " Fields named in the response's `_provenance.page_derived_fields` carry what the source said about the place, quoted by its adapter." +
+  " Fields named in the response's `_provenance.page_derived_fields` may quote the source or its tooling and repeat the `target` you passed, which may have come from a page." +
   LABEL_LIMITS;
 
 // One clause per paged tool, so an agent knows the list may be partial before it reads it.
