@@ -99,13 +99,45 @@ const DRIFT: { name: string; mode: DriftMode; base: number; perPage: number; per
     perPage: 396.68,
     perPath: 76,
   },
+  // Half the pages belong to another source and only cite this one, so perPage averages both kinds.
+  {
+    name: "without diffs, half the pages cited-only",
+    mode: { diffing: false, revisions: 1, citesPerPage: 1, citedOnly: true },
+    base: 14_193,
+    perPage: 108,
+    perPath: 38,
+  },
+  {
+    name: "without diffs, half cited-only, 2 revisions",
+    mode: { diffing: false, revisions: 2, citesPerPage: 2, citedOnly: true },
+    base: 18_222,
+    perPage: 128,
+    perPath: 76,
+  },
+  {
+    name: "with diffs, half the pages cited-only",
+    mode: { diffing: true, revisions: 1, citesPerPage: 1, citedOnly: true },
+    base: 33_663,
+    perPage: 301.01,
+    perPath: 38,
+  },
+  {
+    name: "with diffs, half cited-only, 2 revisions and 2 citations per page",
+    mode: { diffing: true, revisions: 2, citesPerPage: 2, citedOnly: true },
+    base: 51_754,
+    perPage: 456.77,
+    perPath: 76,
+  },
 ];
 
-/** Each changed path appears once per stale revision, plus once per citation that names it. */
+/** Each changed path appears once per stale revision, plus once per citation or cited-only page naming it. */
 function expectPathsOnce(drift: DriftRow, changed: number): void {
   for (let i = 0; i < changed; i++) {
     const path = changedPath(i);
-    const want = drift.staleRevisions + (drift.listedCitations.get(path) ?? 0);
+    const want =
+      drift.staleRevisions +
+      (drift.listedCitations.get(path) ?? 0) +
+      (drift.citedPaths.get(path) ?? 0);
     expect(drift.text.split(path).length - 1, path).toBe(want);
   }
 }

@@ -194,13 +194,30 @@ every git report takes this path. Without diffs, the report lists only pages and
 | with diffs, 2 revisions, 2 citations per page  | 45,734  | 397      | 76       |
 | without diffs, 1 revision                      | 7,316   | 40       | 38       |
 | without diffs, 2 revisions                     | 9,345   | 40       | 76       |
+| with diffs, half cited-only, 1 revision        | 33,663  | 301      | 38       |
+| with diffs, half cited-only, 2 revisions       | 51,754  | 457      | 76       |
+| without diffs, half cited-only, 1 revision     | 14,193  | 108      | 38       |
+| without diffs, half cited-only, 2 revisions    | 18,222  | 128      | 76       |
 
-One revision is what a git ingest leaves: every page verified in one run records the same HEAD.
-The two-revision cases make growth by revision, and by citations times changed paths, show.
+Bytes of the text block, darwin arm64, Bun 1.4.2; the first four rows measure the same on
+Bun 1.3.13. One revision is what a git ingest leaves: every page verified in one run records
+the same HEAD. The two-revision cases, which also cite two paths per page, make growth by
+revision, and by citations times changed paths, show.
+
+In the cited-only rows, every odd page belongs to another source and cites this one through a
+footnote pinned at a stale revision; every other one of those also points its
+`canonical_source` at the same lines. Those pages are listed in `cited_only`, and without diffs
+`cited_paths` names the changed paths each one cites. The benchmark checks both against what it
+generated, so the gate counts each changed path once per stale revision, once per listed
+citation and once per cited-only page that cites it. Per page is the mean of both kinds of
+page, so a field added only to cited-only pages fails once it costs more than twice 10% of
+that column: 22 B without diffs at one revision, 60 B with diffs.
+
 Each of these was reproduced by rewriting the response at run time, and each fails the gate:
 
 - copying the changed paths into every page (the multiplier ADR-0007 removed);
 - copying them onto every citation;
+- copying them onto every cited-only page;
 - adding a field for every page.
 
 A response that grows on purpose raises its budget in the same pull request, where a reviewer
