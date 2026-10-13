@@ -30,13 +30,16 @@ export interface Citation {
 }
 
 export interface CiteOptions {
-  /** The revision the agent read through a delegated source's connector; refused for any other. */
+  /**
+   * The revision the agent read through a delegated source's connector; refused for any other.
+   * The revision the cited content was read at, observed with that read, not after.
+   */
   observedRevision?: string;
 }
 
 /**
- * Cite a place at the source's current revision; never pins, as adapters are shared. Call it before
- * reading the source, or again after and compare: a later revision can name content never read.
+ * Cite a place at the source's current revision, or a delegated one at the agent's observed one.
+ * Never pins the shared adapter. Cite before reading and after: a later revision can name unread content.
  */
 export async function cite(
   sources: ReadonlyMap<string, SourceAdapter>,
@@ -55,7 +58,7 @@ export async function cite(
     throw new Error(`Path "${path}" is not canonical: it has an empty, "." or ".." segment`);
   }
   const { observedRevision } = options;
-  if (observedRevision !== undefined) checkObserved(observedRevision);
+  if (observedRevision !== undefined) checkObserved(observedRevision, format);
 
   // Sequential so the revision is taken no later than the place it vouches for.
   const current = await currentRevision(adapter);
@@ -103,11 +106,21 @@ export async function cite(
   return citation;
 }
 
-function checkObserved(observed: string): void {
+// Widen deliberately when a real connector needs it.
+const OBSERVED_REVISION = /^[A-Za-z0-9][A-Za-z0-9._:+/@-]{0,127}$/;
+
+function checkObserved(observed: string, format: string): void {
   if (observed.trim() === "") throw new Error("observedRevision is empty");
-  if (/[\r\n]/.test(observed)) throw new Error("observedRevision spans more than one line");
-  if (observed === UNPINNED_REVISION) {
+  if (!OBSERVED_REVISION.test(observed)) {
+    throw new Error(
+      "observedRevision must start with a letter or digit and use only letters, digits and . _ : + / @ -, at most 128 characters",
+    );
+  }
+  if (observed.toLowerCase() === UNPINNED_REVISION) {
     throw new Error(`observedRevision "${observed}" is the unpinned marker, not a revision`);
+  }
+  if (!format.includes("{rev}")) {
+    throw new Error("observedRevision was given, but provenance.format cannot carry a revision");
   }
 }
 
