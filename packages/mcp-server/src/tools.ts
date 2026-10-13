@@ -27,8 +27,18 @@ import {
 import { countUnchecked, unloadedFindings, type UnloadedSource } from "@accreta/adapters";
 import type { GetPageOutput, HitOutput, PageOutput, SearchPagesOutput } from "./schemas.ts";
 
+/** A handle a call holds across awaits; it stays open until `release`, even past a rebuild. */
+export interface PinnedIndex {
+  db: Database;
+  release(): void;
+  /** Whether a rebuild has replaced the index since this was pinned. */
+  replaced(): boolean;
+}
+
 export interface ToolContext {
   db: Database;
+  /** Absent on a context that never reopens its index, whose `db` is then pinned for free. */
+  pin?(): PinnedIndex;
   config: AccretaConfig;
   root: string;
   sources: Map<string, SourceAdapter>;
@@ -269,12 +279,41 @@ const groupOut = (group: UnresolvableRevision) => ({
   cited_only: group.citedOnly,
 });
 
+/** SQLITE_IOERR, the primary code under every extended one. */
+function isIoError(error: unknown): boolean {
+  const code = (error as { errcode?: unknown } | null)?.errcode;
+  return typeof code === "number" && (code & 0xff) === 10;
+}
+
+// One index per call, so a report spanning awaits cannot mix two. Apple's system SQLite
+// fails a handle renamed over, so there a mid-call rebuild cannot finish: the caller retries.
+async function withPinnedIndex<T>(
+  ctx: ToolContext,
+  tool: string,
+  run: (db: Database) => Promise<T>,
+): Promise<T> {
+  const pin = ctx.pin?.() ?? { db: ctx.db, release() {}, replaced: () => false };
+  try {
+    return await run(pin.db);
+  } catch (error) {
+    if (pin.replaced() && isIoError(error)) {
+      throw new Error(
+        `The index was rebuilt while ${tool} ran, and this SQLite build cannot read the index the call started on. Run ${tool} again.`,
+        { cause: error },
+      );
+    }
+    throw error;
+  } finally {
+    pin.release();
+  }
+}
+
 // The early returns carry no block: `unloaded_sources` quotes sources/*.yaml, not a page.
-export async function checkDriftTool(ctx: ToolContext, input: { source?: string }) {
-  // Pinned once: the context reopens the index when a rebuild swaps it, and
-  // this loop spans awaits. Re-reading it per adapter could draw one report
-  // from two different indexes.
-  const db = ctx.db;
+export function checkDriftTool(ctx: ToolContext, input: { source?: string }) {
+  return withPinnedIndex(ctx, "check_drift", (db) => checkDrift(ctx, db, input));
+}
+
+async function checkDrift(ctx: ToolContext, db: Database, input: { source?: string }) {
   const why = input.source === undefined ? undefined : notLoaded(ctx, input.source);
   if (why) {
     return {
@@ -465,13 +504,13 @@ export async function lintTool(
   ctx: ToolContext,
   input: { kinds?: LintFindingKind[] } & PageRequest = {},
 ) {
-  // Pinned once: the context reopens the index when a rebuild swaps it.
-  const db = ctx.db;
-  const report = await lintKnowledgeBase(db, ctx.config, ctx.sources, {
-    kinds: input.kinds,
-    page: { limit: input.limit, cursor: input.cursor },
-    sourceFindings: unloadedFindings(countUnchecked(db, ctx.unloadedSources)),
-  });
+  const report = await withPinnedIndex(ctx, "lint_knowledge_base", (db) =>
+    lintKnowledgeBase(db, ctx.config, ctx.sources, {
+      kinds: input.kinds,
+      page: { limit: input.limit, cursor: input.cursor },
+      sourceFindings: unloadedFindings(countUnchecked(db, ctx.unloadedSources)),
+    }),
+  );
   return {
     pages_checked: report.pagesChecked,
     count: report.total,

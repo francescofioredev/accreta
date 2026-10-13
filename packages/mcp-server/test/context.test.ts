@@ -2,9 +2,23 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildIndex, DEFAULT_CONFIG, type AccretaConfig } from "@accreta/core";
+import {
+  buildIndex,
+  DEFAULT_CONFIG,
+  openIndex,
+  type AccretaConfig,
+  type Database,
+  type LocationVerdict,
+  type SourceAdapter,
+} from "@accreta/core";
 import { createContext } from "../src/context.ts";
-import { checkDriftTool, lintTool, listRecentChangesTool, searchPagesTool } from "../src/tools.ts";
+import {
+  checkDriftTool,
+  lintTool,
+  listRecentChangesTool,
+  searchPagesTool,
+  type PinnedIndex,
+} from "../src/tools.ts";
 
 let root = "";
 
@@ -132,4 +146,169 @@ test("a rebuild does not replace the context the server captured", () => {
 
   expect(ctx.config).toBe(before);
   expect(ctx.root).toBe(rootBefore);
+});
+
+function gate(): { opened: Promise<void>; open: () => void } {
+  let open!: () => void;
+  const opened = new Promise<void>((resolve) => (open = resolve));
+  return { opened, open };
+}
+
+function adapter(
+  id: string,
+  hooks: { revision?: () => Promise<string>; locate?: () => Promise<LocationVerdict> } = {},
+): SourceAdapter {
+  return {
+    id,
+    revision: hooks.revision ?? (async () => "r1"),
+    changedSince: async () => ["x.md"],
+    locate: hooks.locate ?? (async () => ({ verdict: "found" })),
+    citation: (path) => `${id}:${path}`,
+    pinRevision: () => {},
+  };
+}
+
+// Probed rather than assumed: whether a handle survives a rebuild depends on the SQLite build.
+function staleHandlesFail(): boolean {
+  const probe = openIndex(indexPath(), { readonly: true });
+  reindex();
+  try {
+    probe.prepare("SELECT count(*) FROM pages").get();
+    return false;
+  } catch {
+    return true;
+  } finally {
+    probe.close();
+  }
+}
+
+function isOpen(db: Database): boolean {
+  try {
+    db.prepare("SELECT 1").get();
+    return true;
+  } catch (error) {
+    return !/not open/.test(String(error));
+  }
+}
+
+test("check_drift finishes on the index it started on when a rebuild lands mid-call", async () => {
+  writePage("a.md", "---\ntype: note\n---\n\n# A\n\nalpha\n");
+  reindex();
+  const failsStale = staleHandlesFail();
+
+  const ctx = createContext(root);
+  const entered = gate();
+  const blocked = gate();
+  const held = async () => {
+    entered.open();
+    await blocked.opened;
+    return "r1";
+  };
+  ctx.sources.set("held", adapter("held", { revision: held }));
+  ctx.sources.set("docs", adapter("docs"));
+
+  const call = checkDriftTool(ctx, {});
+  await entered.opened;
+  writePage(
+    "b.md",
+    "---\ntype: note\nsource: docs\nlast_verified_revision: r0\n---\n\n# B\n\nbeta\n",
+  );
+  reindex();
+  // A new reader gets the rebuilt index at once: only the old handle's close waits.
+  expect(searchPagesTool(ctx, { query: "beta" }).count).toBe(1);
+  blocked.open();
+
+  if (failsStale) {
+    await expect(call).rejects.toThrow("The index was rebuilt while check_drift ran");
+  } else {
+    // b.md is stale in the rebuilt index, so a report that knew of it drew on both.
+    const drift = await call;
+    expect(drift.reports.map((r) => [r.source_id, r.stale])).toEqual([
+      ["held", []],
+      ["docs", []],
+    ]);
+  }
+  const after = await checkDriftTool(ctx, { source: "docs" });
+  expect(after.reports[0]?.stale.map((s) => s.pages)).toEqual([["knowledge/b.md"]]);
+});
+
+test("lint finishes on the index it started on when a rebuild lands mid-call", async () => {
+  writePage("a.md", '---\ntype: note\ncanonical_source: "held:x.md"\n---\n\n# A\n');
+  reindex();
+
+  const ctx = createContext(root);
+  const entered = gate();
+  const blocked = gate();
+  const locate = async (): Promise<LocationVerdict> => {
+    entered.open();
+    await blocked.opened;
+    return { verdict: "found" };
+  };
+  ctx.sources.set("held", adapter("held", { locate }));
+
+  const call = lintTool(ctx);
+  await entered.opened;
+  writePage("b.md", "---\ntype: note\n---\n\n# B\n\nbeta\n");
+  reindex();
+  expect(searchPagesTool(ctx, { query: "beta" }).count).toBe(1);
+  blocked.open();
+
+  expect((await call).pages_checked).toBe(1);
+  expect((await lintTool(ctx)).pages_checked).toBe(2);
+});
+
+test("a rebuild closes every old handle that no call still holds", () => {
+  writePage("a.md", "---\ntype: note\n---\n\n# A\n");
+  reindex();
+
+  const ctx = createContext(root);
+  const seen = new Set<Database>([ctx.db]);
+  const held: PinnedIndex[] = [];
+  for (let i = 0; i < 6; i++) {
+    const pin = ctx.pin!();
+    if (i % 2 === 0) held.push(pin);
+    else pin.release();
+    writePage(`gen${i}.md`, `---\ntype: note\n---\n\n# G${i}\n`);
+    reindex();
+    seen.add(ctx.db);
+  }
+
+  const open = () => [...seen].filter(isOpen);
+  expect(seen.size).toBe(7);
+  expect(open()).toEqual([...held.map((pin) => pin.db), ctx.db]);
+  for (const pin of held) pin.release();
+  held[0]?.release();
+  expect(open()).toEqual([ctx.db]);
+});
+
+test("a call that throws still releases the index it pinned", async () => {
+  writePage("a.md", "---\ntype: note\n---\n\n# A\n\nalpha\n");
+  reindex();
+
+  const ctx = createContext(root);
+  const pin = ctx.pin!.bind(ctx);
+  let pinned: Database | undefined;
+  ctx.pin = () => {
+    const held = pin();
+    pinned = held.db;
+    return held;
+  };
+  const entered = gate();
+  const blocked = gate();
+  const down = async (): Promise<string> => {
+    entered.open();
+    await blocked.opened;
+    throw new Error("source down");
+  };
+  ctx.sources.set("held", adapter("held", { revision: down }));
+
+  const call = checkDriftTool(ctx, {});
+  await entered.opened;
+  reindex();
+  expect(searchPagesTool(ctx, { query: "alpha" }).count).toBe(1);
+  expect(isOpen(pinned!)).toBe(true);
+  blocked.open();
+
+  await expect(call).rejects.toThrow("source down");
+  expect(isOpen(pinned!)).toBe(false);
 });
