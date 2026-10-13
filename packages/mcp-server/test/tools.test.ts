@@ -251,6 +251,42 @@ describe("source-backed tools", () => {
     expect(stale?.citations_untouched).toBe(1);
   });
 
+  test("check_drift lists a moved citation on a page that is also in doubt", async () => {
+    writePage(
+      "a.md",
+      `---\ntype: note\nsource: lines\nlast_verified_revision: rev1\n---\n\n# a\n\n` +
+        `A claim.[^c] Another.[^d]\n\n[^c]: lines @ rev1 · ch.md#L1-L5\n[^d]: lines @ rev1 · ch.md#L40\n`,
+    );
+    build();
+    ctx.sources.set("lines", {
+      id: "lines",
+      revision: async () => "rev2",
+      changedSince: async () => ["ch.md"],
+      locate: async () => ({ verdict: "found" }),
+      citation: () => "",
+      pinRevision: () => {},
+      touchedSince: async () =>
+        new Map([
+          ["L1-L5", { status: "touched" as const }],
+          ["L40", { status: "moved" as const, locator: "L41" }],
+        ]),
+    });
+
+    const stale = (await checkDriftTool(ctx, { source: "lines" })).reports?.[0]?.stale?.[0];
+    expect(stale?.pages_by_change?.changed).toEqual(["knowledge/a.md"]);
+    expect(stale?.citations).toEqual([
+      { page: "knowledge/a.md", footnote: "c", path: "ch.md", locator: "L1-L5", status: "touched" },
+      {
+        page: "knowledge/a.md",
+        footnote: "d",
+        path: "ch.md",
+        locator: "L40",
+        status: "moved",
+        now: "L41",
+      },
+    ]);
+  });
+
   test("list_recent_changes tells the agent to go and look, not that a revision is lost", async () => {
     ctx.sources.set(
       "design-docs",

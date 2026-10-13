@@ -725,9 +725,50 @@ describe("accreta drift for a pull request", () => {
 
     output = [];
     await cli("drift", "--format", "github");
-    expect(stdout()).toContain("1 page(s) only need re-pinning");
+    expect(stdout()).toContain("1 page(s) need re-pinning");
     expect(stdout()).toContain(
       `| \`knowledge/third.md\` | \`c.md#L1-L2\` \`[^c]\` | \`${from.slice(0, 7)}\` | \`L2-L3\` |`,
+    );
+  });
+
+  test("a page in doubt also lists the citations it only needs to re-pin", async () => {
+    const { from } = await fixture();
+    const docs = join(root, "sources", "docs");
+    const short = from.slice(0, 7);
+    writePage(
+      "first.md",
+      `---\ntype: note\nsource: docs\nlast_verified_revision: ${from}\n---\n\n# first\n\n` +
+        `A claim.[^c] Another.[^d]\n\n[^c]: docs @ ${short} · a.md#L3-L5\n` +
+        `[^d]: docs @ ${short} · a.md#L15-L16\n`,
+    );
+    await cli("reindex");
+    const lines = twentyLines({ 4: "rewritten" }).split("\n");
+    lines.splice(9, 0, "inserted");
+    writeFileSync(join(docs, "a.md"), lines.join("\n"), "utf-8");
+    Bun.spawnSync(["git", "commit", "-qam", "shift a"], { cwd: docs });
+
+    output = [];
+    expect(await cli("drift", "--json")).toBe(1);
+    const [source] = JSON.parse(stdout()).sources;
+    const first = source.in_doubt.find((p: { page: string }) => p.page === "knowledge/first.md");
+    expect(first.citations.map((c: { footnote: string }) => c.footnote)).toEqual(["c"]);
+    expect(source.repin).toEqual([
+      {
+        page: "knowledge/first.md",
+        verified_at: from,
+        citations: [
+          { footnote: "d", path: "a.md", locator: "L15-L16", cited_at: short, now: "L16-L17" },
+        ],
+      },
+    ]);
+
+    output = [];
+    await cli("drift");
+    expect(stdout()).toContain("1 cited range(s) changed; re-pin 1 moved locator(s)");
+    output = [];
+    await cli("drift", "--format", "github");
+    expect(stdout()).toContain(
+      `| \`knowledge/first.md\` | \`a.md#L15-L16\` \`[^d]\` | \`${short}\` | \`L16-L17\` |`,
     );
   });
 

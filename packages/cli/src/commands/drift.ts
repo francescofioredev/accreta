@@ -216,8 +216,10 @@ function explainDoubt(doubt: PageChange, entry: StaleRevision, page: string): st
   const mine = (entry.citations ?? []).filter((c) => c.page === page);
   const count = (status: string) => mine.filter((c) => c.change.status === status).length;
   switch (doubt) {
-    case "changed":
-      return `${count("touched") + count("unknown")} cited range(s) changed`;
+    case "changed": {
+      const changed = `${count("touched") + count("unknown")} cited range(s) changed`;
+      return count("moved") > 0 ? `${changed}; re-pin ${count("moved")} moved locator(s)` : changed;
+    }
     case "moved":
       return `cited lines moved, not changed: re-pin ${count("moved")} locator(s)`;
     case "untouched":
@@ -394,27 +396,12 @@ function verdict(report: DriftReport, base?: BaseKeys): SourceVerdict {
             return cited;
           }),
         });
-      } else if (level === "moved") {
-        repin.push({
-          page,
-          ...at,
-          citations: mine.flatMap((c) =>
-            c.change.status === "moved" && c.locator !== null
-              ? [
-                  {
-                    footnote: c.footnote,
-                    path: c.path,
-                    locator: c.locator,
-                    cited_at: c.revision,
-                    now: c.change.locator,
-                  },
-                ]
-              : [],
-          ),
-        });
-      } else {
+      } else if (level !== "moved") {
         other++;
       }
+      // Also on a page in doubt: fixing only its changed citations would leave these locators stale.
+      const moved = mine.flatMap(repinOf);
+      if (moved.length > 0) repin.push({ page, ...at, citations: moved });
     }
   }
 
@@ -430,6 +417,19 @@ function verdict(report: DriftReport, base?: BaseKeys): SourceVerdict {
     delegated: report.delegated && { via: report.delegated.via, pending: report.delegated.pending },
   };
 }
+
+const repinOf = (c: CitedChange): RepinPage["citations"] =>
+  c.change.status === "moved" && c.locator !== null
+    ? [
+        {
+          footnote: c.footnote,
+          path: c.path,
+          locator: c.locator,
+          cited_at: c.revision,
+          now: c.change.locator,
+        },
+      ]
+    : [];
 
 const isChanged = (c: CitedChange) =>
   c.change.status === "touched" || c.change.status === "unknown";
@@ -526,7 +526,7 @@ export function toGithub(
       text(
         "",
         "<details>",
-        `<summary>${distinct(source.repin.map((p) => p.page))} page(s) only need re-pinning: the cited lines moved, unchanged.</summary>`,
+        `<summary>${distinct(source.repin.map((p) => p.page))} page(s) need re-pinning: the cited lines moved, unchanged.</summary>`,
       );
       table(
         ["", "| Page | Cited lines | Lines as of | Now at |", "|---|---|---|---|"],
