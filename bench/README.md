@@ -177,10 +177,10 @@ every git report takes this path. Without diffs, the report lists only pages and
 
 | mode                                           | size    | per page | per path |
 | ---------------------------------------------- | ------- | -------- | -------- |
-| with diffs, 1 revision, 1 citation per page    | 27,490  | 241      | 38       |
-| with diffs, 2 revisions, 2 citations per page  | 45,581  | 397      | 76       |
-| without diffs, 1 revision                      | 7,163   | 40       | 38       |
-| without diffs, 2 revisions                     | 9,192   | 40       | 76       |
+| with diffs, 1 revision, 1 citation per page    | 27,643  | 241      | 38       |
+| with diffs, 2 revisions, 2 citations per page  | 45,734  | 397      | 76       |
+| without diffs, 1 revision                      | 7,316   | 40       | 38       |
+| without diffs, 2 revisions                     | 9,345   | 40       | 76       |
 
 One revision is what a git ingest leaves: every page verified in one run records the same HEAD.
 The two-revision cases make growth by revision, and by citations times changed paths, show.
