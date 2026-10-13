@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { snapshotDirFor } from "@accreta/adapter-fs";
+import { isWorkingTree } from "@accreta/adapter-git";
 import {
   buildRegistry,
   clashingIds,
@@ -150,7 +151,7 @@ describe("loadSources", () => {
     ]);
   });
 
-  test("git paths written from the repository top go unloaded, naming the entry they meant", () => {
+  test("git paths written from the repository top go unloaded, naming the entry they meant", async () => {
     const git = (...args: string[]) =>
       expect(spawnSync("git", args, { cwd: root, stdio: "ignore" }).status).toBe(0);
     git("init", "-q", "-b", "main");
@@ -172,21 +173,28 @@ describe("loadSources", () => {
     writeSource("top.yaml", "id: top\ntype: git\nroot: sub\npaths: [sub/docs]\n");
     writeSource("fixed.yaml", "id: fixed\ntype: git\nroot: sub\npaths: [docs]\n");
 
+    const refusal =
+      '`paths` entry "sub/docs" (did you mean "docs"?) matches no tracked file. ' +
+      "`paths` are relative to `root`, not to the repository top.";
     const { sources, unloaded } = loadSources(ctx());
     expect([...sources.keys()]).toEqual(["fixed"]);
     expect(unloaded).toEqual([
-      {
-        file: join("sources", "top.yaml"),
-        id: "top",
-        reason:
-          'Source "top": `paths` entry "sub/docs" (did you mean "docs"?) matches no tracked file. ' +
-          "`paths` are relative to `root`, not to the repository top.",
-      },
+      { file: join("sources", "top.yaml"), id: "top", reason: `Source "top": ${refusal}` },
     ]);
+
+    // doctor and `source add` must not pass what drift refuses.
+    const [fixed, top] = readDeclarations(root);
+    expect(await kindFor("git")!.preflight(top!, ctx())).toEqual({
+      reachable: "no",
+      detail: refusal,
+    });
+    expect((await kindFor("git")!.preflight(fixed!, ctx())).reachable).toBe("yes");
   });
 
-  test("the shipped climate example still loads both of its git sources", () => {
+  test("the shipped climate example still loads both of its git sources", async () => {
     const example = join(import.meta.dir, "..", "..", "..", "..", "examples", "climate");
+    // Outside a checkout the paths check is skipped, and this would pass without testing it.
+    expect(await isWorkingTree(example)).toBe(true);
     const { sources, unloaded } = loadSources({ ...ctx(), root: example });
     expect(unloaded).toEqual([]);
     expect([...sources.keys()].toSorted()).toEqual(["ipcc-ar6-wg1", "noaa-gml"]);

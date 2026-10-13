@@ -403,9 +403,21 @@ describe("GitSource scoped to paths", () => {
     );
   });
 
-  test("a pattern is refused only when the entries together match nothing", () => {
-    expect(() => scoped(["docs", "*.txt"])).not.toThrow();
-    expect(() => scoped(["*.txt"])).toThrow('`paths` entry "*.txt" matches no tracked file');
+  test("a dead pattern is refused even beside entries that match", () => {
+    expect(() => scoped(["docs", "*.txt"])).toThrow(
+      '`paths` entry "*.txt" matches no tracked file',
+    );
+    expect(() => scoped(["docs", "*/*.md"])).not.toThrow();
+  });
+
+  test("an entry inside a submodule says the submodule needs its own source", async () => {
+    const proc = Bun.spawn(["git", "rev-parse", "HEAD"], { cwd: root, stdout: "pipe" });
+    const sha = (await new Response(proc.stdout).text()).trim();
+    await run(["update-index", "--add", "--cacheinfo", `160000,${sha},vendor/lib`]);
+    await run(["commit", "-q", "-m", "a submodule"]);
+    expect(() => scoped(["docs", "vendor/lib/docs"])).toThrow(
+      '`paths` entry "vendor/lib/docs" (inside submodule "vendor/lib", which needs its own source)',
+    );
   });
 
   test("a root git cannot read is left to fail where git is called", () => {
@@ -809,7 +821,7 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
   }
 
   /** Index a page citing `docs/a.md#L5-L8` as verified at `from`, and run drift over the source. */
-  async function drift(from: string) {
+  async function drift(from: string, paths?: string[]) {
     mkdirSync(join(kb, "knowledge"), { recursive: true });
     writeFileSync(
       join(kb, "knowledge", "page.md"),
@@ -819,7 +831,7 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
     buildIndex({ root: kb, config: DEFAULT_CONFIG, indexPath });
     const db = openIndex(indexPath);
     try {
-      const report = await detectDrift(db, sub());
+      const report = await detectDrift(db, sub(paths));
       const [entry] = report.stale;
       return { report, rank: entry && pageChanges(entry)?.get("knowledge/page.md") };
     } finally {
@@ -912,7 +924,40 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
         "`paths` are relative to `root`, not to the repository top.",
     );
     expect(() => sub(["./sub/docs/*.md"])).toThrow('(did you mean "docs/*.md"?)');
+    expect(() => sub(["sub"])).toThrow('(did you mean "."?)');
     expect(() => sub(["docs", "../other.md"])).not.toThrow();
+  });
+
+  test("a suggestion is offered only when it matches", () => {
+    expect(() => sub(["sub/nope"])).toThrow(
+      /^Source "repo": `paths` entry "sub\/nope" matches no tracked file\. /,
+    );
+  });
+
+  // A dead entry was once refused, and removing it as told turned drift green over a deleted file.
+  test("an entry whose files were deleted still loads, and drift reports the deletion", async () => {
+    write("sub/keep.md", "k");
+    await commit("keep the root alive");
+    const from = await sub(["docs"]).revision();
+    await run(["rm", "-q", "-r", "sub/docs"]);
+    await commit("delete the cited directory");
+
+    expect(() => sub(["docs"])).not.toThrow();
+    const { report, rank } = await drift(from, ["docs"]);
+    expect(report.stale).toHaveLength(1);
+    expect(rank).toBe("changed");
+
+    write("sub/docs/a.md", lines(12));
+    await commit("re-add it");
+    expect(() => sub(["docs"])).not.toThrow();
+  });
+
+  test("a symlinked root is judged by git, which sees through the link", () => {
+    const alias = join(kb, "alias");
+    symlinkSync(join(root, "sub"), alias);
+    const linked = () =>
+      new GitSource({ id: "repo", root: alias, citationFormat: "x", paths: ["../sub/docs"] });
+    expect(linked).not.toThrow();
   });
 
   test("at the top level the revision is still HEAD, even when HEAD changed nothing", async () => {
