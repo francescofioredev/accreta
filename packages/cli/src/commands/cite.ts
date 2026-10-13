@@ -1,6 +1,12 @@
 import { cite as citeAt, parseCitation } from "@accreta/core";
 import { findWorkspace } from "../workspace.ts";
-import { loadSources, printJson, provenance, type CommandContext } from "./shared.ts";
+import {
+  loadSources,
+  printJson,
+  provenance,
+  SOURCE_NOTICE,
+  type CommandContext,
+} from "./shared.ts";
 
 const CITE_FIELDS = ["location.detail"] as const;
 
@@ -63,7 +69,7 @@ export async function cite(
       ...(citation.delegated
         ? { delegated: { via: citation.delegated.via, scope: citation.delegated.guidance } }
         : {}),
-      _provenance: provenance(CITE_FIELDS),
+      _provenance: provenance(CITE_FIELDS, SOURCE_NOTICE),
     });
     return code;
   }
