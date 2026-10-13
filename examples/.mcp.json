@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "accreta": {
-      "command": "bun",
-      "args": ["run", "node_modules/@accreta/mcp-server/src/main.ts"],
+      "command": "accreta",
+      "args": ["mcp"],
       "env": {
         "ACCRETA_ROOT": "./knowledge-base"
       }

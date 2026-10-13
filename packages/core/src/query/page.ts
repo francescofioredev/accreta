@@ -64,13 +64,13 @@ export function getPage(
   pathOrTarget: string,
   config: AccretaConfig,
 ): PageRecord | null {
-  const direct = db.query(`${SELECT} WHERE path = ?`).get(pathOrTarget) as PageRow | null;
+  const direct = db.prepare(`${SELECT} WHERE path = ?`).get(pathOrTarget) as PageRow | undefined;
   if (direct) return toRecord(direct);
 
   const resolved = tryResolveWikilink(pathOrTarget, config);
   if (!resolved.ok) return null;
 
-  const row = db.query(`${SELECT} WHERE path = ?`).get(resolved.path) as PageRow | null;
+  const row = db.prepare(`${SELECT} WHERE path = ?`).get(resolved.path) as PageRow | undefined;
   return row ? toRecord(row) : null;
 }
 
@@ -119,7 +119,7 @@ export function findRelated(
 
   const count = (where: { sql: string; params: string[] }) =>
     (
-      db.query(`SELECT COUNT(*) AS n FROM links l WHERE ${where.sql}`).get(...where.params) as {
+      db.prepare(`SELECT COUNT(*) AS n FROM links l WHERE ${where.sql}`).get(...where.params) as {
         n: number;
       }
     ).n;
@@ -149,7 +149,7 @@ export function findRelated(
     inboundTake === 0
       ? []
       : (db
-          .query(
+          .prepare(
             `SELECT l.src_path AS path, l.kind AS kind, p.type AS type, p.title AS title
              FROM links l LEFT JOIN pages p ON p.path = l.src_path
              WHERE ${inboundWhere.sql}
@@ -163,7 +163,7 @@ export function findRelated(
     outboundTake === 0
       ? []
       : (db
-          .query(
+          .prepare(
             `SELECT l.dst_path AS path, l.kind AS kind, p.type AS type, p.title AS title
              FROM links l LEFT JOIN pages p ON p.path = l.dst_path
              WHERE ${outboundWhere.sql}
@@ -175,7 +175,7 @@ export function findRelated(
           "direction"
         >[]);
 
-  const targetExists = Boolean(db.query("SELECT 1 FROM pages WHERE path = ?").get(target));
+  const targetExists = Boolean(db.prepare("SELECT 1 FROM pages WHERE path = ?").get(target));
   const relations = [
     ...inbound.map((r) => ({ ...r, direction: "inbound" as const })),
     ...outbound.map((r) => ({ ...r, direction: "outbound" as const })),
@@ -229,12 +229,12 @@ export function findCanonical(db: Database, term: string, config: AccretaConfig)
 
   const direct = getPage(db, term, config);
   if (direct) {
-    const row = db.query(`${SELECT} WHERE path = ?`).get(direct.path) as PageRow;
+    const row = db.prepare(`${SELECT} WHERE path = ?`).get(direct.path) as PageRow;
     push(row, "path");
   }
 
   const byTitle = db
-    .query(
+    .prepare(
       `SELECT path, title, type, canonical_source FROM pages WHERE title_key = ? ORDER BY path`,
     )
     .all(needle) as Pick<PageRow, "path" | "title" | "type" | "canonical_source">[];
@@ -242,7 +242,7 @@ export function findCanonical(db: Database, term: string, config: AccretaConfig)
 
   // Equality on whole declared aliases, so a page merely containing the words elsewhere never matches.
   const byAlias = db
-    .query(
+    .prepare(
       `SELECT p.path, p.title, p.type, p.canonical_source
        FROM aliases a JOIN pages p ON p.path = a.path
        WHERE a.alias = ? ORDER BY a.path`,

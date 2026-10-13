@@ -46,7 +46,7 @@ export function searchPages(db: Database, options: SearchOptions): SearchHit[] {
   }
 
   const rows = db
-    .query(
+    .prepare(
       `SELECT
          p.path AS path,
          p.type AS type,

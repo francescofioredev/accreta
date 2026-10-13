@@ -42,7 +42,7 @@ let root = "";
 let db: Database;
 
 function addPage(path: string, source: string, verifiedAt: string | null): void {
-  db.query(
+  db.prepare(
     `INSERT INTO pages (path, type, title, source, last_verified_revision, frontmatter_json, body, mtime)
      VALUES (?, 'note', ?, ?, ?, '{}', '', 0)`,
   ).run(path, path, source, verifiedAt);

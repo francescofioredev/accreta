@@ -70,8 +70,9 @@ export function createContext(cwd: string = process.cwd()): ToolContext {
     get db() {
       const current = inodeOf(indexPath);
       // A reindex replaces this file by rename(2), and a connection held across
-      // that swap is undefined by platform: macOS fails it with SQLITE_IOERR
-      // for the rest of the process, while Linux keeps serving the old rows off
+      // that swap is undefined by SQLite build: Apple's system SQLite fails it
+      // with SQLITE_IOERR for the rest of the process, while Linux and Node's
+      // bundled SQLite keep serving the old rows off
       // the unlinked inode — silently answering with pre-rebuild data, which is
       // the worse half. build.ts says a long-lived reader must reopen; this is
       // that reader.

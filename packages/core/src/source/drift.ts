@@ -152,7 +152,7 @@ interface FootnoteRow {
  */
 export async function detectDrift(db: Database, adapter: SourceAdapter): Promise<DriftReport> {
   const rows = db
-    .query(
+    .prepare(
       `SELECT path, last_verified_revision, canonical_source
        FROM pages
        WHERE source = ?
@@ -374,11 +374,12 @@ function citationsInto(db: Database, sourceId: string, ownRows: PageRow[]): Cita
 
   // SQL only narrows to values containing "id:"; parsing decides, so drift reads them as lint does.
   const canonicalRows = db
-    .query(
+    .prepare(
       `SELECT path, canonical_source FROM pages
-       WHERE (source IS NULL OR source <> ?1) AND instr(canonical_source, ?1 || ':') > 0`,
+       WHERE (source IS NULL OR source <> $source) AND instr(canonical_source, $source || ':') > 0`,
     )
-    .all(sourceId) as { path: string; canonical_source: string }[];
+    // Named, not ?1: Node 22.16's node:sqlite refuses numbered parameters with "column index out of range".
+    .all({ $source: sourceId }) as { path: string; canonical_source: string }[];
   const canonical = new Map<string, Cite>();
   for (const row of canonicalRows) {
     const parsed = parseCitation(row.canonical_source);
@@ -388,7 +389,7 @@ function citationsInto(db: Database, sourceId: string, ownRows: PageRow[]): Cita
   }
 
   const footnotes = db
-    .query(
+    .prepare(
       `SELECT page_path, footnote, revision, path, locator FROM citations
        WHERE source = ? AND path IS NOT NULL ORDER BY page_path, line`,
     )

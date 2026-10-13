@@ -80,11 +80,11 @@ function perFile(revision: string, citedOnly: boolean): DriftReport {
 describe("drift --base", () => {
   test("an unplaceable pin stays unplaceable when a change touches another file", async () => {
     const db = openIndex(join(root, "index.sqlite"));
-    db.query(
+    db.prepare(
       `INSERT INTO pages (path, type, title, source, last_verified_revision, frontmatter_json, body, mtime)
        VALUES ('knowledge/finding.md', 'note', 'f', 'noaa', 'r1', '{}', '', 0)`,
     ).run();
-    db.query(
+    db.prepare(
       `INSERT INTO citations (page_path, footnote, line, text, source, revision, path, locator, claim)
        VALUES ('knowledge/finding.md', 'old', 1, '', 'noaa', 'gone', 'y.md', 'L1', '')`,
     ).run();

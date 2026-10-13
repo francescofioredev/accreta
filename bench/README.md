@@ -27,7 +27,7 @@ Reported: recall@1, recall@5, and MRR.
 ## Running it
 
 ```bash
-bun run bench/search-bench.ts
+bun run bench
 ```
 
 ---
@@ -130,7 +130,7 @@ punctuation tokenizes worse than prose, so the estimate understates the real cou
 
 ## The budget gate
 
-`test/response-budget.test.ts` runs in `bun test`, and so in CI. It calls `measure(60)`: the
+`test/response-budget.test.ts` runs in `bun run test`, and so in CI. It calls `measure(60)`: the
 smallest round size where every list tool has more results than fit in one default page. Past
 that size a default response is still one page, so the bytes barely move: at 1,000 pages each
 figure is within 1.1% of its value at 60. The test takes under a second. It fails when:

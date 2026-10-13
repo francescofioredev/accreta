@@ -92,9 +92,10 @@ export function buildIndex(options: BuildOptions): BuildResult {
   // or the whole new one.
   //
   // What this does *not* buy is a defined outcome for a connection that outlives
-  // the swap, and the difference is platform-dependent: on Linux the unlinked
-  // inode stays alive behind the open descriptor and the stale handle keeps
-  // serving the old rows, while on macOS SQLite revalidates the file and fails
+  // the swap, and the difference depends on the SQLite build: on Linux, and with
+  // the SQLite Node bundles, the unlinked inode stays alive behind the open
+  // descriptor and the stale handle keeps serving the old rows, while Apple's
+  // system SQLite, which Bun loads on macOS, revalidates the file and fails
   // that connection with SQLITE_IOERR. Both were observed in CI against the
   // same code. A long-lived reader must therefore reopen after a rebuild rather
   // than assume either behaviour.
