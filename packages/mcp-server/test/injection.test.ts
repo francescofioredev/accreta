@@ -268,6 +268,7 @@ describe("every tool response, against pages that try to give instructions", () 
   const markedFieldsSeen = new Set<string>();
   const shapesBy = new Map<string, Map<string, Set<string>>>();
   const tools: string[] = [];
+  const readErrors: string[] = [];
   let capabilities: Record<string, unknown> = {};
   let lastWrite: unknown;
 
@@ -295,6 +296,9 @@ describe("every tool response, against pages that try to give instructions", () 
         for (const probe of PROBES[tool.name] ?? []) {
           const args = typeof probe === "function" ? probe(previous) : probe;
           const result = await client.callTool({ name: tool.name, arguments: args });
+          if (tool.name !== WRITE_TOOL && result.isError) {
+            readErrors.push(`${tool.name} ${JSON.stringify(args)}`);
+          }
           const audited = auditResult(result);
           previous = audited.payloads[0];
           if (tool.name === WRITE_TOOL) lastWrite = previous;
@@ -323,6 +327,10 @@ describe("every tool response, against pages that try to give instructions", () 
 
   test("the write probes reach a confirmed write, so the write's reply is swept too", () => {
     expect(lastWrite).toMatchObject({ ok: true });
+  });
+
+  test("no read probe returns an error, so each one swept a real reply", () => {
+    expect(readErrors).toEqual([]);
   });
 
   test("every registered tool has a probe", () => {
