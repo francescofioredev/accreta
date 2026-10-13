@@ -181,6 +181,29 @@ describe("buildIndex", () => {
     db.close();
   });
 
+  test("a recursive YAML alias costs one page its frontmatter, not the whole index", () => {
+    writePage("nested.md", "---\na: &x\n  b: *x\n---\n\n# Nested\n");
+    writePage("top.md", "---\n&top\ntype: note\nself: *top\n---\n\n# Top\n");
+    writePage("fine.md", "---\ntype: concept\n---\n\n# Fine\n");
+    expect(build().pages).toBe(3);
+
+    const db = openIndex(indexPath, { readonly: true });
+    const rows = db
+      .prepare("SELECT path, type, frontmatter_json, frontmatter_error FROM pages ORDER BY path")
+      .all() as Record<string, unknown>[];
+    db.close();
+    expect(rows.map((row) => [row.path, row.type])).toEqual([
+      ["knowledge/fine.md", "concept"],
+      ["knowledge/nested.md", "unknown"],
+      ["knowledge/top.md", "unknown"],
+    ]);
+    expect(rows[0]?.frontmatter_error).toBeNull();
+    for (const row of rows.slice(1)) {
+      expect(row.frontmatter_json).toBe("{}");
+      expect(row.frontmatter_error).toContain("cannot be stored as JSON");
+    }
+  });
+
   test("which frontmatter fields are links is decided by configuration", () => {
     writePage("a.md", "---\ncites: [[b]]\n---\n\n# A\n");
     writePage("b.md", "# B\n");
