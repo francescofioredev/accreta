@@ -1543,4 +1543,51 @@ describe("accreta doctor", () => {
     expect(await cli("doctor")).toBe(1);
     expect(stdout()).toContain("unknown source type");
   });
+
+  test("two declarations sharing an id are both named, and neither wins", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    mkdirSync(join(root, "sources", "docs"), { recursive: true });
+    for (const name of ["a.yaml", "b.yaml"]) {
+      writeFileSync(join(root, "sources", name), "id: docs\ntype: fs\nroot: sources/docs\n");
+    }
+    const [a, b] = ["a.yaml", "b.yaml"].map((name) => join("sources", name));
+    output = [];
+
+    expect(await cli("doctor")).toBe(1);
+    expect(stdout()).toContain(`docs — fs — ${a}`);
+    expect(stdout()).toContain(`docs — fs — ${b}`);
+    expect(stdout()).toContain(`id \`docs\` is also declared in ${b}`);
+    expect(stdout()).toContain(`id \`docs\` is also declared in ${a}`);
+
+    // The checks already fail here; doctor must not be the one command that passes.
+    await cli("reindex");
+    for (const command of ["lint", "drift"]) {
+      const result = spawnCli({}, command);
+      expect(result.code).toBe(1);
+      expect(result.out).toContain(`id \`docs\` is also declared in ${b}`);
+      expect(result.out).toContain(`id \`docs\` is also declared in ${a}`);
+    }
+  });
+
+  test("a declaration missing only its type still claims its id", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    mkdirSync(join(root, "sources", "docs"), { recursive: true });
+    writeFileSync(join(root, "sources", "a.yaml"), "id: docs\ntype: fs\nroot: sources/docs\n");
+    writeFileSync(join(root, "sources", "b.yaml"), "id: docs\n");
+    const [a, b] = ["a.yaml", "b.yaml"].map((name) => join("sources", name));
+    output = [];
+
+    expect(await cli("doctor")).toBe(1);
+    expect(stdout()).toContain("needs a non-empty `type`");
+    expect(stdout()).toContain(`id \`docs\` is also declared in ${b}`);
+    expect(stdout()).toContain(`id \`docs\` is also declared in ${a}`);
+
+    await cli("reindex");
+    const lint = spawnCli({}, "lint");
+    expect(lint.code).toBe(1);
+    expect(lint.out).toContain(`id \`docs\` is also declared in ${b}`);
+    expect(lint.out).toContain(`id \`docs\` is also declared in ${a}`);
+  });
 });

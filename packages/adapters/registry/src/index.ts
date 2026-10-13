@@ -65,6 +65,20 @@ export function readDeclarationFiles(root: string): DeclarationFile[] {
   });
 }
 
+/** The id a file claims. One that failed only on `type` still claims it, or the other would win. */
+export const declaredId = (entry: DeclarationFile) =>
+  "error" in entry ? entry.id : entry.declaration.id;
+
+/** Each id more than one file declares, with those files in order: a citation can name only one. */
+export function clashingIds(entries: readonly DeclarationFile[]): Map<string, string[]> {
+  const filesById = new Map<string, string[]>();
+  for (const entry of entries) {
+    const id = declaredId(entry);
+    if (id !== undefined) filesById.set(id, [...(filesById.get(id) ?? []), entry.file]);
+  }
+  return new Map([...filesById].filter(([, files]) => files.length > 1));
+}
+
 /** A declaration in `sources/` that did not become an adapter. */
 export interface UnloadedSource {
   /** Relative to the workspace root: the file somebody has to open. */
@@ -90,16 +104,13 @@ export function loadSources(ctx: SourceContext): LoadedSources {
   const sources = new Map<string, SourceAdapter>();
   const unloaded: UnloadedSource[] = [];
   const entries = readDeclarationFiles(ctx.root);
-  const filesById = new Map<string, string[]>();
-  for (const entry of entries) {
-    const id = idOf(entry);
-    if (id !== undefined) filesById.set(id, [...(filesById.get(id) ?? []), entry.file]);
-  }
+  const clashes = clashingIds(entries);
 
   for (const entry of entries) {
     const { file } = entry;
-    const id = idOf(entry);
-    const others = id === undefined ? [] : filesById.get(id)!.filter((other) => other !== file);
+    const id = declaredId(entry);
+    const others =
+      id === undefined ? [] : (clashes.get(id)?.filter((other) => other !== file) ?? []);
     if (others.length > 0) {
       unloaded.push({
         file,
@@ -123,9 +134,6 @@ export function loadSources(ctx: SourceContext): LoadedSources {
   }
   return { sources, unloaded };
 }
-
-// A declaration that failed only on `type` still claims its id, or the other one would win.
-const idOf = (entry: DeclarationFile) => ("error" in entry ? entry.id : entry.declaration.id);
 
 /** An unloaded source and how many pages cite it; `pages` is null when there is no id to count by. */
 export interface UncheckedSource extends UnloadedSource {

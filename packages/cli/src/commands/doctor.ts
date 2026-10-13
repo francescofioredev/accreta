@@ -1,7 +1,14 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { checkConfig, compileCitationTemplate, DEFAULT_CONFIG, sqliteSupport } from "@accreta/core";
-import { KNOWN_TYPES, kindFor, readDeclarationFiles, stateDirFor } from "@accreta/adapters";
+import {
+  clashingIds,
+  declaredId,
+  KNOWN_TYPES,
+  kindFor,
+  readDeclarationFiles,
+  stateDirFor,
+} from "@accreta/adapters";
 import { CONFIG_FILENAME, findWorkspace } from "../workspace.ts";
 import { reportPreflight, type CommandContext } from "./shared.ts";
 import { compareVersions, findInstalledSkills, SKILL_NAME } from "./skill-floor.ts";
@@ -63,21 +70,29 @@ export async function doctor(ctx: CommandContext, version: string): Promise<numb
   );
 
   const declarations = readDeclarationFiles(workspace.root);
+  const clashes = clashingIds(declarations);
   ctx.out(`\nsources (${declarations.length})`);
   if (declarations.length === 0) ctx.out("  none declared in sources/");
 
   for (const entry of declarations) {
+    const { file } = entry;
+    const id = declaredId(entry);
+    const others =
+      id === undefined ? [] : (clashes.get(id)?.filter((other) => other !== file) ?? []);
+    const declaration = "error" in entry ? undefined : entry.declaration;
+    const kind = declaration && kindFor(declaration.type);
     if ("error" in entry) {
-      ctx.out(`  ${entry.file}`);
+      ctx.out(`  ${file}`);
       ctx.out(`    no: not a source declaration — ${entry.error}`);
-      exitCode = 1;
-      continue;
+    } else {
+      ctx.out(`  ${entry.declaration.id} — ${entry.declaration.type} — ${file}`);
+      if (!kind) ctx.out(`    no: unknown source type. Known: ${KNOWN_TYPES.join(", ")}.`);
     }
-    const { declaration } = entry;
-    ctx.out(`  ${declaration.id} — ${declaration.type}`);
-    const kind = kindFor(declaration.type);
-    if (!kind) {
-      ctx.out(`    no: unknown source type. Known: ${KNOWN_TYPES.join(", ")}.`);
+    if (others.length > 0) {
+      ctx.out(`    no: id \`${id}\` is also declared in ${others.join(", ")}`);
+      ctx.out("      → give each a distinct id or remove all but one");
+    }
+    if (!declaration || !kind || others.length > 0) {
       exitCode = 1;
       continue;
     }
