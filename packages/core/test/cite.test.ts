@@ -418,6 +418,7 @@ describe("a delegated footnote under lint", () => {
 
   afterEach(() => {
     db?.close();
+    db = undefined;
     rmSync(root, { recursive: true, force: true });
   });
 
