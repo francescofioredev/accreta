@@ -264,6 +264,50 @@ If `consumers` returns less than expected, run `accreta lint` and look for broke
 **Under-reporting is this system's characteristic silent failure**: the pages render, the
 links look right on GitHub, and impact analysis quietly returns a short answer.
 
+## 7. The working loops
+
+Setup is done once; these three run for the life of the knowledge base. Over MCP the same
+procedures are the prompts `ingest_source`, `reverify_stale_pages` and `answer_with_citations`.
+
+### Ingest a source file
+
+```bash
+accreta cite docs:ch01.md          # before reading: keep the revision it prints
+accreta cite --expect-revision <rev> docs:ch01.md#L12-L30   # after writing each claim
+accreta reindex
+accreta lint
+```
+
+Cite the file, then read it. Write the page, and paste the footnote `cite` returns for every
+claim; never compose one. `--expect-revision` fails if the source moved since you read it: re-read
+and cite again. With no revision (a delegated source, an uncommitted file), leave it out. Record
+the revision of the page's own `source` in `last_verified_revision`.
+
+### Re-verify after drift
+
+```bash
+accreta drift
+accreta cite --expect-revision <rev from "source @ rev"> docs:ch01.md#L12-L30
+accreta reindex
+accreta lint
+```
+
+For each page `drift` names, re-read what changed, correct the page, re-cite what you re-read at
+drift's revision, and record that revision. A page listed as "cited at" belongs to another
+source: re-pin its footnotes and record no revision on it. Repeat until `drift` names nothing in
+doubt. Drive this from `accreta drift`, not `drift --json`, which only counts some stale pages.
+
+### Answer with citations
+
+```bash
+accreta canonical "<concept>"
+accreta search "<terms>"
+accreta show <path>
+```
+
+Answer only what the pages support, citing each claim with the page's own footnote. Where pages
+disagree, give both. If no page covers the question, say so rather than answer from memory.
+
 ## Adding a source later
 
 Write the new `sources/*.yaml`, run `accreta reindex`, then `accreta drift`. Nothing else

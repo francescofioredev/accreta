@@ -23,6 +23,7 @@ type ToolResult = {
   structuredContent?: Record<string, unknown>;
 };
 type ToolHandler<I> = (input: I) => Promise<ToolResult>;
+import { registerPrompts } from "./prompts.ts";
 import { getPageOutput, searchPagesOutput } from "./schemas.ts";
 import type { ToolContext, UpdateVerifiedInput } from "./tools.ts";
 import {
@@ -287,5 +288,6 @@ export function createServer(ctx: ToolContext): McpServer {
     );
   }
 
+  registerPrompts(server, ctx.writesEnabled);
   return server;
 }

@@ -61,6 +61,13 @@ const PROBES: Record<string, Probe[]> = {
   ],
 };
 
+// Prompts carry no page text at all, so any canary in a rendered prompt is a leak.
+const PROMPT_PROBES: Record<string, Record<string, string>> = {
+  ingest_source: { target: "docs:ch01.md" },
+  reverify_stale_pages: { source: "docs" },
+  answer_with_citations: { question: "radiative forcing" },
+};
+
 // Declared fields that name a whole author-written object rather than one text value.
 // pages_by_change is keyed by accreta's four doubt levels, and every value under them is a page path.
 // cited_paths is keyed by page path, so its keys are page text as well as its values.
@@ -271,6 +278,8 @@ describe("every tool response, against pages that try to give instructions", () 
   const readErrors: string[] = [];
   let capabilities: Record<string, unknown> = {};
   let lastWrite: unknown;
+  const prompts: string[] = [];
+  const promptLeaks: string[] = [];
 
   beforeAll(async () => {
     // Writes on, so the write tool is enumerated and swept like the rest.
@@ -314,15 +323,31 @@ describe("every tool response, against pages that try to give instructions", () 
         declaredBy.set(tool.name, declared);
         shapesBy.set(tool.name, shapes);
       }
+      for (const prompt of (await client.listPrompts()).prompts) {
+        prompts.push(prompt.name);
+        const rendered = await client.getPrompt({
+          name: prompt.name,
+          arguments: PROMPT_PROBES[prompt.name],
+        });
+        for (const [path, value] of strings(rendered)) {
+          for (const match of value.matchAll(CANARY))
+            promptLeaks.push(`${prompt.name} ${path} ${match[1]}`);
+        }
+      }
     } finally {
       await client.close();
       ctx.db.close();
     }
   });
 
-  test("the server exposes tools only, so no other surface bypasses this sweep", () => {
+  test("the server exposes tools and prompts only, so no other surface bypasses this sweep", () => {
     expect(capabilities.resources).toBeUndefined();
-    expect(capabilities.prompts).toBeUndefined();
+    expect(prompts.filter((name) => !(name in PROMPT_PROBES))).toEqual([]);
+  });
+
+  test("no rendered prompt carries page text", () => {
+    expect(prompts.length).toBeGreaterThan(0);
+    expect(promptLeaks).toEqual([]);
   });
 
   test("the write probes reach a confirmed write, so the write's reply is swept too", () => {
