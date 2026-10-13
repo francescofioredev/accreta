@@ -50,6 +50,8 @@ The gap is not a measurement error: the assessments are modelling different proc
 resolution is attempted here.
 ```
 
+The findings it names link back to it with `discussed_in`.
+
 Note what the page does *not* do. It does not decide. It names the disagreement, cites both
 sides, and — where it can be established from the sources — says what the disagreement is
 about. "The gap is not a measurement error" is itself a claim and needs its own citation if

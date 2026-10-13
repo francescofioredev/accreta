@@ -108,8 +108,8 @@ describe("composeConstitution", () => {
       for (const phrase of [
         "Quote each target",
         "A field reads from the page it is on",
-        "the one writing the contested page\nrecords it inline",
-        "whoever finds it first, after searching",
+        "in the page whose claim is contested; that page's writer does",
+        "Search for one first; if none\nexists, the first writer to find the disagreement writes it",
         "An absence has no locator",
         "cite the document that would list\nit",
       ]) {
@@ -122,7 +122,8 @@ describe("composeConstitution", () => {
     }
     const codebase = composeConstitution({ preset: "codebase" });
     expect(codebase).toContain("consumed_by # what this page's subject calls");
-    expect(codebase).toContain("goes inline\n(rule 3)");
+    const research = composeConstitution({ preset: "research" });
+    expect(research).toContain("link back to it with `discussed_in`");
   });
 
   test("the page example links two targets (#271)", () => {

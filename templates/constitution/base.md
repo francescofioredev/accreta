@@ -65,11 +65,11 @@ No reconciliation is attempted here; the disagreement is the current state of th
 A knowledge base that presents contested things as settled is worse than one that says
 nothing, because it is confidently wrong and reads as authoritative.
 
-Record it inline, in the page whose claim is contested. It gets a page of its own only if the
-vocabulary has a type for disagreements, like research's `contradiction`, and it spans pages or
-matters in its own right; those pages link to it. Search first: link to an existing record
-rather than write a second. When writers split the work, the one writing the contested page
-records it inline; a page of its own goes to whoever finds it first, after searching.
+Record it inline, in the page whose claim is contested; that page's writer does. It gets a
+page of its own only if the vocabulary has a type for disagreements, like research's
+`contradiction`, and it spans pages or matters in its own right. Search for one first; if none
+exists, the first writer to find the disagreement writes it, and the contested pages link to
+it.
 
 ---
 

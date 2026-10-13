@@ -18,9 +18,9 @@ page_types:
 
 link_fields:
   - consumers # what calls this page's subject
-  - consumed_by # what this page's subject calls, despite the name
-  - delegates_to # what this hands work to
-  - implements # the interface or contract this realizes
+  - consumed_by # what this page's subject calls; the inverse of `consumers`
+  - delegates_to # what this page's subject hands work to
+  - implements # the interface or contract this page's subject realizes
   - supersedes
   - superseded_by
   - related
@@ -65,11 +65,6 @@ untouched by a hundred commits is not stale.
 **Beware the rename.** A moved or renamed file shows up as a change to both paths. The page
 is usually still correct and the citation is not; fix the path rather than re-verifying the
 whole page.
-
-## Disagreements
-
-No `contradiction` type here, so a disagreement, such as code against its docs, goes inline
-(rule 3).
 
 ## Concepts are where the value is
 
