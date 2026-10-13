@@ -1374,6 +1374,7 @@ describe("accreta doctor", () => {
 
     await cli("doctor");
     expect(stdout().match(/has no \{rev\}/g)).toHaveLength(1);
+    expect(stdout()).toContain("accreta cite");
   });
 
   test("the default provenance format is not flagged for its revision", async () => {
@@ -1381,7 +1382,7 @@ describe("accreta doctor", () => {
     output = [];
 
     await cli("doctor");
-    expect(stdout()).not.toContain("{rev}");
+    expect(stdout()).not.toContain("unpinned:");
   });
 
   test("a provenance format footnotes cannot be read back through is flagged", async () => {

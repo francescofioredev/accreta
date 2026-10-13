@@ -67,7 +67,7 @@ export async function cite(
   const template = compileCitationTemplate(format);
   if (!template.ok) throw new Error(template.reason);
   const read = template.template.read(footnote);
-  // A format may leave out {rev} or {locator}; the footnote then cannot carry them, by choice.
+  // A format may leave out {rev} or {locator}, so the footnote cannot carry them; lint flags no {rev}.
   const shown = format.includes("{locator}") ? parts : { sourceId, path };
   const footnoteMismatch =
     differingPart(shown, read) ??

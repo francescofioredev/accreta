@@ -681,6 +681,8 @@ describe("lintCitations on footnotes", () => {
     );
     expect(unpinned).toHaveLength(1);
     expect(unpinned[0]?.path).toBe("accreta.config.yaml");
+    // Adding {rev} alone stops footnotes written without one from indexing as citations (#249).
+    expect(unpinned[0]?.detail).toContain("accreta cite");
   });
 
   test("the default format names a revision", () => {

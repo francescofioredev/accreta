@@ -39,7 +39,10 @@ export async function doctor(ctx: CommandContext, version: string): Promise<numb
   }
   if (!workspace.config.provenanceFormat.includes("{rev}")) {
     ctx.out("  unpinned: provenance.format has no {rev}, so no footnote names its revision");
-    ctx.out(`    → add {rev}: "${DEFAULT_CONFIG.provenanceFormat}"`);
+    ctx.out(`    → add {rev} (default: "${DEFAULT_CONFIG.provenanceFormat}")`);
+    ctx.out(
+      "    → then re-cite existing footnotes with `accreta cite`: until then they may not read as citations",
+    );
   }
 
   ctx.out("\nruntime");

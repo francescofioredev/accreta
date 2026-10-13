@@ -141,7 +141,8 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
     findings.push({
       kind: "unpinned-provenance-format",
       path: "accreta.config.yaml",
-      detail: `provenance.format "${config.provenanceFormat}" has no {rev}, so no footnote names the revision it was checked against`,
+      detail:
+        "provenance.format has no {rev}, so no footnote names its revision; add {rev}, then re-cite existing footnotes with `accreta cite`, as until then they may not read as citations",
     });
   }
 
