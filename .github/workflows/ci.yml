@@ -172,9 +172,18 @@ jobs:
         if: ${{ !cancelled() }}
         run: bun run test
 
-      - name: TEMPORARY fail one supported cell to prove the aggregate fails
-        if: ${{ matrix.os == 'macos-latest' && matrix.runtime.bun == '1.4.0' }}
-        run: exit 1
+      # #244: on Windows a spawn may run a git.exe from its cwd before the one on PATH.
+      # A renamed node.exe answers `--version` with a Node version, real git with "git version".
+      - name: Which git a spawn in a source root runs
+        if: ${{ runner.os == 'Windows' && !cancelled() }}
+        env:
+          PLANTED_ROOT: ${{ runner.temp }}\planted-git
+        run: |
+          mkdir -p "$(cygpath -u "$PLANTED_ROOT")"
+          cp "$(cygpath -u "$(node -p process.execPath)")" "$(cygpath -u "$PLANTED_ROOT")/git.exe"
+          script='require("node:child_process").spawn("git", ["--version"], { cwd: process.env.PLANTED_ROOT, stdio: "inherit" })'
+          echo "node: $(node -e "$script")"
+          echo "bun:  $(bun -e "$script")"
 
   # One stable name to require on main, however the matrix changes.
   runtime-matrix:
