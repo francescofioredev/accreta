@@ -213,10 +213,18 @@ export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport)
   // Reported separately because "I cannot tell" is not "out of date", and
   // collapsing them would misrepresent what the system actually knows.
   if (report.unresolvable.length > 0) {
-    ctx.out(`  ${report.unresolvable.length} revision(s) this source cannot place:`);
+    // Each page once, as in `pages_unplaceable`: one page can rest on two such revisions.
+    const pageCount = distinctPages(report.unresolvable);
+    const revisions = report.unresolvable.length;
+    ctx.out(`  ${pageCount} page(s) rest on ${revisions} revision(s) this source cannot place:`);
     for (const entry of report.unresolvable) {
-      ctx.out(`    ${entry.revision} — ${entry.pages.length} page(s)`);
+      ctx.out(`    ${entry.revision}:`);
+      for (const path of entry.pages) {
+        ctx.out(`      ${path} (${entry.citedOnly?.includes(path) ? "cited" : "verified"})`);
+      }
     }
+    ctx.out("    a shallow clone or rewritten history does this: fetch the full history,");
+    ctx.out("    or re-verify these pages from scratch");
   }
   printUnverifiable(ctx, report);
   if (report.stale.length === 0 && report.unresolvable.length === 0) {
