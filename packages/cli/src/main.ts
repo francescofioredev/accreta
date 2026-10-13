@@ -187,6 +187,8 @@ function parseArgs(argv: string[]): ParsedArgs & {
       continue;
     }
     if (arg === "--preset") {
+      // A second --preset once silently replaced the first.
+      if (preset !== undefined) problems.push("--preset is given once; compose with --preset a,b.");
       preset = value();
       continue;
     }

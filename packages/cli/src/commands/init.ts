@@ -102,18 +102,26 @@ function describePresets(names: readonly string[]): string {
     : `the ${quoted.slice(0, -1).join(", ")} and ${quoted.at(-1)} presets`;
 }
 
-function renderConfig(names: readonly string[], vocabulary: PresetVocabulary): string {
-  const list = (items: readonly string[]) => items.map((item) => `  - ${item}\n`).join("");
+// JSON's double-quoted string is valid YAML, so it holds anything a bare scalar cannot.
+function scalar(value: string): string {
+  const plain =
+    /^[A-Za-z_][\w./-]*$/.test(value) && !/^(true|false|null|yes|no|on|off)$/i.test(value);
+  return plain ? value : JSON.stringify(value);
+}
+
+const list = (items: readonly string[]) => items.map((item) => `  - ${scalar(item)}\n`).join("");
+
+export function renderConfig(names: readonly string[], vocabulary: PresetVocabulary): string {
   return `# The vocabulary of this knowledge base — ${describePresets(names)}.
 
-knowledge_base: ${vocabulary.knowledgeBase}
+knowledge_base: ${scalar(vocabulary.knowledgeBase)}
 
 page_types:
 ${list(vocabulary.pageTypes)}
 link_fields:
 ${list(vocabulary.linkFields)}
 provenance:
-  format: "${vocabulary.provenanceFormat}"
+  format: ${JSON.stringify(vocabulary.provenanceFormat)}
 `;
 }
 
@@ -167,6 +175,7 @@ export function init(ctx: CommandContext, options: InitOptions = {}): number {
 
   let presets: Preset[] = [];
   let config = CONFIG_TEMPLATE;
+  let knowledgeBase = "knowledge";
   if (options.preset !== undefined) {
     const parsed = parsePresets(options.preset);
     if ("error" in parsed) {
@@ -182,6 +191,7 @@ export function init(ctx: CommandContext, options: InitOptions = {}): number {
       return 2;
     }
     config = renderConfig(presets, composed.vocabulary);
+    knowledgeBase = composed.vocabulary.knowledgeBase;
   }
 
   if (existsSync(configPath)) {
@@ -189,8 +199,12 @@ export function init(ctx: CommandContext, options: InitOptions = {}): number {
     return 1;
   }
 
+  const agentFile = options.agentFile ?? "AGENTS.md";
+  // Read before the first write: a missing template must not leave half an init behind.
+  const constitution = composeConstitution({ presets, filename: agentFile });
+
   writeFileSync(configPath, config, "utf-8");
-  mkdirSync(join(root, "knowledge"), { recursive: true });
+  mkdirSync(join(root, knowledgeBase), { recursive: true });
   mkdirSync(join(root, "sources"), { recursive: true });
 
   const examplePath = join(root, "sources", "example.yaml");
@@ -200,13 +214,12 @@ export function init(ctx: CommandContext, options: InitOptions = {}): number {
   // The constitution is written only if nothing is there to overwrite. An
   // existing AGENTS.md or CLAUDE.md is somebody's work, and init is not the
   // place to discover that the hard way.
-  const agentFile = options.agentFile ?? "AGENTS.md";
   const agentPath = join(root, agentFile);
   if (existsSync(agentPath)) {
     ctx.err(`${agentFile} already exists. Not overwriting it.`);
     ctx.err(`The composed constitution would have gone there; write it by hand if you want it.`);
   } else {
-    writeFileSync(agentPath, composeConstitution({ presets, filename: agentFile }), "utf-8");
+    writeFileSync(agentPath, constitution, "utf-8");
   }
 
   ctx.out(`Created ${CONFIG_FILENAME}, knowledge/, sources/ and ${agentFile}.`);

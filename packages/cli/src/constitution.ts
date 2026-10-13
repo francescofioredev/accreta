@@ -32,6 +32,7 @@ const GENERATED_HEADER = `<!--
 export function composeConstitution(options: ComposeOptions = {}): string {
   const base = readTemplate("base.md");
   const parts = [GENERATED_HEADER, "", base];
+  if (options.preset && options.presets) throw new Error("Pass preset or presets, not both.");
   const presets = [...new Set(options.presets ?? (options.preset ? [options.preset] : []))];
 
   for (const preset of presets) {
