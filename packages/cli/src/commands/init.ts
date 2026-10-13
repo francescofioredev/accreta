@@ -136,5 +136,6 @@ export function init(ctx: CommandContext, options: InitOptions = {}): number {
   ctx.out(`Created ${CONFIG_FILENAME}, knowledge/, sources/ and ${agentFile}.`);
   if (preset) ctx.out(`Vocabulary and constitution use the "${preset}" preset.`);
   ctx.out("Describe a source in sources/, then run `accreta reindex`.");
+  ctx.out("To connect an agent: accreta mcp install --client <claude|cursor|codex|vscode>");
   return 0;
 }

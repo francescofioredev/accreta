@@ -43,8 +43,12 @@ Usage: accreta <command> [arguments]
                            Before reading, cite the file and keep its revision; after
                            writing, cite the place with --expect-revision <rev>, which
                            fails if the source has moved since
+  mcp                      Start the MCP server on stdio; an agent client runs this
+  mcp install --client <claude|cursor|codex|vscode> [--scope project|user]
+                           Add that server to the client's config (--force replaces
+                           an accreta entry that differs)
 
-  --json                   On lint, search, show, consumers, canonical and cite: print
+  --json                  On lint, search, show, consumers, canonical and cite: print
                            the JSON the matching MCP tool returns
   --limit <n>, --cursor <c>
                            On lint, consumers and canonical: print one page of at most
@@ -287,7 +291,7 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
     case "cite":
       return cite(ctx, positional[0] ?? "", { json, expectRevision: parsed.expectRevision });
     case "mcp":
-      return mcp(ctx, positional);
+      return mcp(ctx, rest);
     default:
       ctx.err(`Unknown command "${command}".\n`);
       ctx.err(USAGE);

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { checkConfig, compileCitationTemplate, DEFAULT_CONFIG, sqliteSupport } from "@accreta/core";
 import { KNOWN_TYPES, kindFor, readDeclarationFiles, stateDirFor } from "@accreta/adapters";
 import { CONFIG_FILENAME, findWorkspace } from "../workspace.ts";
+import { reportMcp } from "./mcp-config.ts";
 import { reportPreflight, type CommandContext } from "./shared.ts";
 import { compareVersions, findInstalledSkills, SKILL_NAME } from "./skill-floor.ts";
 
@@ -92,12 +93,7 @@ export async function doctor(ctx: CommandContext, version: string): Promise<numb
     if (preflight.reachable === "no") exitCode = 1;
   }
 
-  ctx.out("\nmcp");
-  ctx.out(
-    mentionsAccretaServer(workspace.root)
-      ? "  ok: .mcp.json in this workspace names accreta's server"
-      : "  unknown: no .mcp.json here names accreta's server — the agent may be configured elsewhere",
-  );
+  if (reportMcp(ctx, workspace.root)) exitCode = 1;
 
   reportSkill(ctx, version);
 
@@ -137,19 +133,5 @@ function reportSkill(ctx: CommandContext, version: string): void {
     } else {
       ctx.out(`  ok: ${skill.where} found, requires ${skill.floor.requires}`);
     }
-  }
-}
-
-/** Only this workspace's file. An agent configured elsewhere is invisible, and saying so is the point. */
-function mentionsAccretaServer(root: string): boolean {
-  const path = join(root, ".mcp.json");
-  if (!existsSync(path)) return false;
-  try {
-    const parsed = JSON.parse(readFileSync(path, "utf-8")) as {
-      mcpServers?: Record<string, unknown>;
-    };
-    return Object.keys(parsed.mcpServers ?? {}).some((name) => name.includes("accreta"));
-  } catch {
-    return false;
   }
 }
