@@ -335,6 +335,21 @@ describe("GitSource scoped to paths", () => {
     expect(await wholeRepo.revision()).not.toBe(before);
   });
 
+  test("locate reads a declared path however it is spelled", async () => {
+    for (const paths of [["docs"], ["./docs/"], ["docs/a.md"], ["."]]) {
+      expect(await scoped(paths).locate("docs/a.md")).toEqual({ verdict: "found" });
+    }
+    expect(await scoped(["doc"]).locate("docs/a.md")).toMatchObject({
+      verdict: "missing",
+      part: "path",
+    });
+  });
+
+  test("locate cannot tell for a scope written as a pattern", async () => {
+    // Git expands the pattern for revision(); answering `missing` here would report a citation as broken.
+    expect(await scoped(["docs/*.md"]).locate("docs/a.md")).toMatchObject({ verdict: "unknown" });
+  });
+
   test("paths that have no commits yet resolve to HEAD rather than failing", async () => {
     const scopedSource = scoped(["nothing/here"]);
     expect(await scopedSource.revision()).toMatch(/^[0-9a-f]{40}$/);

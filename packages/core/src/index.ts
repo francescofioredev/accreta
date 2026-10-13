@@ -43,6 +43,7 @@ export {
   UNPINNED_REVISION,
   DelegatedSourceError,
   UnknownRevisionError,
+  countLines,
   formatCanonicalSource,
   formatCitation,
   parseCitation,

@@ -214,6 +214,13 @@ export function parseLineLocator(locator: string): readonly [start: number, end:
   return [start, end];
 }
 
+/** Lines a line locator can address: a final newline ends the last line, as git counts them. */
+export function countLines(text: string): number {
+  if (text === "") return 0;
+  const lines = text.split("\n").length;
+  return text.endsWith("\n") ? lines - 1 : lines;
+}
+
 /** A `canonical_source` pointer, split into the parts a check can act on. */
 export interface ParsedCitation {
   sourceId: string;

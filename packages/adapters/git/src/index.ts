@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { constants } from "node:os";
-import { relative, resolve, sep } from "node:path";
+import { posix, relative, resolve, sep } from "node:path";
 import {
+  countLines,
   formatCitation,
   parseLineLocator,
   resolveInside,
@@ -236,8 +237,28 @@ export class GitSource implements SourceAdapter {
       };
     }
 
+    const scoped = relative(resolve(this.root), full).split(sep).join("/");
+    // `revision()` and `changedSince()` see only `paths`, so a citation outside them could never drift.
+    if (this.paths.length > 0) {
+      const scope = this.paths.map((p) => posix.normalize(p).replace(/\/+$/, ""));
+      const pattern = scope.find((p) => /[*?[\\]/.test(p) || p.startsWith(":"));
+      if (pattern !== undefined) {
+        return {
+          verdict: "unknown",
+          detail: `scope path "${pattern}" is a pattern, and locate matches declared paths literally`,
+        };
+      }
+      if (!scope.some((p) => p === "." || scoped === p || scoped.startsWith(`${p}/`))) {
+        return {
+          verdict: "missing",
+          part: "path",
+          detail: `${path} is outside the declared paths (${this.paths.join(", ")}) of source "${this.id}"`,
+        };
+      }
+    }
+
     // Joined before the first await, so every locate issued together shares one `git status`.
-    const state = this.workingState(relative(resolve(this.root), full).split(sep).join("/"));
+    const state = this.workingState(scoped);
     state.catch(() => {});
 
     let text: string;
@@ -289,7 +310,7 @@ export class GitSource implements SourceAdapter {
       };
     }
 
-    const lines = text.split("\n").length;
+    const lines = countLines(text);
     if (range[1] > lines) {
       return {
         verdict: "missing",

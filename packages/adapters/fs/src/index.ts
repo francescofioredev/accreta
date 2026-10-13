@@ -16,8 +16,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { basename, dirname, join, relative, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import {
+  countLines,
   formatCitation,
   parseLineLocator,
   resolveInside,
@@ -252,6 +253,21 @@ function scanTree(root: string, extensions: readonly string[]): [string, number]
   return out;
 }
 
+const skipsDirectory = (name: string) => name === "node_modules" || name.startsWith(".");
+
+const keepsFile = (name: string, extensions: readonly string[]) =>
+  extensions.length === 0 || extensions.some((e) => name.endsWith(e));
+
+/** Why `scan()` would not list this root-relative path, or null when it would. */
+function outOfScope(path: string, extensions: readonly string[]): string | null {
+  const dirs = path.split("/");
+  const name = dirs.pop() ?? "";
+  if (dirs.some(skipsDirectory)) return "is under a hidden or node_modules directory";
+  if (!keepsFile(name, extensions))
+    return `is outside the declared extensions (${extensions.join(", ")})`;
+  return null;
+}
+
 function walk(
   root: string,
   dir: string,
@@ -267,12 +283,12 @@ function walk(
   for (const entry of entries) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
+      if (skipsDirectory(entry.name)) continue;
       walk(root, full, extensions, into);
       continue;
     }
     if (!entry.isFile()) continue;
-    if (extensions.length > 0 && !extensions.some((e) => entry.name.endsWith(e))) continue;
+    if (!keepsFile(entry.name, extensions)) continue;
     const path = relative(root, full);
     into.push([sep === "/" ? path : path.split(sep).join("/"), statSync(full).mtimeMs]);
   }
@@ -414,6 +430,17 @@ export class FsSource implements SourceAdapter {
       };
     }
 
+    // `revision()` never sees what `scan()` skips, so a citation there could never drift.
+    const scoped = relative(resolve(this.root), full).split(sep).join("/");
+    const outside = outOfScope(scoped, this.extensions);
+    if (outside) {
+      return {
+        verdict: "missing",
+        part: "path",
+        detail: `${path} ${outside} of source "${this.id}"`,
+      };
+    }
+
     let text: string;
     try {
       text = await readFile(full, "utf-8");
@@ -436,7 +463,7 @@ export class FsSource implements SourceAdapter {
       };
     }
 
-    const lines = text.split("\n").length;
+    const lines = countLines(text);
     if (range[1] > lines) {
       return {
         verdict: "missing",

@@ -12,6 +12,7 @@ import { lint, lintCitations } from "../src/query/lint.ts";
 import { countPagesCiting } from "../src/query/citing.ts";
 import { requireTable, StaleIndexError } from "../src/query/tables.ts";
 import {
+  countLines,
   parseCitation,
   parseLineLocator,
   type LocationVerdict,
@@ -427,6 +428,20 @@ describe("parseLineLocator", () => {
   });
 });
 
+describe("countLines", () => {
+  test("a final newline ends the last line rather than opening another", () => {
+    expect(countLines("one\ntwo\n")).toBe(2);
+    expect(countLines("one\ntwo")).toBe(2);
+    expect(countLines("one\ntwo\nthree\n")).toBe(3);
+  });
+
+  test("an empty file has no lines, and a lone newline is one empty line", () => {
+    expect(countLines("")).toBe(0);
+    expect(countLines("\n")).toBe(1);
+    expect(countLines("\n\n")).toBe(2);
+  });
+});
+
 /** A file-backed source, answering the way `fs` and `git` do. */
 function locateIn(files: Record<string, string>, path: string, locator?: string): LocationVerdict {
   const text = files[path];
@@ -438,7 +453,7 @@ function locateIn(files: Record<string, string>, path: string, locator?: string)
   if (!range) {
     return { verdict: "missing", part: "locator", detail: `"${locator}" is not a line range` };
   }
-  const lines = text.split("\n").length;
+  const lines = countLines(text);
   return range[1] > lines
     ? {
         verdict: "missing",

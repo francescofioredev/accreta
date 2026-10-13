@@ -133,6 +133,17 @@ describe("FsSource", () => {
     expect(await fs.revision()).toBe(before);
   });
 
+  test("locate refuses what the scan skips, since no change there moves the revision", async () => {
+    write(".hidden/a.md", "one", 1000);
+    write("node_modules/pkg/a.md", "one", 1000);
+    write("docs/.notes.md", "one", 1000);
+    for (const path of [".hidden/a.md", "node_modules/pkg/a.md"]) {
+      expect(await source().locate(path)).toMatchObject({ verdict: "missing", part: "path" });
+    }
+    // The scan skips hidden directories, not hidden files.
+    expect(await source().locate("docs/.notes.md")).toEqual({ verdict: "found" });
+  });
+
   test("an extension filter narrows what counts as part of the source", async () => {
     write("a.md", "one", 1000);
     write("b.txt", "two", 1000);
