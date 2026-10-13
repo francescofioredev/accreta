@@ -212,7 +212,8 @@ ${body}
     mixedPath: `knowledge/${pageId(1)}.md`,
     // On every page, so find_canonical has n matches: an upper bound, like the hub.
     sharedAlias: "shared concept",
-    lintFindings: 2 * Math.floor(n / 2),
+    // Plus one shared-alias finding for "shared concept".
+    lintFindings: 2 * Math.floor(n / 2) + (n > 1 ? 1 : 0),
     bodyBytes: Buffer.byteLength(body, "utf-8"),
   };
 }

@@ -31,6 +31,7 @@ export const LINT_FINDING_KINDS = [
   "unloaded-source",
   "inconsistent-supersession",
   "unreadable-supersession-fields",
+  "shared-alias",
 ] as const;
 
 export type LintFindingKind = (typeof LINT_FINDING_KINDS)[number];
@@ -85,6 +86,7 @@ interface PageRow {
  * short answer. Lint is where that becomes visible.
  */
 export function lint(db: Database, config: AccretaConfig): LintReport {
+  requireTable(db, "aliases");
   const findings: LintFinding[] = [];
 
   // Links the indexer could not resolve to a path inside the knowledge base.
@@ -191,6 +193,7 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
   }
 
   findings.push(...supersessionFindings(db, config));
+  findings.push(...sharedAliasFindings(db));
 
   return {
     findings,
@@ -199,6 +202,40 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
     citationsUnchecked: 0,
     uncheckedReasons: [],
   };
+}
+
+// ADR-0007 pages cap the number of findings, not their size.
+const MAX_NAMED = 20;
+
+/** Names `findCanonical` resolves to several pages via an alias, compared by stored `nameKey` as it does. */
+function sharedAliasFindings(db: Database): LintFinding[] {
+  const rows = db
+    .prepare(
+      `WITH claims AS (
+         SELECT alias AS key, path, 'alias' AS via FROM aliases
+         UNION
+         SELECT title_key, path, 'title' FROM pages WHERE title_key IN (SELECT alias FROM aliases)
+       )
+       SELECT key, path, via FROM claims
+       WHERE key IN (SELECT key FROM claims GROUP BY key HAVING COUNT(DISTINCT path) > 1)
+       ORDER BY key, path, via`,
+    )
+    .all() as { key: string; path: string; via: string }[];
+  const byKey = new Map<string, Map<string, string[]>>();
+  for (const row of rows) {
+    const pages = byKey.get(row.key) ?? new Map<string, string[]>();
+    pages.set(row.path, [...(pages.get(row.path) ?? []), row.via]);
+    byKey.set(row.key, pages);
+  }
+  return [...byKey].map(([key, pages]) => {
+    const named = [...pages].map(([path, via]) => `${path} (${via.join(", ")})`);
+    const more = named.length > MAX_NAMED ? ` and ${named.length - MAX_NAMED} more` : "";
+    return {
+      kind: "shared-alias",
+      path: pages.keys().next().value!,
+      detail: `"${key}" names ${named.length} pages, so canonical has no single answer: ${named.slice(0, MAX_NAMED).join(", ")}${more}`,
+    };
+  });
 }
 
 interface CitationRow {
