@@ -374,6 +374,18 @@ describe("cite", () => {
     expect(out.delegated).toEqual({ via: "notion", scope: "The design pages.\n" });
   });
 
+  // cite reads a source, not a page: a label that fires where it does not apply teaches the reader to skip it.
+  test("the notice names the source's text, not a page author's", async () => {
+    const fromCli = (await cited(["cite", "repo:dirty.md"]))._provenance;
+    const fromMcp = JSON.parse((await mcp("cite", { target: "repo:dirty.md" })).text)._provenance;
+    for (const block of [fromCli, fromMcp]) {
+      expect(block.page_derived_fields).toEqual(["location.detail"]);
+      expect(block.notice).not.toMatch(/\bpage\b/);
+      expect(block.notice).toContain("source");
+      expect(block.notice).toContain("does not prevent");
+    }
+  });
+
   test("the expected revision passes when the source has not moved", async () => {
     const fromCli = await cli(["cite", "repo:a.md#L1", "--expect-revision", head, "--json"]);
     const fromMcp = await mcp("cite", { target: "repo:a.md#L1", expect_revision: head });
