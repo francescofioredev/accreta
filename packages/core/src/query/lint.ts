@@ -20,6 +20,7 @@ export const LINT_FINDING_KINDS = [
   "unverified-page",
   "dangling-link",
   "unparseable-frontmatter",
+  "unsupported-field-type",
   "unparseable-citation",
   "citation-path-missing",
   "citation-locator-missing",
@@ -72,7 +73,37 @@ interface PageRow {
   type: string;
   canonical_source: string | null;
   last_verified_revision: string | null;
+  frontmatter_json: string;
   frontmatter_error: string | null;
+}
+
+// Fields accreta reads as one string; the indexer stores anything else as absent.
+const SINGLE_VALUE_FIELDS = ["source", "last_verified_revision"] as const;
+
+/** How a value loaded and what to write instead, when it is not the string its field needs. */
+function unsupportedValue(value: unknown): { loadedAs: string; fix: string } | null {
+  if (Array.isArray(value)) {
+    return {
+      loadedAs: "a list",
+      fix: "lists are not supported: name one source in source and last_verified_revision, and cite the others in footnotes",
+    };
+  }
+  return null;
+}
+
+function unsupportedFields(path: string, frontmatterJson: string): Map<string, LintFinding> {
+  const frontmatter = JSON.parse(frontmatterJson) as Record<string, unknown>;
+  const findings = new Map<string, LintFinding>();
+  for (const field of SINGLE_VALUE_FIELDS) {
+    const unsupported = unsupportedValue(frontmatter[field]);
+    if (!unsupported) continue;
+    findings.set(field, {
+      kind: "unsupported-field-type",
+      path,
+      detail: `${field} is ${unsupported.loadedAs}, so accreta reads it as absent; ${unsupported.fix}`,
+    });
+  }
+  return findings;
 }
 
 /**
@@ -123,7 +154,8 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
 
   const pages = db
     .prepare(
-      `SELECT path, type, canonical_source, last_verified_revision, frontmatter_error
+      `SELECT path, type, canonical_source, last_verified_revision, frontmatter_json,
+              frontmatter_error
        FROM pages ORDER BY path`,
     )
     .all() as PageRow[];
@@ -181,7 +213,10 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
         detail: "no canonical_source: this page cites nothing",
       });
     }
-    if (!page.last_verified_revision) {
+    // A field that is there but unreadable gets its own finding, not one saying it is absent.
+    const unsupported = unsupportedFields(page.path, page.frontmatter_json);
+    findings.push(...unsupported.values());
+    if (!page.last_verified_revision && !unsupported.has("last_verified_revision")) {
       findings.push({
         kind: "unverified-page",
         path: page.path,

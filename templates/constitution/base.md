@@ -92,6 +92,11 @@ Two fields do most of the work:
 - **`last_verified_revision`** makes drift detectable. A page without it renders fine and
   cannot be checked — `accreta lint` will tell you so.
 
+**A page drawn from two sources still names one.** `source` and `last_verified_revision` each
+hold a single value: the source the page is mainly about, and the revision of it you verified.
+Cite every other source in footnotes; drift checks those too. A list in either field is not
+supported, and lint reports it.
+
 **`aliases` are not decoration.** They are how a reader who knows a concept by another name
 finds it, and search consults them alongside the title and the body. A page that declares
 `aliases: ["ECS"]`, where "ECS" appears in neither its title nor its text, is reachable by
@@ -255,6 +260,7 @@ an interruption to work around.
 - **unknown page types** — a `type` outside the configured vocabulary
 - **missing provenance** — no `canonical_source`
 - **unverified pages** — no `last_verified_revision`
+- **unsupported field values** — a list in `source` or `last_verified_revision`
 - **citations that point at nothing** — a `canonical_source` or footnote naming a path the
   source does not have, or a locator the source cannot place
 - **citations that name no revision, or one the source never had** — `unknown` where a
