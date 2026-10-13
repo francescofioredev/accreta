@@ -12,6 +12,7 @@ import {
   DelegatedSourceError,
   UNPINNED_REVISION,
   formatCitation,
+  parseCitation,
   type LocationVerdict,
   type SourceAdapter,
 } from "../src/source/adapter.ts";
@@ -416,6 +417,29 @@ describe("cite refuses what lint and drift cannot read back", () => {
           path: "a.md",
         }),
       ).rejects.toThrow(`footnote "docs @ ${rev} · a.md" does not read back`);
+    }
+  });
+
+  test("$ patterns and placeholders in a revision or path are cited, not refused", async () => {
+    const template = compileCitationTemplate(FORMAT);
+    if (!template.ok) throw new Error(template.reason);
+    const cases = [
+      { rev: "$&", path: "a$$b.md", footnote: "docs @ $& · a$$b.md", canonical: "docs:a$$b.md" },
+      {
+        rev: "{path}",
+        path: "{locator}.md",
+        locator: "L1",
+        footnote: "docs @ {path} · {locator}.md#L1",
+        canonical: "docs:{locator}.md#L1",
+      },
+    ];
+    for (const { rev, path, locator, footnote, canonical } of cases) {
+      const target = { sourceId: "docs", path, ...(locator ? { locator } : {}) };
+      const result = await cite(sources(scripted("docs", async () => rev)), FORMAT, target);
+      expect(result.footnote).toBe(footnote);
+      expect(result.canonicalSource).toBe(canonical);
+      expect(template.template.read(footnote)).toEqual({ ...target, revision: rev });
+      expect(parseCitation(canonical)).toEqual(target);
     }
   });
 });

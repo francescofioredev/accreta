@@ -334,9 +334,10 @@ export function formatCitation(
   const values: Record<string, string | undefined> = { ...parts };
   // One pass with a function, so a value is never read as a `$` pattern or filled again.
   return format
-    .replace(FILL_RE, (_, hash: string, placeholder: string) => {
+    .replace(FILL_RE, (match: string, hash: string, placeholder: string) => {
       const value = values[placeholder.slice(1, -1)];
-      return placeholder === "{locator}" && !value ? "" : hash + value;
+      if (placeholder === "{locator}" && !value) return "";
+      return value === undefined ? match : hash + value;
     })
     .trim();
 }

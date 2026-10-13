@@ -97,6 +97,13 @@ describe("formatCitation", () => {
       "a.md:{start}",
     );
   });
+
+  test("leaves a placeholder an untyped caller gave no value for, dropping only {locator}", () => {
+    const parts = { path: "a.md" } as unknown as Parameters<typeof formatCitation>[1];
+    expect(formatCitation("{source} @ {rev} · {path}#{locator}", parts)).toBe(
+      "{source} @ {rev} · a.md",
+    );
+  });
 });
 
 describe("extractFootnotes", () => {
