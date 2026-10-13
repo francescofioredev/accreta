@@ -23,8 +23,9 @@ const USAGE = `accreta — a knowledge base an agent writes and keeps current
 
 Usage: accreta <command> [arguments]
 
-  init [--preset <name>]   Create accreta.config.yaml, knowledge/, sources/ and
-                           a constitution. Presets: codebase, research.
+  init [--preset <names>]  Create accreta.config.yaml, knowledge/, sources/ and
+                           a constitution. Presets: codebase, research; several
+                           compose, comma-separated (--preset codebase,research)
                            --agent-file <name> names the constitution (default AGENTS.md)
   reindex                  Rebuild the index from the knowledge base
   lint                     Report unresolvable links, missing provenance, unknown types
@@ -186,6 +187,8 @@ function parseArgs(argv: string[]): ParsedArgs & {
       continue;
     }
     if (arg === "--preset") {
+      // A second --preset once silently replaced the first.
+      if (preset !== undefined) problems.push("--preset is given once; compose with --preset a,b.");
       preset = value();
       continue;
     }

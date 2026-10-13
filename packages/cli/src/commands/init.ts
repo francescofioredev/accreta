@@ -5,65 +5,139 @@ import { CONFIG_FILENAME } from "../workspace.ts";
 import { composeConstitution, isPreset, PRESETS, type Preset } from "../constitution.ts";
 import type { CommandContext } from "./shared.ts";
 
-function configTemplateFor(preset?: Preset): string {
-  if (preset === "codebase") return CONFIG_CODEBASE;
-  if (preset === "research") return CONFIG_RESEARCH;
-  return CONFIG_TEMPLATE;
+/** What a preset writes into the config. */
+export interface PresetVocabulary {
+  knowledgeBase: string;
+  pageTypes: readonly string[];
+  linkFields: readonly string[];
+  provenanceFormat: string;
 }
 
-const CONFIG_CODEBASE = `# The vocabulary of this knowledge base — the "codebase" preset.
+export const PRESET_VOCABULARY: Readonly<Record<Preset, PresetVocabulary>> = {
+  codebase: {
+    knowledgeBase: "knowledge",
+    pageTypes: [
+      "repository",
+      "module",
+      "api",
+      "usecase",
+      "concept",
+      "decision",
+      "integration",
+      "synthesis",
+    ],
+    linkFields: [
+      "consumers",
+      "consumed_by",
+      "delegates_to",
+      "implements",
+      "supersedes",
+      "superseded_by",
+      "related",
+      "discussed_in",
+    ],
+    provenanceFormat: "{source} @ {rev} · {path}#{locator}",
+  },
+  research: {
+    knowledgeBase: "knowledge",
+    pageTypes: ["source", "concept", "finding", "method", "contradiction", "synthesis"],
+    linkFields: [
+      "cites",
+      "cited_by",
+      "supports",
+      "contradicts",
+      "supersedes",
+      "superseded_by",
+      "related",
+      "discussed_in",
+    ],
+    provenanceFormat: "{source} @ {rev} · {path}#{locator}",
+  },
+};
 
-knowledge_base: knowledge
+export type VocabularyComposition =
+  { vocabulary: PresetVocabulary; clash?: undefined } | { vocabulary?: undefined; clash: string };
+
+/**
+ * The union of several presets' vocabularies, in the order given and then each preset's own.
+ * A shared name dedupes; a setting two presets give different values is refused, never merged.
+ */
+export function composeVocabulary(
+  presets: readonly { name: string; vocabulary: PresetVocabulary }[],
+): VocabularyComposition {
+  const [first, ...rest] = presets;
+  if (!first) return { clash: "No preset to compose." };
+  const settings = [
+    ["knowledge_base", (v: PresetVocabulary) => v.knowledgeBase],
+    ["provenance.format", (v: PresetVocabulary) => v.provenanceFormat],
+  ] as const;
+  for (const [key, read] of settings) {
+    const other = rest.find((preset) => read(preset.vocabulary) !== read(first.vocabulary));
+    if (other) {
+      return {
+        clash:
+          `Presets "${first.name}" and "${other.name}" set ${key} differently ` +
+          `("${read(first.vocabulary)}" and "${read(other.vocabulary)}"). ` +
+          `Not picking one: compose the config by hand.`,
+      };
+    }
+  }
+  const union = (read: (v: PresetVocabulary) => readonly string[]) => [
+    ...new Set(presets.flatMap((preset) => read(preset.vocabulary))),
+  ];
+  return {
+    vocabulary: {
+      ...first.vocabulary,
+      pageTypes: union((v) => v.pageTypes),
+      linkFields: union((v) => v.linkFields),
+    },
+  };
+}
+
+/** `the "a" preset`, or `the "a" and "b" presets`. */
+function describePresets(names: readonly string[]): string {
+  const quoted = names.map((name) => `"${name}"`);
+  return quoted.length === 1
+    ? `the ${quoted[0]} preset`
+    : `the ${quoted.slice(0, -1).join(", ")} and ${quoted.at(-1)} presets`;
+}
+
+// JSON's double-quoted string is valid YAML, so it holds anything a bare scalar cannot.
+function scalar(value: string): string {
+  const plain =
+    /^[A-Za-z_][\w./-]*$/.test(value) && !/^(true|false|null|yes|no|on|off)$/i.test(value);
+  return plain ? value : JSON.stringify(value);
+}
+
+const list = (items: readonly string[]) => items.map((item) => `  - ${scalar(item)}\n`).join("");
+
+export function renderConfig(names: readonly string[], vocabulary: PresetVocabulary): string {
+  return `# The vocabulary of this knowledge base — ${describePresets(names)}.
+
+knowledge_base: ${scalar(vocabulary.knowledgeBase)}
 
 page_types:
-  - repository
-  - module
-  - api
-  - usecase
-  - concept
-  - decision
-  - integration
-  - synthesis
-
+${list(vocabulary.pageTypes)}
 link_fields:
-  - consumers
-  - consumed_by
-  - delegates_to
-  - implements
-  - supersedes
-  - superseded_by
-  - related
-  - discussed_in
-
+${list(vocabulary.linkFields)}
 provenance:
-  format: "{source} @ {rev} · {path}#{locator}"
+  format: ${JSON.stringify(vocabulary.provenanceFormat)}
 `;
+}
 
-const CONFIG_RESEARCH = `# The vocabulary of this knowledge base — the "research" preset.
-
-knowledge_base: knowledge
-
-page_types:
-  - source
-  - concept
-  - finding
-  - method
-  - contradiction
-  - synthesis
-
-link_fields:
-  - cites
-  - cited_by
-  - supports
-  - contradicts
-  - supersedes
-  - superseded_by
-  - related
-  - discussed_in
-
-provenance:
-  format: "{source} @ {rev} · {path}#{locator}"
-`;
+/** Split `--preset a,b` into known, distinct preset names, or say why not. */
+export function parsePresets(value: string): { presets: Preset[] } | { error: string } {
+  const presets: Preset[] = [];
+  for (const item of value.split(",").map((part) => part.trim())) {
+    if (item === "") return { error: `--preset "${value}" has an empty item.` };
+    if (!isPreset(item)) {
+      return { error: `Unknown preset "${item}". Available: ${PRESETS.join(", ")}.` };
+    }
+    if (presets.includes(item)) return { error: `--preset names "${item}" twice.` };
+    presets.push(item);
+  }
+  return { presets };
+}
 
 const CONFIG_TEMPLATE = `# The vocabulary of this knowledge base.
 #
@@ -99,22 +173,38 @@ export function init(ctx: CommandContext, options: InitOptions = {}): number {
   const root = ctx.cwd;
   const configPath = join(root, CONFIG_FILENAME);
 
+  let presets: Preset[] = [];
+  let config = CONFIG_TEMPLATE;
+  let knowledgeBase = "knowledge";
+  if (options.preset !== undefined) {
+    const parsed = parsePresets(options.preset);
+    if ("error" in parsed) {
+      ctx.err(parsed.error);
+      return 2;
+    }
+    presets = parsed.presets;
+    const composed = composeVocabulary(
+      presets.map((name) => ({ name, vocabulary: PRESET_VOCABULARY[name] })),
+    );
+    if (composed.clash !== undefined) {
+      ctx.err(composed.clash);
+      return 2;
+    }
+    config = renderConfig(presets, composed.vocabulary);
+    knowledgeBase = composed.vocabulary.knowledgeBase;
+  }
+
   if (existsSync(configPath)) {
     ctx.err(`${CONFIG_FILENAME} already exists. Leaving it alone.`);
     return 1;
   }
 
-  let preset: Preset | undefined;
-  if (options.preset !== undefined) {
-    if (!isPreset(options.preset)) {
-      ctx.err(`Unknown preset "${options.preset}". Available: ${PRESETS.join(", ")}.`);
-      return 1;
-    }
-    preset = options.preset;
-  }
+  const agentFile = options.agentFile ?? "AGENTS.md";
+  // Read before the first write: a missing template must not leave half an init behind.
+  const constitution = composeConstitution({ presets, filename: agentFile });
 
-  writeFileSync(configPath, configTemplateFor(preset), "utf-8");
-  mkdirSync(join(root, "knowledge"), { recursive: true });
+  writeFileSync(configPath, config, "utf-8");
+  mkdirSync(join(root, knowledgeBase), { recursive: true });
   mkdirSync(join(root, "sources"), { recursive: true });
 
   const examplePath = join(root, "sources", "example.yaml");
@@ -124,17 +214,16 @@ export function init(ctx: CommandContext, options: InitOptions = {}): number {
   // The constitution is written only if nothing is there to overwrite. An
   // existing AGENTS.md or CLAUDE.md is somebody's work, and init is not the
   // place to discover that the hard way.
-  const agentFile = options.agentFile ?? "AGENTS.md";
   const agentPath = join(root, agentFile);
   if (existsSync(agentPath)) {
     ctx.err(`${agentFile} already exists. Not overwriting it.`);
     ctx.err(`The composed constitution would have gone there; write it by hand if you want it.`);
   } else {
-    writeFileSync(agentPath, composeConstitution({ preset, filename: agentFile }), "utf-8");
+    writeFileSync(agentPath, constitution, "utf-8");
   }
 
   ctx.out(`Created ${CONFIG_FILENAME}, knowledge/, sources/ and ${agentFile}.`);
-  if (preset) ctx.out(`Vocabulary and constitution use the "${preset}" preset.`);
+  if (presets.length > 0) ctx.out(`Vocabulary and constitution use ${describePresets(presets)}.`);
   ctx.out("Describe a source in sources/, then run `accreta reindex`.");
   return 0;
 }

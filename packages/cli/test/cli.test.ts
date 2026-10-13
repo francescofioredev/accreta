@@ -99,7 +99,7 @@ describe("accreta init", () => {
   });
 
   test("an unknown preset is refused before anything is written", async () => {
-    expect(await cli("init", "--preset", "nonsense")).toBe(1);
+    expect(await cli("init", "--preset", "nonsense")).toBe(2);
     expect(stderr()).toContain("Unknown preset");
     expect(existsSync(join(root, "accreta.config.yaml"))).toBe(false);
   });
