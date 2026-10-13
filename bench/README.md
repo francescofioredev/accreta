@@ -194,13 +194,32 @@ every git report takes this path. Without diffs, the report lists only pages and
 | with diffs, 2 revisions, 2 citations per page  | 45,734  | 397      | 76       |
 | without diffs, 1 revision                      | 7,316   | 40       | 38       |
 | without diffs, 2 revisions                     | 9,345   | 40       | 76       |
+| with diffs, cited-only, 1 revision             | 33,439  | 361      | 38       |
+| with diffs, cited-only, 2 revisions            | 51,568  | 517      | 76       |
+| without diffs, cited-only, 1 revision          | 14,193  | 176      | 38       |
+| without diffs, cited-only, 2 revisions         | 18,299  | 216      | 76       |
 
-One revision is what a git ingest leaves: every page verified in one run records the same HEAD.
-The two-revision cases make growth by revision, and by citations times changed paths, show.
+Bytes of the text block, darwin arm64, Bun 1.4.2. One revision is what a git ingest leaves:
+every page verified in one run records the same HEAD. The two-revision cases, which also cite
+two paths per page, make growth by revision, and by citations times changed paths, show.
+
+In the cited-only rows, the 100-page base alternates: every odd page belongs to another source
+and cites this one through a footnote pinned at a stale revision, and both kinds of page spread
+over every revision. The 100 extra pages are all cited-only, so per page is what one cited-only
+page costs. Half of the cited-only pages also point their `canonical_source` at the lines their
+footnote cites. Those pages are listed in `cited_only`, and without diffs `cited_paths` names
+the changed paths each one cites. The benchmark checks both against what it generated, so the
+gate counts each changed path once per stale revision, once per listed citation and once per
+cited-only page that cites it. A field added to every cited-only page fails once it costs more
+than 10% of its per-page figure: 18 B and 22 B without diffs, 36 B and 52 B with diffs, at one
+and two revisions.
+
 Each of these was reproduced by rewriting the response at run time, and each fails the gate:
 
 - copying the changed paths into every page (the multiplier ADR-0007 removed);
 - copying them onto every citation;
+- copying them onto every cited-only page;
+- adding the revision to every citation of a cited-only page, with diffs (+39 B per page);
 - adding a field for every page.
 
 A response that grows on purpose raises its budget in the same pull request, where a reviewer
