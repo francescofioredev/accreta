@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { loadSources, readDeclarationFiles } from "@accreta/adapters";
 import { COMMAND_ARGS } from "../src/commands/shared.ts";
 
 const SKILL = readFileSync(
@@ -42,4 +45,32 @@ test("the working loops are in the skill", () => {
     expect.arrayContaining(["cite", "drift", "canonical", "search", "show"]),
   );
   expect(SKILL).toContain("--expect-revision");
+});
+
+test("the git source example declares paths and loads through the sources/ loader", () => {
+  const example = [...SKILL.matchAll(/^```yaml\n([\s\S]*?)^```/gm)]
+    .map((m) => m[1]!)
+    .find((yaml) => /^type: git$/m.test(yaml));
+  expect(example).toBeDefined();
+
+  const root = mkdtempSync(join(tmpdir(), "accreta-skill-"));
+  try {
+    mkdirSync(join(root, "sources"));
+    writeFileSync(join(root, "sources", "example.yaml"), example!, "utf-8");
+    const [entry] = readDeclarationFiles(root);
+    if (!entry || "error" in entry) throw new Error(`did not parse: ${JSON.stringify(entry)}`);
+    const { paths } = entry.declaration.options;
+    expect(Array.isArray(paths) && paths.length > 0).toBe(true);
+    expect((paths as unknown[]).every((p) => typeof p === "string" && p.length > 0)).toBe(true);
+
+    const { sources, unloaded } = loadSources({
+      root,
+      citationFormat: "{source} @ {rev}",
+      stateDir: join(root, ".accreta"),
+    });
+    expect(unloaded).toEqual([]);
+    expect([...sources.keys()]).toEqual([entry.declaration.id]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
