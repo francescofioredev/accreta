@@ -77,13 +77,12 @@ describe("searchPages", () => {
   });
 
   test("a type filter narrows the results", () => {
-    expect(searchPages(db, { query: "flux OR prose", types: ["note"] }).map((h) => h.type)).toEqual(
-      ["note"],
-    );
+    const hits = searchPages(db, { query: "flux OR prose", syntax: "fts5", types: ["note"] });
+    expect(hits.map((h) => h.type)).toEqual(["note"]);
   });
 
   test("a source filter narrows the results", () => {
-    const hits = searchPages(db, { query: "flux OR prose", source: "ipcc" });
+    const hits = searchPages(db, { query: "flux OR prose", syntax: "fts5", source: "ipcc" });
     expect(hits.map((h) => h.source)).toEqual(["ipcc"]);
   });
 
@@ -107,7 +106,93 @@ describe("searchPages", () => {
   });
 
   test("the limit is honoured and capped", () => {
-    expect(searchPages(db, { query: "flux OR prose", limit: 1 })).toHaveLength(1);
+    expect(searchPages(db, { query: "flux OR prose", syntax: "fts5", limit: 1 })).toHaveLength(1);
+  });
+});
+
+describe("searchPages on a plain query", () => {
+  const paths = (query: string, syntax?: "plain" | "fts5") =>
+    searchPages(db, { query, syntax })
+      .map((h) => h.path.replace("knowledge/notes/", ""))
+      .toSorted();
+
+  beforeEach(() => {
+    const note = (name: string, body: string) =>
+      writePage(`notes/${name}.md`, `---\ntype: note\n---\n\n# ${name}\n\n${body}\n`);
+    note("fired", "Fired pieces are not porous.");
+    note("raw", "Unfired pieces absorb water.");
+    note("finish", "Use glaze or slip on the rim.");
+    note("rim", "The rim takes glaze.");
+    note("wedge", "Wedge and knead the clay.");
+    note("knead", "Knead the clay, then wedge it.");
+    reindex();
+  });
+
+  test("an uppercase NOT is a word, not a negation", () => {
+    expect(paths("pieces NOT porous")).toEqual(["fired.md"]);
+  });
+
+  test("an uppercase OR is a word, not a union", () => {
+    expect(paths("glaze OR slip")).toEqual(["finish.md"]);
+  });
+
+  test("an uppercase AND is a word, not a conjunction", () => {
+    expect(paths("wedge AND knead")).toEqual(["wedge.md"]);
+  });
+
+  test("lowercase operators are words too", () => {
+    expect(paths("pieces not porous")).toEqual(["fired.md"]);
+    expect(paths("glaze or slip")).toEqual(["finish.md"]);
+    expect(paths("wedge and knead")).toEqual(["wedge.md"]);
+  });
+
+  test("a query that is only an operator searches for that word", () => {
+    expect(paths("NOT")).toEqual(["fired.md"]);
+    expect(paths("OR")).toEqual(["finish.md"]);
+    expect(paths("AND")).toEqual(["wedge.md"]);
+    expect(paths("NEAR")).toEqual([]);
+  });
+
+  test("a double-quoted phrase stays a phrase", () => {
+    expect(paths('"not porous"')).toEqual(["fired.md"]);
+    expect(paths('"porous not"')).toEqual([]);
+    expect(paths('fired "NOT porous"')).toEqual(["fired.md"]);
+  });
+
+  test("FTS5 syntax characters never reach the caller as a syntax error", () => {
+    const queries = [
+      '"',
+      '""',
+      'glaze"',
+      '"unbalanced glaze',
+      "*",
+      "glaze*",
+      "-",
+      "-porous",
+      ":",
+      "title:glaze",
+      "(",
+      "(slip",
+      "slip)",
+      "^rim",
+      "+",
+      "NEAR(glaze slip)",
+      "{title}: glaze",
+      "   ",
+    ];
+    for (const query of queries) {
+      expect(() => searchPages(db, { query })).not.toThrow();
+    }
+    expect(paths("-porous")).toEqual(["fired.md"]);
+    expect(paths("(slip")).toEqual(["finish.md"]);
+    expect(paths('"unbalanced glaze')).toEqual([]);
+    expect(paths("   ")).toEqual([]);
+  });
+
+  test("operators are still there for a caller that opts in", () => {
+    expect(paths("pieces NOT porous", "fts5")).toEqual(["raw.md"]);
+    expect(paths("glaze OR slip", "fts5")).toEqual(["finish.md", "rim.md"]);
+    expect(paths("wedge AND knead", "fts5")).toEqual(["knead.md", "wedge.md"]);
   });
 });
 
