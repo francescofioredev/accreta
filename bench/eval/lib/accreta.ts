@@ -6,7 +6,7 @@ import { openIndex } from "@accreta/core";
 
 export const EVAL_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const REPO = join(EVAL_DIR, "..", "..");
-export const CLI = join(REPO, "packages", "cli", "src", "main.ts");
+export const CLI = join(REPO, "packages", "cli", "src", "bin.ts");
 
 export interface CliRun {
   code: number;
@@ -30,7 +30,10 @@ export function kbAt(root: string, indexPath?: string): Kb {
 /** Run the real CLI as a user would: a new process, the knowledge base named by ACCRETA_ROOT. */
 export function accreta(kb: Kb, ...args: string[]): CliRun {
   const env = { ...process.env, ACCRETA_ROOT: kb.root, ACCRETA_INDEX_PATH: kb.indexPath };
-  const proc = Bun.spawnSync([process.execPath, CLI, ...args], { cwd: kb.root, env });
+  const proc = Bun.spawnSync([process.execPath, "--conditions=@accreta/source", CLI, ...args], {
+    cwd: kb.root,
+    env,
+  });
   return {
     code: proc.exitCode ?? -1,
     stdout: proc.stdout.toString(),
@@ -81,13 +84,13 @@ export function readIndex(kb: Kb): { pages: PageRow[]; footnotes: FootnoteRow[] 
   const db = openIndex(kb.indexPath, { readonly: true });
   try {
     const pages = db
-      .query(
+      .prepare(
         `SELECT path, type, source, canonical_source, last_verified_revision, body
          FROM pages ORDER BY path`,
       )
       .all() as PageRow[];
     const footnotes = db
-      .query(
+      .prepare(
         `SELECT page_path, footnote, line, text, source, revision, path, locator
          FROM citations ORDER BY page_path, line`,
       )
