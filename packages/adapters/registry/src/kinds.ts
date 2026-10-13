@@ -2,7 +2,13 @@ import { existsSync, realpathSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { SourceAdapter, SourceDeclaration } from "@accreta/core";
 import { FsSource, SNAPSHOT_BUDGET_BYTES, snapshotHealth } from "@accreta/adapter-fs";
-import { GitSource, isWorkingTree, scopeProblem, unmatchedPaths } from "@accreta/adapter-git";
+import {
+  GitSource,
+  isWorkingTree,
+  scopeProblem,
+  scopeRefusal,
+  unmatchedPaths,
+} from "@accreta/adapter-git";
 import { DelegatedSource } from "@accreta/adapter-delegated";
 
 export interface SourceContext {
@@ -178,9 +184,19 @@ paths: []
         remedy: "Point `root` at a checkout, or declare it as `type: fs` instead.",
       };
     }
+    // scopeProblem passed, so `paths` is a list of strings or absent.
+    const paths = (d.options.paths as readonly string[] | undefined) ?? [];
+    const refusal = await scopeRefusal(root, paths);
+    if (refusal) {
+      return {
+        reachable: "no",
+        detail: refusal,
+        remedy: "Name directories or files inside `root`, relative to it.",
+      };
+    }
     // The same verdict construction would give, so doctor cannot pass what drift refuses.
-    const refusal = unmatchedPaths(root, stringsOr(d.options.paths) ?? []);
-    if (refusal) return { reachable: "no", detail: refusal };
+    const unmatched = unmatchedPaths(root, paths);
+    if (unmatched) return { reachable: "no", detail: unmatched };
     return { reachable: "yes", detail: `${root} is a git repository` };
   },
 };

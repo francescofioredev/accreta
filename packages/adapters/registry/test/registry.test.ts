@@ -212,11 +212,11 @@ describe("loadSources", () => {
     expect([...sources.keys()]).toEqual(["docs"]);
     const reasons = Object.fromEntries(unloaded.map((u) => [u.id, u.reason]));
     expect(Object.keys(reasons).toSorted()).toEqual(["empty", "number", "scalar", "up"]);
-    expect(reasons.empty).toContain('""');
+    expect(reasons.empty).toContain('paths entry "", which is empty; omit `paths`');
     expect(reasons.up).toContain('"../x"');
     expect(reasons.up).not.toContain('"docs"');
-    expect(reasons.number).toContain("1");
-    expect(reasons.scalar).toContain("list");
+    expect(reasons.number).toContain("paths entry 1, which is not a string");
+    expect(reasons.scalar).toContain("declares `paths` as a string, not a list");
   });
 
   test("a git paths entry that climbs back into the root, or names the root, still loads", () => {
@@ -425,5 +425,18 @@ describe("git preflight", () => {
     const preflight = await kindFor("git")!.preflight(declaration, ctx());
     expect(preflight.reachable).toBe("no");
     expect(preflight.detail).toContain('"../x"');
+  });
+
+  test("reports git's refusal of a pathspec the loader cannot judge", async () => {
+    const init = Bun.spawnSync(["git", "init", "-q"], { cwd: root });
+    expect(init.exitCode).toBe(0);
+    const declaration = {
+      id: "repo",
+      type: "git",
+      options: { root: ".", paths: [":(bogus)docs"] },
+    };
+    const preflight = await kindFor("git")!.preflight(declaration, ctx());
+    expect(preflight.reachable).toBe("no");
+    expect(preflight.detail).toContain("bogus");
   });
 });

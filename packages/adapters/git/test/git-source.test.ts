@@ -20,7 +20,7 @@ import {
   pageChanges,
   UnknownRevisionError,
 } from "@accreta/core";
-import { GitCommandError, GitSource } from "../src/index.ts";
+import { GitCommandError, GitSource, scopeRefusal } from "../src/index.ts";
 
 let root = "";
 
@@ -907,7 +907,29 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
     expect(() => sub(["../other.md"])).toThrow('"../other.md"');
     expect(() => sub(["docs/../../other.md"])).toThrow('"docs/../../other.md"');
     expect(() => sub([""])).toThrow('""');
-    expect(() => sub([join(root, "other.md")])).toThrow("outside the source root");
+    expect(() => sub([":(glob)../*.md"])).toThrow("outside the source root");
+  });
+
+  test("an absolute scope path is refused without quoting it, inside the root or not", () => {
+    for (const path of [join(root, "other.md"), join(root, "sub", "docs")]) {
+      expect(() => sub([path])).toThrow("an absolute path; name it relative to `root`");
+      expect(() => sub([path])).not.toThrow(root);
+    }
+  });
+
+  test("a pathspec anchored at the repository top is refused, an exclusion is not", () => {
+    expect(() => sub([":/docs"])).toThrow('":/docs"');
+    expect(() => sub([":(top)docs"])).toThrow('":(top)docs"');
+    expect(() => sub([":(top,glob)sub/docs/*"])).toThrow("relative to the repository top");
+    expect(() => sub([":(top)sub/docs"])).toThrow("relative to the repository top");
+    expect(() => sub([":(exclude)other.md"])).not.toThrow();
+    expect(() => sub([":!other.md", "docs"])).not.toThrow();
+  });
+
+  test("git's own reading of paths is checked: its refusal, or a match outside the root", async () => {
+    expect(await scopeRefusal(join(root, "sub"), ["docs"])).toBeUndefined();
+    expect(await scopeRefusal(join(root, "sub"), [":(bogus)docs"])).toContain("bogus");
+    expect(await scopeRefusal(join(root, "sub"), [":/other.md"])).toContain("../other.md");
   });
 
   test("paths are relative to the root, and so is what changedSince names", async () => {

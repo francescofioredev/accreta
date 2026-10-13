@@ -157,20 +157,81 @@ function submoduleAbove(root: string, scope: string): string | undefined {
  */
 export function scopeProblem(root: string, paths: unknown): string | undefined {
   if (paths === undefined || paths === null) return undefined;
-  if (!Array.isArray(paths)) return `declares \`paths\` as ${JSON.stringify(paths)}, not a list`;
+  if (!Array.isArray(paths)) return `declares \`paths\` as a ${typeof paths}, not a list`;
   const base = resolve(root);
   for (const entry of paths as unknown[]) {
-    const shown = JSON.stringify(entry) ?? String(entry);
-    if (typeof entry !== "string") return `declares paths entry ${shown}, which is not a string`;
-    if (entry === "") return `declares paths entry "", which is empty; use "." for the whole root`;
-    // Pathspec magic is git's to interpret, and locate already reads it through ls-files.
-    if (entry.startsWith(":")) continue;
-    const inside = relative(base, resolve(base, entry));
+    if (typeof entry !== "string") {
+      return `declares paths entry ${scalarOrType(entry)}, which is not a string`;
+    }
+    if (entry === "")
+      return `declares paths entry "", which is empty; omit \`paths\` for the whole root`;
+    const { top, exclude, pattern } = pathspecMagic(entry);
+    // Not quoted: reasons reach PR comments, and an absolute path names somebody's machine.
+    if (isAbsolute(entry) || isAbsolute(pattern)) {
+      return "declares a paths entry that is an absolute path; name it relative to `root`";
+    }
+    const shown = JSON.stringify(entry);
+    // Citations are relative to the root, so a top-anchored match is one no citation names.
+    if (top && !exclude) {
+      return `declares paths entry ${shown}, which is relative to the repository top; name it relative to \`root\``;
+    }
+    if (exclude) continue;
+    const inside = relative(base, resolve(base, pattern));
     if (inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute(inside)) {
       return `declares paths entry ${shown}, which resolves outside the source root`;
     }
   }
   return undefined;
+}
+
+const scalarOrType = (value: unknown): string =>
+  value === null || typeof value === "number" || typeof value === "boolean"
+    ? String(value)
+    : Array.isArray(value)
+      ? "a list"
+      : `a ${typeof value}`;
+
+/** The `top` and `exclude` magic of a pathspec, short or long form, and the pattern after it. */
+function pathspecMagic(entry: string): { top: boolean; exclude: boolean; pattern: string } {
+  if (!entry.startsWith(":")) return { top: false, exclude: false, pattern: entry };
+  const long = /^:\(([^)]*)\)/.exec(entry);
+  if (long) {
+    const words = long[1]!.split(",").map((word) => word.trim().split(/[:=]/)[0]);
+    return {
+      top: words.includes("top"),
+      exclude: words.includes("exclude"),
+      pattern: entry.slice(long[0].length),
+    };
+  }
+  const short = /^:([/!^]*):?/.exec(entry)!;
+  const signs = short[1]!;
+  return {
+    top: signs.includes("/"),
+    exclude: /[!^]/.test(signs),
+    pattern: entry.slice(short[0].length),
+  };
+}
+
+/**
+ * What git itself makes of `paths` from `root`: its refusal of the pathspec, or a match outside the
+ * root. Run by preflight, since the loader cannot run git and cannot read every kind of magic.
+ */
+export async function scopeRefusal(
+  root: string,
+  paths: readonly string[],
+): Promise<string | undefined> {
+  if (paths.length === 0) return undefined;
+  let out: string;
+  try {
+    out = await git(root, ["ls-files", "-z", "--", ...paths]);
+  } catch (error) {
+    if (!(error instanceof GitCommandError)) throw error;
+    return `git refuses \`paths\`: ${error.stderr.split("\n")[0]}`;
+  }
+  const outside = out.split("\0").find((path) => path.startsWith("../"));
+  return outside === undefined
+    ? undefined
+    : `\`paths\` matches files outside the source root, such as ${outside}`;
 }
 
 /**
