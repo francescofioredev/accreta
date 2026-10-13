@@ -1,6 +1,6 @@
 # ADR-0016: Run on Node 22.16+ and Bun 1.4+, with `node:sqlite` on both
 
-Status: accepted
+Status: accepted, amended 2026-10-13 (numbered parameters, #117)
 Date: 2026-09-29
 
 ## Context
@@ -86,6 +86,7 @@ It reports outcomes and asserts nothing. The same run gave the same result on Bu
 | bind `undefined`                       | throws                    | throws            | throws                    | binds NULL                 |
 | bind `true`                            | throws                    | binds 1           | throws                    | binds 1                    |
 | unknown named key (`$nope`)            | throws                    | throws            | throws                    | ignored                    |
+| bind numbered `?1`                     | throws                    | binds             | binds                     | binds                      |
 | `SELECT "text"` (double-quoted)        | throws `no such column`   | throws            | throws `no such column`   | returns `'text'`           |
 | INTEGER 2^53 + 1                       | throws                    | throws            | throws                    | returns 2^53, rounded      |
 | statement used after `close()`         | throws `finalized`        | throws            | throws `finalized`        | still returns rows         |
@@ -97,9 +98,19 @@ It reports outcomes and asserts nothing. The same run gave the same result on Bu
 `import.meta.main` was also `undefined` on Node 22.17.1 and 23.10.0, and `true` on 22.18.0 and
 22.23.3. Binding `true` also threw on Node 22.23.3.
 
+Binding `?1` threw `column index out of range` on Node 22.14.0, 22.16.0, 22.17.0, 22.17.1,
+22.18.0 and 22.19.0, whether the parameter was used once or twice. It bound on 22.20.0, 22.21.0,
+22.22.0, 22.23.3 and 25.6.0. The probe's numbered-parameter rows were added on 2026-10-13, after
+[#192](https://github.com/francescofioredev/accreta/pull/192) brought in the one `?1` query and
+[#117](https://github.com/francescofioredev/accreta/issues/117) found it failing on Node 22.16.
+
 Under Bun 1.4, `node:sqlite` matches Node on every row that matters. There is one driver and one
 set of rules. The last column is what a two-driver design would have had to make match, and
 the double-quoted literal could not have been.
+
+Numbered parameters are the exception to one set of rules: Bun 1.4 binds `?1` and Node 22.16
+refuses it. CI runs the unit suite under Bun, so a passing test does not show that a query binds
+on Node 22.16.
 
 [`0016-entry/`](0016-entry/) reproduces the bin entry shape. Run `node` or `bun` on
 `entry.mjs` or on `static-entry.mjs`. The directory has four modules:
@@ -195,6 +206,7 @@ invalidation rules.
   truthiness.
 - Rows have a null prototype, which `bun test` equality accepts.
 - Booleans are never bound. Node 22 and Bun 1.4 refuse them, while Node 24 binds them.
+- Parameters are `?` or `$name`, never numbered. Node 22.16 through 22.19 refuse `?1`.
 
 **Spawn git with async `execFile` from `node:child_process`, with an explicit `maxBuffer`.**
 `execFileSync` is rejected: its default 1 MiB buffer threw `ENOBUFS` on every runtime, and it

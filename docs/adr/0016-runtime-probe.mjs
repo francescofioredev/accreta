@@ -49,6 +49,8 @@ probe(
   "unknown named key",
   () => mem.prepare("INSERT INTO t (a) VALUES ($a)").run({ $a: 1, $nope: 2 }).changes,
 );
+probe("numbered parameter ?1", () => mem.prepare("SELECT ?1 AS v").get("x"));
+probe("numbered parameter ?1, used twice", () => mem.prepare("SELECT ?1 AS v, ?1 AS w").get("x"));
 probe("double-quoted string literal", () => mem.prepare(`SELECT "text" AS v`).get());
 probe("INTEGER above 2^53", () => String(mem.prepare("SELECT 9007199254740993 AS n").get().n));
 const stmt = mem.prepare("SELECT 1 AS one");

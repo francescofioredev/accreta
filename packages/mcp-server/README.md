@@ -34,11 +34,13 @@ another — it needs no filesystem access to the knowledge base itself, only to 
 | `check_drift` | Which pages their sources have moved out from under. |
 | `list_recent_changes` | What changed in a source since a revision. |
 | `lint_knowledge_base` | Unresolvable links, missing provenance, unknown page types, and a count of the citations it could not check. Filter by `kinds`. Paged: `count` is the total; follow `nextCursor`. |
+| `cite` | The citation for a place in a source, in this knowledge base's footnote format, pinned to the source's current revision. Read-only. |
 | `update_verified_revision` | Write. Registered only when `ACCRETA_ALLOW_WRITES=1`. |
 
 ## Which fields a page author wrote
 
-The five tools that relay page text return a `_provenance` block naming the fields that carry it:
+Every tool's answer carries a `_provenance` block naming the fields whose text a page author, or a
+source, controls. Some error and early-exit responses leave it out, such as "no page matches":
 
 ```json
 {

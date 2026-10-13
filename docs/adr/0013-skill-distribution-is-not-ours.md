@@ -1,6 +1,6 @@
 # ADR-0013: Skill distribution is not ours to own
 
-Status: accepted
+Status: accepted, amended 2026-10-13 (`doctor` reads the installed skill; see the end)
 Date: 2026-09-08
 
 ## Context
@@ -76,7 +76,8 @@ meets it. Anything worth keeping belongs outside the skills directory.
 that detectable rather than a command failing halfway through a setup. Detectable is not
 detected: nothing in accreta reads an installed skill, so the comparison is the reader's to
 make. Closing that gap — `accreta doctor` finding the installed copy and comparing floors — is
-[#103](https://github.com/francescofioredev/accreta/issues/103).
+[#103](https://github.com/francescofioredev/accreta/issues/103). _Amended 2026-10-13: closed by
+[#169](https://github.com/francescofioredev/accreta/pull/169); see the amendment below._
 
 **A skill is instructions an agent will follow, fetched from a branch that moves.** That is the
 same trust argument the README already makes about pages, and it now applies to the file that
@@ -85,3 +86,47 @@ ships.
 
 **If the channel decays, this is reversible.** The rejected installer is written down above, and
 nothing else in the codebase depends on how the skill arrives.
+
+## Amendment, 2026-10-13: `doctor` reads the installed skill
+
+[#169](https://github.com/francescofioredev/accreta/pull/169) closed #103. `accreta doctor` has
+a `skill` section that finds installed copies of `accreta-setup` and compares each one's
+`metadata.requires` with the CLI's own version. The code is
+`packages/cli/src/commands/skill-floor.ts`; `doctor.ts` prints the result.
+
+**Where it looks.** Four directories, two in the project and two global:
+
+- `.agents/skills/` and `.claude/skills/`, in the current directory and in each parent up to the
+  repository root (the first directory holding `.git`). The walk stops before the home directory,
+  which the global pair covers;
+- `~/.agents/skills/`, and `~/.claude/skills/`, or `$CLAUDE_CONFIG_DIR/skills/` when that is set.
+
+**Why those.** They are where `npx skills` 1.7.0 writes, and where the agents that read them look.
+The skills CLI installs into the directory it runs in. A symlink install, and every agent it calls
+universal, goes to `.agents/skills/`, or `~/.agents/skills/` with `-g`. A copy for Claude Code
+alone goes to `.claude/skills/`. Claude Code and Codex load project skills from every directory up
+to the repository root, so `doctor` walks the same path. This is a fixed list of directories, not
+a table of agents, which this ADR rejected maintaining. A copy installed for one other agent, in
+that agent's own directory, is not found. The PR measured nine installs with `npx skills@1.7.0
+add` (project and `-g`; Claude Code, Cursor, Windsurf, mixed, `--copy`): seven found, and the two
+Windsurf-only installs reported `unknown`.
+
+**What it reports.** For each copy found, counted once even when a symlink and its target are
+both on the path:
+
+- `ok` when the CLI is at or above the floor;
+- `stale` when the skill requires a later release, with the fix: upgrade accreta, or reinstall the
+  skill pinned to this release's tag. `npx skills update` cannot help, since the skill is already
+  ahead of the CLI;
+- `unknown` when no copy is found, when a copy cannot be read (a dangling symlink, no `SKILL.md`,
+  a permission error), when its frontmatter declares no release, or when a directory on the path
+  could not be listed. A copy that cannot be read is reported as found, never as absent.
+
+**It never fails.** The section never changes `doctor`'s exit code, `stale` included. The copy it
+finds may not be the one the agent loads, and finding none proves nothing.
+
+**When the skills CLI moves.** The list follows `npx skills` 1.7.0 and is not read from the CLI.
+If a later release installs somewhere else, `doctor` does not find those copies. With none found
+it reports `unknown`, and the exit code is unchanged. A copy left in a listed directory is still
+reported, against its own floor. The fix is to add the new directory in `skill-floor.ts`.
+Nothing else depends on it, so this stays as reversible as the rest of this ADR.
