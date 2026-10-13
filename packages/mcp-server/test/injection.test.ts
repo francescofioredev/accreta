@@ -42,10 +42,20 @@ const PROBES: Record<string, Probe[]> = {
     { target: "quoting:p#b1" },
   ],
   [WRITE_TOOL]: [
+    // Refused: the page's own source is page text, echoed back.
+    { path: "notes/foreign-source", revision: "deadbeef" },
+    { path: "notes/unsourced", revision: "deadbeef" },
+    // A delegated source is not checked: a dry run, never confirmed.
+    { path: "notes/relayed", revision: "deadbeef" },
+    // Refused: not the revision `docs` is at, which the refusal names.
     { path: "concepts/injected", revision: "deadbeef" },
+    (refused) => ({
+      path: "concepts/injected",
+      revision: (refused as { source_revision?: string }).source_revision,
+    }),
     (dryRun) => ({
       path: "concepts/injected",
-      revision: "deadbeef",
+      revision: (dryRun as { source_revision?: string }).source_revision,
       confirm_token: (dryRun as { confirm_token?: string }).confirm_token,
     }),
   ],
@@ -53,7 +63,12 @@ const PROBES: Record<string, Probe[]> = {
 
 // Declared fields that name a whole author-written object rather than one text value.
 // pages_by_change is keyed by accreta's four doubt levels, and every value under them is a page path.
-const SUBTREE_FIELDS = ["page.frontmatter", "reports[].stale[].pages_by_change"];
+// cited_paths is keyed by page path, so its keys are page text as well as its values.
+const SUBTREE_FIELDS = [
+  "page.frontmatter",
+  "reports[].stale[].pages_by_change",
+  "reports[].stale[].cited_paths",
+];
 
 // Page-derived text unmarked today, as "tool path CHANNEL". The fix belongs in src/tools.ts, not here.
 const KNOWN_UNMARKED: string[] = [];
@@ -73,6 +88,16 @@ const DIFFING_SOURCE: SourceAdapter = {
   pinRevision: () => {},
   touchedSince: async (_revision, _path, locators) =>
     new Map(locators.map((locator) => [locator, { status: "touched" as const }])),
+};
+
+// Stale without per-line diffs, so check_drift names the paths each cited-only page cites.
+const PLAIN_SOURCE: SourceAdapter = {
+  id: "plain",
+  revision: async () => "rev2",
+  changedSince: async () => ["knowledge/notes/CANARY-FILENAME.md"],
+  locate: async () => ({ verdict: "found" }),
+  citation: () => "",
+  pinRevision: () => {},
 };
 
 // A source only the agent can reach, so check_drift lists what waits on it.
@@ -239,6 +264,7 @@ describe("every tool response, against pages that try to give instructions", () 
   const shapesBy = new Map<string, Map<string, Set<string>>>();
   const tools: string[] = [];
   let capabilities: Record<string, unknown> = {};
+  let lastWrite: unknown;
 
   beforeAll(async () => {
     // Writes on, so the write tool is enumerated and swept like the rest.
@@ -246,6 +272,7 @@ describe("every tool response, against pages that try to give instructions", () 
     ctx.sources.set("lines", DIFFING_SOURCE);
     ctx.sources.set("agent", DELEGATED_SOURCE);
     ctx.sources.set("quoting", QUOTING_SOURCE);
+    ctx.sources.set("plain", PLAIN_SOURCE);
     const client = await connect(ctx);
     try {
       capabilities = client.getServerCapabilities() ?? {};
@@ -265,6 +292,7 @@ describe("every tool response, against pages that try to give instructions", () 
           const result = await client.callTool({ name: tool.name, arguments: args });
           const audited = auditResult(result);
           previous = audited.payloads[0];
+          if (tool.name === WRITE_TOOL) lastWrite = previous;
           for (const payload of audited.payloads) shapesOf(payload, "", shapes);
           for (const field of audited.declared) declared.add(field);
           for (const leak of audited.leaks) {
@@ -286,6 +314,10 @@ describe("every tool response, against pages that try to give instructions", () 
   test("the server exposes tools only, so no other surface bypasses this sweep", () => {
     expect(capabilities.resources).toBeUndefined();
     expect(capabilities.prompts).toBeUndefined();
+  });
+
+  test("the write probes reach a confirmed write, so the write's reply is swept too", () => {
+    expect(lastWrite).toMatchObject({ ok: true });
   });
 
   test("every registered tool has a probe", () => {
