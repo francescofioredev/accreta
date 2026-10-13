@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { constants } from "node:os";
 import { relative, resolve, sep } from "node:path";
@@ -27,12 +27,17 @@ export interface GitSourceOptions {
   paths?: readonly string[];
 }
 
-/** Run a git command in the repository, returning stdout. */
-function git(root: string, args: string[]): Promise<string> {
+function gitEnv(): NodeJS.ProcessEnv {
   // accreta only reads; without this `status` rewrites .git/index and a user's commit can hit index.lock.
   const env: NodeJS.ProcessEnv = { ...process.env, GIT_OPTIONAL_LOCKS: "0" };
   // GIT_DIFF_OPTS would override the -U0 that hunk parsing depends on.
   delete env.GIT_DIFF_OPTS;
+  return env;
+}
+
+/** Run a git command in the repository, returning stdout. */
+function git(root: string, args: string[]): Promise<string> {
+  const env = gitEnv();
 
   return new Promise((resolveOutput, reject) => {
     // Streamed, not execFile: its maxBuffer turns a large diff into an error.
@@ -96,6 +101,46 @@ export class GitSource implements SourceAdapter {
     this.root = options.root;
     this.citationFormat = options.citationFormat;
     this.paths = options.paths ?? [];
+    if (this.paths.length > 0) this.refuseUnmatchedPaths();
+  }
+
+  /**
+   * An entry matching no tracked file leaves drift silent for good; the usual cause is one written
+   * from the repository top. Synchronous, since `loadSources` turns a throw into a finding.
+   */
+  private refuseUnmatchedPaths(): void {
+    const listing = spawnSync("git", ["ls-files", "-z", "--", ...this.paths], {
+      cwd: this.root,
+      env: gitEnv(),
+      maxBuffer: Infinity,
+    });
+    // A root git cannot read fails every later call, with git's own reason.
+    if (listing.status !== 0) return;
+    const files = listing.stdout.toString("utf-8").split("\0").filter(Boolean);
+    // One listing cannot say which pattern matched what, so patterns are judged together.
+    const unmatched = this.paths.filter((entry) => {
+      if (isPattern(entry)) return files.length === 0;
+      const scope = scopeOf(this.root, entry);
+      return !files.some((file) => scope === "" || file === scope || file.startsWith(`${scope}/`));
+    });
+    if (unmatched.length === 0) return;
+
+    const prefix = spawnSync("git", ["rev-parse", "--show-prefix"], {
+      cwd: this.root,
+      env: gitEnv(),
+    })
+      .stdout.toString("utf-8")
+      .trim();
+    const named = unmatched.map((entry) => {
+      const scope = entry.startsWith(":") ? entry : scopeOf(this.root, entry);
+      if (prefix === "" || !scope.startsWith(prefix)) return `"${entry}"`;
+      return `"${entry}" (did you mean "${scope.slice(prefix.length) || "."}"?)`;
+    });
+    throw new Error(
+      `Source "${this.id}": ${named.length === 1 ? "`paths` entry" : "`paths` entries"} ` +
+        `${named.join(", ")} ${named.length === 1 ? "matches" : "match"} no tracked file. ` +
+        `\`paths\` are relative to \`root\`, not to the repository top.`,
+    );
   }
 
   /**
@@ -235,10 +280,9 @@ export class GitSource implements SourceAdapter {
       part: "path",
       detail: `${path} is outside the declared paths (${this.paths.join(", ")}) of source "${this.id}"`,
     };
-    const patterned = this.paths.some((p) => /[*?[\\]/.test(p) || p.startsWith(":"));
+    const patterned = this.paths.some(isPattern);
     if (this.paths.length > 0 && !patterned) {
-      const base = resolve(this.root);
-      const scope = this.paths.map((p) => relative(base, resolve(base, p)).split(sep).join("/"));
+      const scope = this.paths.map((p) => scopeOf(this.root, p));
       if (!scope.some((p) => p === "" || path === p || path.startsWith(`${p}/`))) return outside;
     }
 
@@ -413,6 +457,14 @@ export class GitSource implements SourceAdapter {
 }
 
 type WorkingState = "committed" | "changed" | "untracked";
+
+const isPattern = (entry: string) => /[*?[\\]/.test(entry) || entry.startsWith(":");
+
+/** A literal `paths` entry as git lists it from the root: `./docs/` is `docs`, `.` is "". */
+function scopeOf(root: string, entry: string): string {
+  const base = resolve(root);
+  return relative(base, resolve(base, entry)).split(sep).join("/");
+}
 
 interface Hunk {
   oldStart: number;

@@ -346,6 +346,8 @@ describe("GitSource scoped to paths", () => {
   });
 
   test("locate reads a declared path however it is spelled", async () => {
+    write("doc/z.md", "z");
+    await commit("a sibling whose name is a prefix of docs");
     for (const paths of [["docs"], ["./docs/"], ["docs/a.md"], ["."]]) {
       expect(await scoped(paths).locate("docs/a.md")).toEqual({ verdict: "found" });
     }
@@ -383,8 +385,38 @@ describe("GitSource scoped to paths", () => {
   });
 
   test("paths that have no commits yet resolve to HEAD rather than failing", async () => {
+    write("nothing/here/new.md", "staged, not committed");
+    await run(["add", "-A"]);
     const scopedSource = scoped(["nothing/here"]);
     expect(await scopedSource.revision()).toMatch(/^[0-9a-f]{40}$/);
+  });
+
+  // A typo or a directory to be created later would drift nothing until somebody noticed.
+  test("an entry that matches no tracked file is refused", () => {
+    // Anchored: at the repository top there is no prefix to suggest dropping.
+    expect(() => scoped(["docs", "nothing/here"])).toThrow(
+      /^Source "repo": `paths` entry "nothing\/here" matches no tracked file\. `paths` are relative to `root`, not to the repository top\.$/,
+    );
+    write("untracked/u.md", "never added");
+    expect(() => scoped(["untracked", "gone"])).toThrow(
+      '`paths` entries "untracked", "gone" match no tracked file',
+    );
+  });
+
+  test("a pattern is refused only when the entries together match nothing", () => {
+    expect(() => scoped(["docs", "*.txt"])).not.toThrow();
+    expect(() => scoped(["*.txt"])).toThrow('`paths` entry "*.txt" matches no tracked file');
+  });
+
+  test("a root git cannot read is left to fail where git is called", () => {
+    const outside = mkdtempSync(join(tmpdir(), "accreta-not-git-"));
+    try {
+      expect(
+        () => new GitSource({ id: "repo", root: outside, citationFormat: "x", paths: ["docs"] }),
+      ).not.toThrow();
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 });
 
@@ -851,6 +883,8 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
   });
 
   test("a scope path that climbs back into the root still scopes locate", async () => {
+    write("sub/other/b.md", "b");
+    await commit("a second directory under the root");
     expect(await sub(["../sub/docs"]).locate("docs/a.md")).toEqual({ verdict: "found" });
     expect(await sub(["../sub/other"]).locate("docs/a.md")).toMatchObject({ verdict: "missing" });
   });
@@ -865,8 +899,20 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
   });
 
   test("a pattern in paths is matched from the root, as revision() matches it", async () => {
+    write("sub/notes.txt", "n");
+    await commit("a text file under the root");
     expect(await sub(["docs/*.md"]).locate("docs/a.md", "L12")).toEqual({ verdict: "found" });
     expect(await sub(["*.txt"]).locate("docs/a.md")).toMatchObject({ verdict: "missing" });
+  });
+
+  // #206: from the root `-- sub/docs` matches nothing, so drift reported the page current forever.
+  test("paths written from the repository top are refused, with the entry they meant", () => {
+    expect(() => sub(["sub/docs"])).toThrow(
+      'Source "repo": `paths` entry "sub/docs" (did you mean "docs"?) matches no tracked file. ' +
+        "`paths` are relative to `root`, not to the repository top.",
+    );
+    expect(() => sub(["./sub/docs/*.md"])).toThrow('(did you mean "docs/*.md"?)');
+    expect(() => sub(["docs", "../other.md"])).not.toThrow();
   });
 
   test("at the top level the revision is still HEAD, even when HEAD changed nothing", async () => {

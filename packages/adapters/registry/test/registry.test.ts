@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -147,6 +148,48 @@ describe("loadSources", () => {
         reason: expect.stringContaining("`scope`"),
       },
     ]);
+  });
+
+  test("git paths written from the repository top go unloaded, naming the entry they meant", () => {
+    const git = (...args: string[]) =>
+      expect(spawnSync("git", args, { cwd: root, stdio: "ignore" }).status).toBe(0);
+    git("init", "-q", "-b", "main");
+    mkdirSync(join(root, "sub", "docs"), { recursive: true });
+    writeFileSync(join(root, "sub", "docs", "a.md"), "one\n", "utf-8");
+    git("add", "-A");
+    git(
+      "-c",
+      "user.email=t@example.com",
+      "-c",
+      "user.name=T",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "-q",
+      "-m",
+      "first",
+    );
+    writeSource("top.yaml", "id: top\ntype: git\nroot: sub\npaths: [sub/docs]\n");
+    writeSource("fixed.yaml", "id: fixed\ntype: git\nroot: sub\npaths: [docs]\n");
+
+    const { sources, unloaded } = loadSources(ctx());
+    expect([...sources.keys()]).toEqual(["fixed"]);
+    expect(unloaded).toEqual([
+      {
+        file: join("sources", "top.yaml"),
+        id: "top",
+        reason:
+          'Source "top": `paths` entry "sub/docs" (did you mean "docs"?) matches no tracked file. ' +
+          "`paths` are relative to `root`, not to the repository top.",
+      },
+    ]);
+  });
+
+  test("the shipped climate example still loads both of its git sources", () => {
+    const example = join(import.meta.dir, "..", "..", "..", "..", "examples", "climate");
+    const { sources, unloaded } = loadSources({ ...ctx(), root: example });
+    expect(unloaded).toEqual([]);
+    expect([...sources.keys()].toSorted()).toEqual(["ipcc-ar6-wg1", "noaa-gml"]);
   });
 
   test("a YAML error is cut to its first line, which does not quote the file", () => {
