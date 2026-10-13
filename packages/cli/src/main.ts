@@ -43,7 +43,8 @@ Usage: accreta <command> [arguments]
                            The citation for a claim, at the source's current revision.
                            Before reading, cite the file and keep its revision; after
                            writing, cite the place with --expect-revision <rev>, which
-                           fails if the source has moved since
+                           fails if the source has moved since. --format footnote
+                           prints the footnote alone, and nothing if the place is missing
   mcp                      Start the MCP server on stdio; an agent client runs this
   mcp install --client <claude|cursor|codex|vscode> [--scope project|user]
                            Add that server to the client's config (--force replaces
@@ -292,7 +293,7 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
     case "canonical":
       return canonical(ctx, positional.join(" "), { json, limit, cursor });
     case "cite":
-      return cite(ctx, positional[0] ?? "", { json, expectRevision: parsed.expectRevision });
+      return cite(ctx, rest, positional, { json, expectRevision: parsed.expectRevision });
     case "mcp":
       return mcp(ctx, rest);
     default:

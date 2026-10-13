@@ -1,4 +1,4 @@
-import { cite as citeAt, parseCitation } from "@accreta/core";
+import { cite as citeAt, parseCitation, type Citation } from "@accreta/core";
 import { findWorkspace } from "../workspace.ts";
 import {
   loadSources,
@@ -10,17 +10,67 @@ import {
 
 const CITE_FIELDS = ["location.detail"] as const;
 
+const USAGE =
+  "Usage: accreta cite <source>:<path>[#locator] [--expect-revision <rev>] [--json | --format footnote]";
+
+export type CiteFormat = "text" | "footnote" | "json";
+
+/**
+ * `--format`'s value in the raw arguments, and the positionals left once it is taken out.
+ * `COMMAND_ARGS` has already refused any flag cite does not take. A string is a refusal.
+ */
+export function citeArguments(
+  args: readonly string[],
+  positional: readonly string[],
+  json: boolean,
+): { format: CiteFormat; targets: string[] } | string {
+  let given: string | undefined;
+  let separate = false;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (arg === "--") break;
+    if (arg === "--format") {
+      given = args[++i] ?? "";
+      separate = true;
+    } else if (arg.startsWith("--format=")) {
+      given = arg.slice("--format=".length);
+      separate = false;
+    }
+  }
+  if (given === undefined) return { format: json ? "json" : "text", targets: [...positional] };
+  if (given !== "text" && given !== "footnote" && given !== "json") {
+    return `--format takes text, footnote or json, not "${given}".`;
+  }
+  if (json && given !== "json") return `--json and --format ${given} ask for different output.`;
+  const targets = [...positional];
+  // No target can be named text, footnote or json: each lacks the "source:" part.
+  if (separate) targets.splice(targets.indexOf(given), 1);
+  return { format: given, targets };
+}
+
 export async function cite(
   ctx: CommandContext,
-  raw: string,
+  args: readonly string[],
+  positional: readonly string[],
   options: { json?: boolean; expectRevision?: string } = {},
 ): Promise<number> {
+  const parsed = citeArguments(args, positional, options.json ?? false);
+  if (typeof parsed === "string") {
+    ctx.err(parsed);
+    return 2;
+  }
+  const { format, targets } = parsed;
+  if (targets.length > 1) {
+    ctx.err(`cite does not take "${targets.slice(1).join(" ")}".`);
+    return 2;
+  }
+  const raw = targets[0] ?? "";
   const target = parseCitation(raw);
   if (!target) {
     ctx.err(
       raw
         ? `"${raw}" is not source:path[#locator]; a path with "#" or whitespace in it cannot be cited.`
-        : "Usage: accreta cite <source>:<path>[#locator] [--expect-revision <rev>] [--json]",
+        : USAGE,
     );
     return 2;
   }
@@ -58,9 +108,10 @@ export async function cite(
     );
   }
   // A place that is not there must not look like a citation to paste.
-  const code = citation.location.verdict === "missing" ? 1 : 0;
+  const missing = citation.location.verdict === "missing";
+  const code = missing ? 1 : 0;
 
-  if (options.json) {
+  if (format === "json") {
     printJson(ctx, {
       canonical_source: citation.canonicalSource,
       footnote: citation.footnote,
@@ -73,24 +124,27 @@ export async function cite(
     });
     return code;
   }
-
-  const { location } = citation;
-  // Missing leads with why and prints no footnote, so `| head -1` never yields one to paste.
-  if (location.verdict === "missing") {
-    ctx.out(`location: missing ${location.part}: ${location.detail}`);
-  } else {
-    ctx.out(citation.footnote);
+  if (format === "footnote") {
+    // Empty stdout when missing, so `$(accreta cite --format footnote …)` never captures an error.
+    if (missing) ctx.err(locationLine(citation));
+    else ctx.out(citation.footnote);
+    return code;
   }
+
+  // The same keys in the same order whatever the verdict, so a script reads them by label.
+  ctx.out(`footnote: ${missing ? "none: location missing" : citation.footnote}`);
   ctx.out(`canonical_source: ${citation.canonicalSource}`);
   ctx.out(`revision: ${citation.revision ?? "none, so the footnote is unpinned"}`);
-  if (location.verdict !== "missing") {
-    ctx.out(
-      location.verdict === "found" ? "location: found" : `location: unknown: ${location.detail}`,
-    );
-  }
+  ctx.out(locationLine(citation));
   if (citation.delegated) {
     ctx.out(`delegated: read through ${citation.delegated.via}; scope:`);
     ctx.out(citation.delegated.guidance.trimEnd());
   }
   return code;
+}
+
+function locationLine({ location }: Citation): string {
+  if (location.verdict === "found") return "location: found";
+  if (location.verdict === "unknown") return `location: unknown: ${location.detail}`;
+  return `location: missing ${location.part}: ${location.detail}`;
 }
