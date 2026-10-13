@@ -20,7 +20,7 @@ export interface Citation {
   location: LocationVerdict;
   /**
    * In `provenance.format`. A null revision renders `UNPINNED_REVISION`, flagged `citation-unpinned`:
-   * cite again with the revision read through the connector, or for an uncommitted file commit first.
+   * for a delegated source cite again with `observedRevision`; for an uncommitted file commit first.
    */
   footnote: string;
   /** `source:path[#locator]`, the fixed grammar `parseCitation` reads. */

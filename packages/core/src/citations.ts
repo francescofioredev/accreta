@@ -22,7 +22,7 @@ export interface CitationTemplate {
 export type TemplateResult =
   { ok: true; template: CitationTemplate } | { ok: false; reason: string };
 
-const PLACEHOLDER_RE = /(\{source\}|\{rev\}|\{path\}|\{locator\})/;
+export const PLACEHOLDER_RE = /(\{source\}|\{rev\}|\{path\}|\{locator\})/;
 
 const CAPTURE: Record<string, string> = {
   source: "\\S+?",
