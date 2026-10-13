@@ -37,7 +37,7 @@ under Bun, so the Node version only reaches the probes and the installed bins.
 
 All six cells pass. One difference shows in the SQLite probe. On macOS, Bun loads Apple's
 SQLite (3.51.0), and a reader held across the index swap fails with `disk I/O error`. On Linux,
-Bun bundles SQLite 3.53.2, and the held reader serves the old rows, as it does under Node on both
+Bun bundles its own SQLite (3.53.2 in Bun 1.4.0, 3.53.4 in 1.4.3), and the held reader serves the old rows, as it does under Node on both
 systems. [ADR-0010](adr/0010-readers-revalidate-by-inode.md)'s inode check reopens the reader in
 both cases.
 
