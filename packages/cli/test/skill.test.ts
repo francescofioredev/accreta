@@ -17,7 +17,8 @@ const invocations = [...blocks, ...inline]
   .filter((m): m is RegExpMatchArray => m !== null)
   .map(([, command, rest]) => ({
     command: command!,
-    flags: rest!.replace(/#.*$/, "").match(/--[a-z-]+/g) ?? [],
+    // A shell comment starts at " #"; a "#" inside a target is its locator.
+    flags: rest!.replace(/\s#\s.*$/, "").match(/--[a-z-]+/g) ?? [],
   }));
 
 test("every command the setup skill runs is one the CLI has", () => {

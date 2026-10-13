@@ -61,10 +61,10 @@ const PROBES: Record<string, Probe[]> = {
   ],
 };
 
-// Prompts carry no page text at all, so any canary in a rendered prompt is a leak.
+// Prompts carry no page or source text, so any canary in one is a leak; each argument names injected text.
 const PROMPT_PROBES: Record<string, Record<string, string>> = {
   ingest_source: { target: "docs:ch01.md" },
-  reverify_stale_pages: { source: "docs" },
+  reverify_stale_pages: { source: "lines" },
   answer_with_citations: { question: "radiative forcing" },
 };
 
@@ -325,6 +325,8 @@ describe("every tool response, against pages that try to give instructions", () 
       }
       for (const prompt of (await client.listPrompts()).prompts) {
         prompts.push(prompt.name);
+        // Reported as missing below; rendering without arguments would throw before any test runs.
+        if (!(prompt.name in PROMPT_PROBES)) continue;
         const rendered = await client.getPrompt({
           name: prompt.name,
           arguments: PROMPT_PROBES[prompt.name],
@@ -400,7 +402,8 @@ describe("every tool response, against pages that try to give instructions", () 
   test("every canary in the fixture reaches some response, including the channels #139 names", () => {
     // A canary nothing surfaces means a probe went blind, and the sweep would pass by default.
     const planted = readdirSync(FIXTURE, { recursive: true, encoding: "utf-8" })
-      .filter((name) => name.endsWith(".md"))
+      // Source text reaches no tool; its canary is planted for the prompt check alone.
+      .filter((name) => name.endsWith(".md") && !name.startsWith("sources"))
       .flatMap((name) => [
         ...canariesIn(basename(name)),
         ...canariesIn(readFileSync(join(FIXTURE, name), "utf-8")),
