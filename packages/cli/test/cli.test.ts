@@ -335,6 +335,7 @@ describe("accreta drift", () => {
 
     expect(await cli("drift")).toBe(1);
     expect(stdout()).toContain("cannot place");
+    expect(stdout()).toContain("knowledge/a.md (verified at fromapreviousrun)");
   });
 
   test("an fs page goes stale across two separate processes", async () => {

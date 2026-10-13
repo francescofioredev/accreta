@@ -108,6 +108,17 @@ describe("a page that only cites the source", () => {
     expect(page.verified_at).toBeUndefined();
   });
 
+  test("is labelled cited at under a revision the source cannot place", () => {
+    const noaa: DriftReport = {
+      ...report("noaa", []),
+      unresolvable: [{ revision: "b0", pages: ["knowledge/own.md", PAGE], citedOnly: [PAGE] }],
+    };
+    const out = text(noaa);
+    expect(out).toContain("b0 — 2 page(s):");
+    expect(out).toContain("knowledge/own.md (verified at b0)");
+    expect(out).toContain(`${PAGE} (cited at b0)`);
+  });
+
   test("a per-file source names only the changed files it cites", () => {
     const noaa = report("noaa", [
       {

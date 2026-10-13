@@ -201,7 +201,10 @@ export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport)
   if (report.unresolvable.length > 0) {
     ctx.out(`  ${report.unresolvable.length} revision(s) this source cannot place:`);
     for (const entry of report.unresolvable) {
-      ctx.out(`    ${entry.revision} — ${entry.pages.length} page(s)`);
+      ctx.out(`    ${entry.revision} — ${entry.pages.length} page(s):`);
+      for (const path of entry.pages) {
+        ctx.out(`      ${path} (${atLabel(entry, path)} ${entry.revision})`);
+      }
     }
   }
   printUnverifiable(ctx, report);
