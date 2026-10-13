@@ -1,5 +1,6 @@
 import { realpathSync, statSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
+import { PLACEHOLDER_RE } from "../citations.ts";
 
 /**
  * A source is anything that can answer three questions: what revision are you
@@ -315,6 +316,8 @@ export function formatCanonicalSource(parts: ParsedCitation): string {
   return locator ? `${sourceId}:${path}#${locator}` : `${sourceId}:${path}`;
 }
 
+const FILL_RE = new RegExp(`(#?)${PLACEHOLDER_RE.source}`, "g");
+
 /**
  * Render a citation from the configured template.
  *
@@ -328,13 +331,12 @@ export function formatCitation(
   format: string,
   parts: { source: string; rev: string; path: string; locator?: string },
 ): string {
-  const { source, rev, path, locator } = parts;
-
-  const out = format
-    .replaceAll("{source}", source)
-    .replaceAll("{rev}", rev)
-    .replaceAll("{path}", path);
-
-  if (locator) return out.replaceAll("{locator}", locator).trim();
-  return out.replace(/#?\{locator\}/g, "").trim();
+  const values: Record<string, string | undefined> = { ...parts };
+  // One pass with a function, so a value is never read as a `$` pattern or filled again.
+  return format
+    .replace(FILL_RE, (_, hash: string, placeholder: string) => {
+      const value = values[placeholder.slice(1, -1)];
+      return placeholder === "{locator}" && !value ? "" : hash + value;
+    })
+    .trim();
 }

@@ -81,6 +81,24 @@ describe("compileCitationTemplate", () => {
   });
 });
 
+describe("formatCitation", () => {
+  test("renders $ patterns and placeholders in a value verbatim", () => {
+    const format = "{source} @ {rev} · {path}#{locator}";
+    expect(formatCitation(format, { source: "$&", rev: "$`", path: "$'", locator: "{rev}" })).toBe(
+      "$& @ $` · $'#{rev}",
+    );
+    expect(formatCitation(format, { source: "s", rev: "{path}", path: "{locator}" })).toBe(
+      "s @ {path} · {locator}",
+    );
+  });
+
+  test("leaves a placeholder it does not know as written", () => {
+    expect(formatCitation("{path}:{start}", { source: "s", rev: "r", path: "a.md" })).toBe(
+      "a.md:{start}",
+    );
+  });
+});
+
 describe("extractFootnotes", () => {
   test("each definition comes with its line and the sentence that cites it", () => {
     const body = [

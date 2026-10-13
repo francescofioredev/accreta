@@ -406,6 +406,18 @@ describe("cite refuses what lint and drift cannot read back", () => {
     expect(result.footnote).toBe("docs · a.md");
     expect(result.canonicalSource).toBe("docs:a.md#L1");
   });
+
+  test("a footnote quotes the value it was given, $ patterns and placeholders included", async () => {
+    for (const value of ["$&", "$`", "$'", "{path}"]) {
+      const rev = `${value} x`;
+      await expect(
+        cite(sources(scripted("docs", async () => rev)), FORMAT, {
+          sourceId: "docs",
+          path: "a.md",
+        }),
+      ).rejects.toThrow(`footnote "docs @ ${rev} · a.md" does not read back`);
+    }
+  });
 });
 
 describe("a delegated footnote under lint", () => {
