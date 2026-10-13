@@ -922,8 +922,13 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
     expect(() => sub([":(top)docs"])).toThrow('":(top)docs"');
     expect(() => sub([":(top,glob)sub/docs/*"])).toThrow("relative to the repository top");
     expect(() => sub([":(top)sub/docs"])).toThrow("relative to the repository top");
-    expect(() => sub([":(exclude)other.md"])).not.toThrow();
+    expect(() => sub([":(exclude)other.md", "docs"])).not.toThrow();
     expect(() => sub([":!other.md", "docs"])).not.toThrow();
+  });
+
+  test("a scope made only of exclusions is refused", () => {
+    expect(() => sub([":(exclude)other.md"])).toThrow("add a positive entry or omit `paths`");
+    expect(() => sub([":!a.md", ":^b.md"])).toThrow("only exclusions");
   });
 
   test("git's own reading of paths is checked: its refusal, or a match outside the root", async () => {

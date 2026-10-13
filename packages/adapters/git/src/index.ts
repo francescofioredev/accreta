@@ -159,6 +159,7 @@ export function scopeProblem(root: string, paths: unknown): string | undefined {
   if (paths === undefined || paths === null) return undefined;
   if (!Array.isArray(paths)) return `declares \`paths\` as a ${typeof paths}, not a list`;
   const base = resolve(root);
+  let positive = false;
   for (const entry of paths as unknown[]) {
     if (typeof entry !== "string") {
       return `declares paths entry ${scalarOrType(entry)}, which is not a string`;
@@ -176,10 +177,15 @@ export function scopeProblem(root: string, paths: unknown): string | undefined {
       return `declares paths entry ${shown}, which is relative to the repository top; name it relative to \`root\``;
     }
     if (exclude) continue;
+    positive = true;
     const inside = relative(base, resolve(base, pattern));
     if (inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute(inside)) {
       return `declares paths entry ${shown}, which resolves outside the source root`;
     }
+  }
+  // Git reads an exclude-only pathspec from the repository top, widening the source past its root.
+  if (paths.length > 0 && !positive) {
+    return "declares `paths` with only exclusions; add a positive entry or omit `paths`";
   }
   return undefined;
 }
