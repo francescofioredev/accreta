@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   countPagesCiting,
   parseSourceDeclaration,
+  SourceDeclarationError,
   SourceRegistry,
   type Database,
   type SourceAdapter,
@@ -50,7 +51,7 @@ export function readDeclarations(root: string) {
 
 /** One `sources/*.yaml` file, relative to the workspace root: its declaration, or why it is not one. */
 export type DeclarationFile =
-  { file: string; declaration: SourceDeclaration } | { file: string; error: string };
+  { file: string; declaration: SourceDeclaration } | { file: string; error: string; id?: string };
 
 /** Every declaration file, each read on its own so a bad one is reported against itself. */
 export function readDeclarationFiles(root: string): DeclarationFile[] {
@@ -58,18 +59,21 @@ export function readDeclarationFiles(root: string): DeclarationFile[] {
     try {
       return { file, declaration: parseSourceDeclaration(readFileSync(join(root, file), "utf-8")) };
     } catch (error) {
-      return { file, error: firstLine(error) };
+      const id = error instanceof SourceDeclarationError ? error.sourceId : undefined;
+      return { file, error: firstLine(error), ...(id === undefined ? {} : { id }) };
     }
   });
 }
+
+// A declaration that failed only on `type` still claims its id, or the other one would win.
+const idOf = (entry: DeclarationFile) => ("error" in entry ? entry.id : entry.declaration.id);
 
 /** Each id more than one file declares, with those files in order: a citation can name only one. */
 export function clashingIds(entries: readonly DeclarationFile[]): Map<string, string[]> {
   const filesById = new Map<string, string[]>();
   for (const entry of entries) {
-    if ("error" in entry) continue;
-    const id = entry.declaration.id;
-    filesById.set(id, [...(filesById.get(id) ?? []), entry.file]);
+    const id = idOf(entry);
+    if (id !== undefined) filesById.set(id, [...(filesById.get(id) ?? []), entry.file]);
   }
   return new Map([...filesById].filter(([, files]) => files.length > 1));
 }
@@ -92,7 +96,7 @@ export interface LoadedSources {
 /**
  * Every source that builds, plus each declaration that did not: one half-written file
  * must not stop lint, drift and the MCP server for every other source.
- * A shared id still throws, since keeping either declaration would be picking a winner.
+ * A shared id loads none of its declarations, since keeping one would be picking a winner.
  */
 export function loadSources(ctx: SourceContext): LoadedSources {
   const registry = buildRegistry(ctx);
@@ -102,18 +106,25 @@ export function loadSources(ctx: SourceContext): LoadedSources {
   const clashes = clashingIds(entries);
 
   for (const entry of entries) {
-    if ("error" in entry) {
-      unloaded.push({ file: entry.file, reason: entry.error });
+    const { file } = entry;
+    const id = idOf(entry);
+    const others =
+      id === undefined ? [] : (clashes.get(id)?.filter((other) => other !== file) ?? []);
+    if (others.length > 0) {
+      unloaded.push({
+        file,
+        id,
+        reason:
+          `id \`${id}\` is also declared in ${others.join(", ")}; ` +
+          `give each a distinct id or remove all but one`,
+      });
       continue;
     }
-    const { file, declaration } = entry;
-    const first = clashes.get(declaration.id)?.[0];
-    if (first !== undefined && first !== file) {
-      throw new Error(
-        `Two sources in sources/ are declared with id "${declaration.id}". ` +
-          `An id names a source in every citation, so it has to name only one.`,
-      );
+    if ("error" in entry) {
+      unloaded.push({ file, ...(id === undefined ? {} : { id }), reason: entry.error });
+      continue;
     }
+    const { declaration } = entry;
     try {
       sources.set(declaration.id, registry.create(declaration));
     } catch (error) {

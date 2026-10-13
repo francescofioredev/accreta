@@ -283,6 +283,27 @@ describe("lintKnowledgeBase", () => {
     expect(only.citationsChecked).toBe(unfiltered.citationsChecked);
   });
 
+  test("a format without {rev} is one finding however many footnotes it renders", async () => {
+    const noRev = { ...config, provenanceFormat: "{source} · {path}#{locator}" };
+    for (const name of ["e", "f", "g"]) {
+      writePage(`${name}.md`, `---\ntype: note\n---\n\n# ${name}[^1]\n\n[^1]: s · doc.md#L1\n`);
+    }
+    db?.close();
+    buildIndex({ root, config: noRev, indexPath });
+    db = openIndex(indexPath, { readonly: true });
+
+    const whole = await lintKnowledgeBase(db, noRev, sources);
+    expect(whole.findings.filter((f) => f.kind === "unpinned-provenance-format")).toHaveLength(1);
+
+    const only = await lintKnowledgeBase(db, noRev, sources, {
+      page: { limit: 1 },
+      kinds: ["unpinned-provenance-format"],
+    });
+    expect(only.total).toBe(1);
+    expect(only.findings).toHaveLength(1);
+    expect(only.nextCursor).toBeUndefined();
+  });
+
   test("a cursor does not carry over to another kind filter", async () => {
     const d = reindex();
     const first = await lintKnowledgeBase(d, config, sources, { page: { limit: 1 } });

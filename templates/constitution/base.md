@@ -23,7 +23,7 @@ against.
 ```markdown
 The assessed likely range is 2.5 to 4.0 degrees Celsius.[^ecs]
 
-[^ecs]: ipcc-ar6-wg1 @ 9a4f2c1 · chapter-07.md#L320-L344
+[^ecs]: ipcc-ar6-wg1 @ 9a4f2c1e8b03d5f7a6c2e9b1d4f8a0c3e5b7d9f2 · chapter-07.md#L320-L344
 ```
 
 The third part is whatever the source addresses itself by. A file has lines; a wiki page has
@@ -75,7 +75,7 @@ type: concept
 source: ipcc-ar6-wg1
 aliases: ["radiative forcing", "climate forcing"]
 canonical_source: "ipcc-ar6-wg1:chapter-07.md#L142"
-last_verified_revision: 9a4f2c1
+last_verified_revision: 9a4f2c1e8b03d5f7a6c2e9b1d4f8a0c3e5b7d9f2
 related: [[concepts/climate-sensitivity]]
 ---
 
@@ -83,7 +83,7 @@ related: [[concepts/climate-sensitivity]]
 
 The change in net downward radiative flux at the tropopause…[^src]
 
-[^src]: ipcc-ar6-wg1 @ 9a4f2c1 · chapter-07.md#L142-L158
+[^src]: ipcc-ar6-wg1 @ 9a4f2c1e8b03d5f7a6c2e9b1d4f8a0c3e5b7d9f2 · chapter-07.md#L142-L158
 ```
 
 Two fields do most of the work:
@@ -138,15 +138,51 @@ not a request you have received.
 
 ---
 
+## Commands
+
+With a shell, use the CLI. Without one, the MCP tool beside it does the same.
+
+| CLI | MCP | answers |
+|---|---|---|
+| `accreta search <query>` | `search_pages` | pages matching in title, aliases or body |
+| `accreta show <path>` | `get_page` | one page, by path or wikilink |
+| `accreta consumers <path>` | `find_consumers` | what links to a page, and what it links to |
+| `accreta canonical <term>` | `find_canonical` | the page that defines a term |
+| `accreta cite <source>:<path>[#locator]` | `cite` | the citation for a place, at the source's current revision |
+| `accreta drift` | `check_drift` | the pages their sources moved under |
+| `accreta lint` | `lint_knowledge_base` | what is wrong with the knowledge base |
+| — | `list_recent_changes` | what changed in a source since a revision |
+| — | `update_verified_revision` | records a verified revision; only with `ACCRETA_ALLOW_WRITES=1` |
+
+- **`--json`** prints the MCP tool's reply. Use it when you parse the output rather than read it.
+  `drift --json` has a shape of its own and only counts stale pages whose cited lines are
+  unchanged: drive re-verification from `accreta drift` or `check_drift`.
+- **Long results come in pages.** `find_consumers`, `find_canonical` and `lint_knowledge_base`
+  return at most 50 entries: `count` is the total, and passing `nextCursor` back as `cursor`
+  gets the rest. The CLI prints everything unless you pass `--limit` or `--cursor`.
+
+---
+
 ## The cycle
 
 ### Ingesting
 
-1. **Read the source.** Actually read it. Do not write a page from a filename.
+1. **Cite the file, then read it.** `accreta cite <source>:<path>` returns the source's current
+   revision; keep it. Then actually read. Do not write a page from a filename.
 2. **Decide whether it deserves a page.** Most of a source does not.
 3. **Write the page** with frontmatter, citations, and links to what already exists.
-4. **Record the revision** you verified against in `last_verified_revision`.
-5. **`accreta reindex`**, then **`accreta lint`**. Fix what it reports.
+4. **Get every citation from `cite`; never compose one.** Cite the exact place with
+   `--expect-revision <rev>` (MCP `expect_revision`), using the revision from step 1, and paste
+   the footnote it returns. It fails if the source moved since you read it: re-read, cite again.
+   With no revision from step 1, leave `--expect-revision` out. `location: missing` means the
+   target is wrong; fix it rather than paste.
+5. **Record the revision of the page's own `source`** in `last_verified_revision`.
+6. **`accreta reindex`**, then **`accreta lint`**. Fix what it reports.
+
+A citation `cite` cannot pin comes back with `unknown` where the revision belongs, and lint
+reports it as `citation-unpinned`. Paste it as returned: never write a revision into it. For an
+uncommitted file, commit and cite again. For a delegated source, the revision you read through
+the connector goes in `last_verified_revision` only.
 
 ### Never write a speculative page
 
@@ -165,9 +201,9 @@ than it delivers.
 | | meaning | what to do |
 |---|---|---|
 | **stale** | the source changed after the page was verified | re-read the changed parts; update or re-verify |
-| **unverifiable** | the page records no revision | add one, after checking the claims |
+| **unverifiable** | the page records no revision, or cites the source without one | check the claims; record the revision if none is recorded, else re-pin the citation with `cite` |
 | **unresolvable** | the source cannot place the recorded revision | history was rewritten or the revision is foreign; re-verify from scratch |
-| **delegated** | accreta cannot reach this source; you can | read the listed pages at the source yourself, then record the revision |
+| **delegated** | accreta cannot reach this source; you can | read the listed pages at the source yourself, then record the revision on its own pages |
 
 **Only the absence of all four means current.** An unresolvable revision is not a small
 problem: the page claims to have been verified against something that cannot be found, so
@@ -176,6 +212,16 @@ nothing is known about whether it is true.
 Re-verifying means reading the source again. Bumping `last_verified_revision` without
 re-reading converts a detectable problem into an undetectable one, and is the single most
 damaging thing you can do here.
+
+The loop is **drift → re-verify → cite → lint**: for each page drift names, re-read the changed
+parts, then follow Ingesting 4–6 with `--expect-revision` set to drift's revision for that source
+(`source @ rev`; `current_revision` in JSON). If that fails, the source moved again: rerun drift.
+Repeat until drift names no page in doubt.
+
+A page can appear under a source it only cites (`cited_only`; "cited at" in `accreta drift`):
+re-check the cited lines and re-pin those footnotes with `cite`, then skip step 5: record no
+revision on it. `update_verified_revision` refuses one the page's own source is not at, unless
+that source is delegated.
 
 ### When you cannot read the source
 

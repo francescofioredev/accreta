@@ -95,6 +95,28 @@ test("a half-declared delegated source does not stop the server, and lint and dr
   expect(changes.message).toBe(one.message);
 });
 
+test("two declarations sharing an id do not stop the server, and drift names both", async () => {
+  mkdirSync(join(root, "sources", "docs"), { recursive: true });
+  writeFileSync(join(root, "sources", "docs", "a.md"), "one\n", "utf-8");
+  writeFileSync(join(root, "sources", "docs.yaml"), "id: docs\ntype: fs\nroot: sources/docs\n");
+  writeFileSync(join(root, "sources", "a.yaml"), "id: notes\ntype: fs\nroot: one\n");
+  writeFileSync(join(root, "sources", "b.yaml"), "id: notes\ntype: fs\nroot: two\n");
+  writePage("a.md", "---\ntype: note\nsource: notes\n---\n\n# A\n");
+  reindex();
+
+  const ctx = createContext(root);
+  expect([...ctx.sources.keys()]).toEqual(["docs"]);
+
+  const [a, b] = [join("sources", "a.yaml"), join("sources", "b.yaml")];
+  const drift = await checkDriftTool(ctx, { source: "notes" });
+  expect(drift.unloaded_sources).toEqual([
+    { file: a, id: "notes", reason: expect.stringContaining(`also declared in ${b}`), pages: 1 },
+    { file: b, id: "notes", reason: expect.stringContaining(`also declared in ${a}`), pages: 1 },
+  ]);
+  expect(drift.message).toStartWith(`Source "notes" is declared in ${a} but did not load:`);
+  expect(drift.message).toContain(`also declared in ${b}`);
+});
+
 test("a rebuild does not replace the context the server captured", () => {
   writePage("a.md", "---\ntype: note\n---\n\n# A\n\nalpha\n");
   reindex();

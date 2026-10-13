@@ -12,6 +12,7 @@ import { lint, lintCitations } from "../src/query/lint.ts";
 import { countPagesCiting } from "../src/query/citing.ts";
 import { requireTable, StaleIndexError } from "../src/query/tables.ts";
 import {
+  countLines,
   parseCitation,
   parseLineLocator,
   type LocationVerdict,
@@ -427,6 +428,20 @@ describe("parseLineLocator", () => {
   });
 });
 
+describe("countLines", () => {
+  test("a final newline ends the last line rather than opening another", () => {
+    expect(countLines("one\ntwo\n")).toBe(2);
+    expect(countLines("one\ntwo")).toBe(2);
+    expect(countLines("one\ntwo\nthree\n")).toBe(3);
+  });
+
+  test("an empty file has no lines, and a lone newline is one empty line", () => {
+    expect(countLines("")).toBe(0);
+    expect(countLines("\n")).toBe(1);
+    expect(countLines("\n\n")).toBe(2);
+  });
+});
+
 /** A file-backed source, answering the way `fs` and `git` do. */
 function locateIn(files: Record<string, string>, path: string, locator?: string): LocationVerdict {
   const text = files[path];
@@ -438,7 +453,7 @@ function locateIn(files: Record<string, string>, path: string, locator?: string)
   if (!range) {
     return { verdict: "missing", part: "locator", detail: `"${locator}" is not a line range` };
   }
-  const lines = text.split("\n").length;
+  const lines = countLines(text);
   return range[1] > lines
     ? {
         verdict: "missing",
@@ -669,5 +684,26 @@ describe("lintCitations on footnotes", () => {
     const format = report.findings.filter((f) => f.kind === "unreadable-provenance-format");
     expect(format).toHaveLength(1);
     expect(format[0]?.path).toBe("accreta.config.yaml");
+  });
+
+  test("a format that names no revision is one finding against the config", () => {
+    writePage("a.md", page(["[^a]: s · doc.md#L1"]));
+    const noRev = { ...config, provenanceFormat: "{source} · {path}#{locator}" };
+    buildIndex({ root, config: noRev, indexPath });
+    db = openIndex(indexPath, { readonly: true });
+    const unpinned = lint(db, noRev).findings.filter(
+      (f) => f.kind === "unpinned-provenance-format",
+    );
+    expect(unpinned).toHaveLength(1);
+    expect(unpinned[0]?.path).toBe("accreta.config.yaml");
+    // Adding {rev} alone stops footnotes written without one from indexing as citations (#249).
+    expect(unpinned[0]?.detail).toContain("accreta cite");
+  });
+
+  test("the default format names a revision", () => {
+    writePage("a.md", page(["[^a]: s @ r1 · doc.md#L1"]));
+    reindex();
+    const kinds = lint(db, config).findings.map((f) => f.kind);
+    expect(kinds).not.toContain("unpinned-provenance-format");
   });
 });
