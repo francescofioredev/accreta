@@ -144,31 +144,38 @@ figure is within 1.1% of its value at 60. The test takes under a second. It fail
 
 | response                                    | at 60 pages | budget | headroom per entry |
 | ------------------------------------------- | ----------- | ------ | ------------------ |
-| `search_pages`, body word                   | 7,120       | 7,400  | 14 B per hit       |
-| `search_pages`, shared alias                | 8,696       | 9,000  | 15 B per hit       |
+| `search_pages`, body word                   | 5,875       | 6,300  | 21 B per hit       |
+| `search_pages`, shared alias                | 6,791       | 7,200  | 20 B per hit       |
+| `search_pages` on the wire                  | 12,368      | 13,700 | 66 B per hit       |
 | `find_consumers`, the hub                   | 8,478       | 9,300  | 16 B per relation  |
 | `find_consumers`, inbound and outbound      | 8,498       | 9,300  | 16 B per relation  |
 | `find_canonical`                            | 9,443       | 10,300 | 17 B per match     |
 | `lint_knowledge_base`                       | 8,727       | 9,600  | 17 B per finding   |
-| `get_page`, minus its body                  | 1,069       | 1,100  | 31 B in all        |
+| `get_page`, minus its body                  | 850         | 1,000  | 150 B in all       |
 | `get_page` on the wire, minus both bodies   | 1,876       | 2,100  | 224 B in all       |
 
-Bytes of the text block the server returns, darwin arm64, Bun 1.3.13. The wire row counts the
+Bytes of the text block the server returns, darwin arm64, Bun 1.4.2. The wire rows count the
 whole JSON-RPC response, serialized as the stdio transport sends it, without its newline. Each
 budget is the size measured when the gate was added plus 10%, rounded up to the next 100 bytes;
-the `_provenance` labels added since cost the difference. The margin is a tolerance, not room
-for noise: the output at 60 pages is deterministic, so the same code always measures the same
-bytes. `search_pages` returns 20 entries rather than 50, so 10% would leave each hit 40 B; its
-budgets allow 18 B per hit instead, in line with the other tools. A field added to every entry
-fails once it costs more than the last column: `"matched_aliases": []` on every search hit
-costs 29 B. ADR-0007 states a size only for lint (8.5KB, which the measurement matches).
+the `_provenance` labels added since cost the difference. The `search_pages` and `get_page` text
+rows were set again when that text went compact (#131), which cut 17% and 20% from them. The
+margin is a tolerance, not room for noise: the output at 60 pages is deterministic, so the same
+code always measures the same bytes. `search_pages` returns 20 entries rather than 50, so 10%
+would leave each hit 29 B; its text budgets allow 18 B per hit instead, in line with the other
+tools. A field added to every entry fails once it costs more than the last column: a 25 B field
+on every search hit fails both text rows, while `"matched_aliases":[]` on every hit would cost
+21 B and pass the body-word row by 5 B. The search wire row keeps the plain 10%: a field costs it
+about twice, once in each copy, so that 25 B field adds 54 B per hit there and passes; the text
+rows are what catch it. ADR-0007 states a size only for lint (8.5KB, which the measurement
+matches).
 
 Two probes exist only for the gate. The aliased search matches every page, which the test
 checks against the index, so every hit carries `matched_aliases`. The second `find_consumers`
 probe has 30 inbound relations and 29 outbound, so its default page holds both and the limit
 cuts the outbound ones. `get_page` is gated without its body, because the body is the caller's
 page, not accreta's overhead. Its text block cannot show the body's second copy, in
-`structuredContent`, so it is gated on the wire too, minus both copies. `search_pages` still
+`structuredContent`, so it is gated on the wire too, minus both copies. `search_pages` has no
+body, so its wire row is the whole response. `search_pages` still
 returns 20 results by default; aligning it to 50 (#183) has to raise its budget in the same
 change.
 

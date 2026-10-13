@@ -227,6 +227,8 @@ function indexed(root: string): { config: AccretaConfig; db: ReturnType<typeof o
 export interface Row {
   pages: number;
   search: number;
+  /** search_pages' whole JSON-RPC response, its hits twice: text and structuredContent. */
+  searchWire: number;
   /** search_pages on the shared alias, so every hit carries `matched_aliases`. */
   searchAliased: number;
   /** Pages the aliased probe matches in the index, before search_pages' limit. */
@@ -332,6 +334,7 @@ export async function measure(size: number, options: { bodyBytes?: number } = {}
       return {
         pages: size,
         search: search.bytes,
+        searchWire: search.wire,
         searchAliased: aliased.bytes,
         searchAliasedMatches,
         getPage: page.bytes,

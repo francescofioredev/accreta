@@ -17,13 +17,15 @@ const ADR_LIMIT = 50;
 
 // Bytes at GATE_PAGES plus 10%, rounded up to 100; search plus 18 B per hit, like the rest.
 const BUDGET = {
-  search: 7_400,
-  searchAliased: 9_000,
+  search: 6_300,
+  searchAliased: 7_200,
+  // The whole response, hits twice; plus 10%, as search has no body to take out.
+  searchWire: 13_700,
   findConsumers: 9_300,
   findConsumersMixed: 9_300,
   findCanonical: 10_300,
   lint: 9_600,
-  getPageEnvelope: 1_100,
+  getPageEnvelope: 1_000,
   // The text gate cannot see structuredContent, which carries the body a second time.
   getPageWireEnvelope: 2_100,
 } satisfies Partial<Record<keyof Row, number>>;
