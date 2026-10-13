@@ -7,6 +7,7 @@ import {
   DelegatedSourceError,
   UNPINNED_REVISION,
   UnknownRevisionError,
+  parseCitation,
   type LocationVerdict,
   type LocatorChange,
   type SourceAdapter,
@@ -88,6 +89,12 @@ function addPage(path: string, source: string, verifiedAt: string | null, canoni
     `INSERT INTO pages (path, type, title, source, canonical_source, last_verified_revision, frontmatter_json, body, mtime)
      VALUES (?, 'note', ?, ?, ?, ?, '{}', '', 0)`,
   ).run(path, path, source, canonical ?? null, verifiedAt);
+  const named = canonical ? parseCitation(canonical)?.sourceId : undefined;
+  if (canonical && named && named !== source) {
+    db.prepare(
+      `INSERT INTO canonical_cites (source, page_path, canonical_source) VALUES (?, ?, ?)`,
+    ).run(named, path, canonical);
+  }
 }
 
 let line = 0;
@@ -214,6 +221,15 @@ describe("a footnote into a source other than the page's own", () => {
     expect(report.stale).toEqual([]);
     expect(report.unverifiable).toEqual(["knowledge/contradiction.md"]);
     expect(report.unpinned).toEqual([{ page: "knowledge/contradiction.md", footnote: null }]);
+  });
+
+  test("an index without the canonical_cites table says to reindex", async () => {
+    addPage("knowledge/finding.md", "noaa", "rev1");
+    db.exec("DROP TABLE canonical_cites");
+    const noaa = new ScriptedSource("noaa", "rev1", {}, {});
+    await expect(detectDrift(db, noaa)).rejects.toThrow(
+      "This index predates the canonical_cites table; run `accreta reindex`.",
+    );
   });
 
   test("a canonical_source takes the pin of a footnote citing the same lines", async () => {
