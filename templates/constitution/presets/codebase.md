@@ -68,8 +68,8 @@ whole page.
 
 ## Disagreements
 
-There is no `contradiction` type here: a disagreement, such as code that contradicts its docs,
-goes inline in the contested page, per base rule 3.
+No `contradiction` type here, so a disagreement, such as code against its docs, goes inline
+(rule 3).
 
 ## Concepts are where the value is
 

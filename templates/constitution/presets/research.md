@@ -36,7 +36,7 @@ often the most valuable thing you can write, and it deserves to be findable on i
 ```markdown
 ---
 type: contradiction
-contradicts: ["[[findings/permafrost-feedback-strength]]"]
+related: ["[[findings/permafrost-feedback-gradual]]", "[[findings/permafrost-feedback-abrupt]]"]
 ---
 
 # Disagreement on permafrost feedback strength
