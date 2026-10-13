@@ -23,7 +23,7 @@ against.
 ```markdown
 The assessed likely range is 2.5 to 4.0 degrees Celsius.[^ecs]
 
-[^ecs]: ipcc-ar6-wg1 @ 9a4f2c1 · chapter-07.md#L320-L344
+[^ecs]: ipcc-ar6-wg1 @ 9a4f2c1e8b03d5f7a6c2e9b1d4f8a0c3e5b7d9f2 · chapter-07.md#L320-L344
 ```
 
 The third part is whatever the source addresses itself by. A file has lines; a wiki page has
@@ -75,7 +75,7 @@ type: concept
 source: ipcc-ar6-wg1
 aliases: ["radiative forcing", "climate forcing"]
 canonical_source: "ipcc-ar6-wg1:chapter-07.md#L142"
-last_verified_revision: 9a4f2c1
+last_verified_revision: 9a4f2c1e8b03d5f7a6c2e9b1d4f8a0c3e5b7d9f2
 related: [[concepts/climate-sensitivity]]
 ---
 
@@ -83,7 +83,7 @@ related: [[concepts/climate-sensitivity]]
 
 The change in net downward radiative flux at the tropopause…[^src]
 
-[^src]: ipcc-ar6-wg1 @ 9a4f2c1 · chapter-07.md#L142-L158
+[^src]: ipcc-ar6-wg1 @ 9a4f2c1e8b03d5f7a6c2e9b1d4f8a0c3e5b7d9f2 · chapter-07.md#L142-L158
 ```
 
 Two fields do most of the work:
