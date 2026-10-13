@@ -6,6 +6,7 @@
     "moduleResolution": "bundler",
     "moduleDetection": "force",
     "types": ["bun"],
+    "customConditions": ["@accreta/source"],
 
     "strict": true,
     "noUncheckedIndexedAccess": true,

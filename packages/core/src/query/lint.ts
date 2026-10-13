@@ -88,7 +88,7 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
 
   // Links the indexer could not resolve to a path inside the knowledge base.
   const broken = db
-    .query(
+    .prepare(
       `SELECT src_path, target, kind, reason FROM broken_links ORDER BY src_path, target, kind`,
     )
     .all() as BrokenRow[];
@@ -104,7 +104,7 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
   // from a broken link: the target is sayable, it just is not there — usually a
   // page that was renamed or has not been written yet.
   const dangling = db
-    .query(
+    .prepare(
       `SELECT l.src_path AS src_path, l.dst_path AS target, l.kind AS kind
        FROM links l
        LEFT JOIN pages p ON p.path = l.dst_path
@@ -121,7 +121,7 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
   }
 
   const pages = db
-    .query(
+    .prepare(
       `SELECT path, type, canonical_source, last_verified_revision, frontmatter_error
        FROM pages ORDER BY path`,
     )
@@ -243,7 +243,7 @@ export async function lintCitations(
   };
 
   const pages = db
-    .query(
+    .prepare(
       `SELECT path, canonical_source FROM pages
        WHERE canonical_source IS NOT NULL AND canonical_source != ''
        ORDER BY path`,
@@ -264,7 +264,7 @@ export async function lintCitations(
   };
 
   const footnotes = db
-    .query(
+    .prepare(
       `SELECT page_path, footnote, line, text, source, revision, path, locator
        FROM citations ORDER BY page_path, line`,
     )

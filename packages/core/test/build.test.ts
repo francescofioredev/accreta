@@ -53,7 +53,7 @@ describe("buildIndex", () => {
     expect(build().pages).toBe(1);
 
     const db = openIndex(indexPath, { readonly: true });
-    const row = db.query("SELECT * FROM pages").get() as Record<string, unknown>;
+    const row = db.prepare("SELECT * FROM pages").get() as Record<string, unknown>;
     expect(row.path).toBe("knowledge/concepts/forcing.md");
     expect(row.type).toBe("concept");
     expect(row.title).toBe("Radiative forcing");
@@ -75,7 +75,7 @@ describe("buildIndex", () => {
 
     const db = openIndex(indexPath, { readonly: true });
     const row = db
-      .query("SELECT type, canonical_source, last_verified_revision FROM pages WHERE path = ?")
+      .prepare("SELECT type, canonical_source, last_verified_revision FROM pages WHERE path = ?")
       .get("knowledge/concepts/forcing.md") as Record<string, unknown>;
     expect(row.type).toBe("concept");
     expect(row.canonical_source).toBe("ipcc:ch07.md#L320");
@@ -97,7 +97,7 @@ describe("buildIndex", () => {
 
     build();
     const db = openIndex(indexPath, { readonly: true });
-    const rows = db.query("SELECT src_path, dst_path, kind FROM links ORDER BY kind").all();
+    const rows = db.prepare("SELECT src_path, dst_path, kind FROM links ORDER BY kind").all();
     expect(rows).toEqual([
       { src_path: "knowledge/a.md", dst_path: "knowledge/b.md", kind: "related" },
       { src_path: "knowledge/a.md", dst_path: "knowledge/c.md", kind: "wikilink" },
@@ -113,7 +113,7 @@ describe("buildIndex", () => {
 
     build();
     const db = openIndex(indexPath, { readonly: true });
-    const row = db.query("SELECT dst_path FROM links").get() as { dst_path: string };
+    const row = db.prepare("SELECT dst_path FROM links").get() as { dst_path: string };
     expect(row.dst_path).toBe("knowledge/modules/foo.md");
     db.close();
   });
@@ -126,7 +126,7 @@ describe("buildIndex", () => {
     expect(result.links).toBe(0);
 
     const db = openIndex(indexPath, { readonly: true });
-    const row = db.query("SELECT * FROM broken_links").get() as Record<string, unknown>;
+    const row = db.prepare("SELECT * FROM broken_links").get() as Record<string, unknown>;
     expect(row.src_path).toBe("knowledge/a.md");
     expect(row.reason).toBe("escapes-knowledge-base");
     db.close();
@@ -138,7 +138,7 @@ describe("buildIndex", () => {
 
     build();
     const db = openIndex(indexPath, { readonly: true });
-    const rows = db.query("SELECT path FROM pages_fts WHERE pages_fts MATCH ?").all("tropopause");
+    const rows = db.prepare("SELECT path FROM pages_fts WHERE pages_fts MATCH ?").all("tropopause");
     expect(rows).toEqual([{ path: "knowledge/a.md" }]);
     db.close();
   });
@@ -151,7 +151,7 @@ describe("buildIndex", () => {
     expect(build().pages).toBe(2);
 
     const db = openIndex(indexPath, { readonly: true });
-    const { n } = db.query("SELECT COUNT(*) AS n FROM pages").get() as { n: number };
+    const { n } = db.prepare("SELECT COUNT(*) AS n FROM pages").get() as { n: number };
     expect(n).toBe(2);
     db.close();
   });
@@ -165,7 +165,7 @@ describe("buildIndex", () => {
     expect(build().pages).toBe(1);
 
     const db = openIndex(indexPath, { readonly: true });
-    const rows = db.query("SELECT path FROM pages").all();
+    const rows = db.prepare("SELECT path FROM pages").all();
     expect(rows).toEqual([{ path: "knowledge/a.md" }]);
     db.close();
   });
@@ -175,7 +175,7 @@ describe("buildIndex", () => {
     expect(build().pages).toBe(1);
 
     const db = openIndex(indexPath, { readonly: true });
-    const row = db.query("SELECT type, title FROM pages").get() as Record<string, unknown>;
+    const row = db.prepare("SELECT type, title FROM pages").get() as Record<string, unknown>;
     expect(row.type).toBe("unknown");
     expect(row.title).toBe("Still here");
     db.close();
@@ -209,9 +209,9 @@ describe("buildIndex", () => {
     }
 
     const db = openIndex(indexPath, { readonly: true });
-    const mode = db.query("PRAGMA journal_mode").get() as { journal_mode: string };
+    const mode = db.prepare("PRAGMA journal_mode").get() as { journal_mode: string };
     expect(mode.journal_mode).toBe("delete");
-    expect(db.query("SELECT COUNT(*) AS n FROM pages").get()).toEqual({ n: 1 });
+    expect(db.prepare("SELECT COUNT(*) AS n FROM pages").get()).toEqual({ n: 1 });
     db.close();
   });
 
@@ -220,7 +220,10 @@ describe("buildIndex", () => {
     build();
 
     const db = openIndex(indexPath, { readonly: true });
-    const rows = db.query("SELECT key, value FROM meta").all() as { key: string; value: string }[];
+    const rows = db.prepare("SELECT key, value FROM meta").all() as {
+      key: string;
+      value: string;
+    }[];
     const meta = Object.fromEntries(rows.map((r) => [r.key, r.value]));
     expect(meta.page_count).toBe("1");
     expect(meta.knowledge_base).toBe("knowledge");
@@ -292,7 +295,7 @@ describe("buildIndex", () => {
     expect(`${codes.join(",")} ${stderrs.join(" ")}`).toBe("0,0  ");
 
     const db = openIndex(indexPath, { readonly: true });
-    expect(db.query("SELECT COUNT(*) AS n FROM pages").get()).toEqual({ n: PAGES });
+    expect(db.prepare("SELECT COUNT(*) AS n FROM pages").get()).toEqual({ n: PAGES });
     db.close();
     expect(stagingLeftovers()).toEqual([]);
     // Two bun processes over a corpus big enough to overlap: the default 5s is
@@ -306,37 +309,38 @@ describe("buildIndex", () => {
     build();
 
     const before = openIndex(indexPath, { readonly: true });
-    expect(before.query("SELECT COUNT(*) AS n FROM pages").get()).toEqual({ n: 1 });
+    expect(before.prepare("SELECT COUNT(*) AS n FROM pages").get()).toEqual({ n: 1 });
     before.close();
 
     writePage("b.md", "# B\n");
     build();
 
     const after = openIndex(indexPath, { readonly: true });
-    expect(after.query("SELECT COUNT(*) AS n FROM pages").get()).toEqual({ n: 2 });
+    expect(after.prepare("SELECT COUNT(*) AS n FROM pages").get()).toEqual({ n: 2 });
     after.close();
   });
 
   test("a reopened connection sees the new index after a swap", () => {
     // What a caller may rely on: reopen after a rebuild and you get the new
     // data. What it may *not* rely on is the fate of a handle held across the
-    // swap — that is platform-dependent. On Linux the unlinked inode stays
-    // alive behind the open descriptor and the stale handle keeps serving the
-    // old rows; on macOS SQLite revalidates the file and fails the connection
-    // with SQLITE_IOERR. Neither is asserted here, because pinning either one
-    // would encode one platform's filesystem semantics as a promise.
+    // swap — that depends on the SQLite build. On Linux, and with Node's bundled
+    // SQLite, the unlinked inode stays alive behind the open descriptor and the
+    // stale handle keeps serving the old rows; Apple's system SQLite, which Bun
+    // loads on macOS, revalidates the file and fails the connection with
+    // SQLITE_IOERR. Neither is asserted here, because pinning either one would
+    // encode one SQLite build's semantics as a promise.
     writePage("a.md", "# A\n");
     build();
 
     const first = openIndex(indexPath, { readonly: true });
-    expect(first.query("SELECT COUNT(*) AS n FROM pages").get()).toEqual({ n: 1 });
+    expect(first.prepare("SELECT COUNT(*) AS n FROM pages").get()).toEqual({ n: 1 });
     first.close();
 
     writePage("b.md", "# B\n");
     build();
 
     const second = openIndex(indexPath, { readonly: true });
-    expect(second.query("SELECT COUNT(*) AS n FROM pages").get()).toEqual({ n: 2 });
+    expect(second.prepare("SELECT COUNT(*) AS n FROM pages").get()).toEqual({ n: 2 });
     second.close();
   });
 
@@ -347,7 +351,7 @@ describe("buildIndex", () => {
     );
     expect(build().citations).toBe(1);
     const db = openIndex(indexPath, { readonly: true });
-    const rows = db.query("SELECT * FROM citations").all();
+    const rows = db.prepare("SELECT * FROM citations").all();
     db.close();
     expect(rows).toEqual([
       {

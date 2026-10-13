@@ -15,7 +15,9 @@ const present = new WeakMap<Database, Set<string>>();
 export function requireTable(db: Database, table: string): void {
   const known = present.get(db) ?? new Set<string>();
   if (known.has(table)) return;
-  const row = db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table);
+  const row = db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(table);
   if (!row) throw new StaleIndexError(table);
   known.add(table);
   present.set(db, known);

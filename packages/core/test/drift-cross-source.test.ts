@@ -84,7 +84,7 @@ afterEach(() => {
 });
 
 function addPage(path: string, source: string, verifiedAt: string | null, canonical?: string) {
-  db.query(
+  db.prepare(
     `INSERT INTO pages (path, type, title, source, canonical_source, last_verified_revision, frontmatter_json, body, mtime)
      VALUES (?, 'note', ?, ?, ?, ?, '{}', '', 0)`,
   ).run(path, path, source, canonical ?? null, verifiedAt);
@@ -98,7 +98,7 @@ function addFootnote(
   path: string,
   at: string,
 ) {
-  db.query(
+  db.prepare(
     `INSERT INTO citations (page_path, footnote, line, text, source, revision, path, locator, claim)
      VALUES (?, ?, ?, '', 'noaa', ?, ?, ?, '')`,
   ).run(page, footnote, ++line, revision, path, at);

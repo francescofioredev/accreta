@@ -22,7 +22,12 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.13
+          bun-version: 1.4.2
+
+      # The packaging test runs the installed bins under `node` as well as Bun.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
 
       # --frozen-lockfile catches a changed *registry* dependency, and does not
       # catch a stale workspace member: bun resolves those by path, so the
@@ -36,7 +41,7 @@ jobs:
       # full picture in one pass instead of one error per push.
       - name: Test
         id: test
-        run: bun test
+        run: bun run test
 
       - name: Typecheck
         if: ${{ !cancelled() }}
@@ -63,24 +68,63 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.13
+          bun-version: 1.4.2
 
       - name: Install
         run: bun install --frozen-lockfile
 
       - name: Reindex
         working-directory: examples/climate
-        run: bun run ../../packages/cli/src/main.ts reindex
+        run: bun --conditions=@accreta/source ../../packages/cli/src/bin.ts reindex
 
       # lint exits non-zero on a broken link, a missing citation, a page type
       # outside the configured vocabulary, or a citation whose path or line range
       # does not exist in the source it names.
+      # The output is asserted too: a CLI that never ran its command also exits 0.
       - name: Lint
         working-directory: examples/climate
-        run: bun run ../../packages/cli/src/main.ts lint
+        run: |
+          out=$(bun --conditions=@accreta/source ../../packages/cli/src/bin.ts lint)
+          echo "$out"
+          grep -q "nothing to report" <<<"$out"
 
       # `drift` is deliberately not run here. The demo's pages are verified
       # against the commit that introduced them, so every later commit to this
       # repository makes them legitimately stale — the tool would be reporting
       # correctly and CI would be red for it. Re-verifying the demo is an
       # editorial act, not something a build should paper over.
+
+  # The bottom of the supported range (ADR-0016). The full OS and runtime matrix is #118.
+  runtimes:
+    name: node 22.16 · bun 1.4.0
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.16.0
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      # Node 22.12 has no node:sqlite and 22.14 has no FTS5; both must be refused by name.
+      - name: Fetch the runtimes accreta must refuse
+        run: |
+          no_sqlite=$(npx -y node@22.12.0 -p process.execPath)
+          no_fts5=$(npx -y node@22.14.0 -p process.execPath)
+          echo "ACCRETA_UNSUPPORTED_RUNTIMES=$no_sqlite:$no_fts5" >> "$GITHUB_ENV"
+
+      - name: SQLite probes
+        run: |
+          node docs/adr/0016-sqlite-probe.mjs
+          bun docs/adr/0016-sqlite-probe.mjs
+          node docs/adr/0016-runtime-probe.mjs
+          bun docs/adr/0016-runtime-probe.mjs
+
+      - name: Packaging and db.ts tests
+        run: bun run test packages/cli/test/packaging.test.ts packages/core/test/db.test.ts

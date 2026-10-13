@@ -27,7 +27,7 @@ Reported: recall@1, recall@5, and MRR.
 ## Running it
 
 ```bash
-bun run bench/search-bench.ts
+bun run bench
 ```
 
 ---
@@ -130,7 +130,7 @@ punctuation tokenizes worse than prose, so the estimate understates the real cou
 
 ## The budget gate
 
-`test/response-budget.test.ts` runs in `bun test`, and so in CI. It calls `measure(60)`: the
+`test/response-budget.test.ts` runs in `bun run test`, and so in CI. It calls `measure(60)`: the
 smallest round size where every list tool has more results than fit in one default page. Past
 that size a default response is still one page, so the bytes barely move: at 1,000 pages each
 figure is within 1.1% of its value at 60. The test takes under a second. It fails when:
@@ -177,10 +177,10 @@ every git report takes this path. Without diffs, the report lists only pages and
 
 | mode                                           | size    | per page | per path |
 | ---------------------------------------------- | ------- | -------- | -------- |
-| with diffs, 1 revision, 1 citation per page    | 27,490  | 241      | 38       |
-| with diffs, 2 revisions, 2 citations per page  | 45,581  | 397      | 76       |
-| without diffs, 1 revision                      | 7,163   | 40       | 38       |
-| without diffs, 2 revisions                     | 9,192   | 40       | 76       |
+| with diffs, 1 revision, 1 citation per page    | 27,643  | 241      | 38       |
+| with diffs, 2 revisions, 2 citations per page  | 45,734  | 397      | 76       |
+| without diffs, 1 revision                      | 7,316   | 40       | 38       |
+| without diffs, 2 revisions                     | 9,345   | 40       | 76       |
 
 One revision is what a git ingest leaves: every page verified in one run records the same HEAD.
 The two-revision cases make growth by revision, and by citations times changed paths, show.

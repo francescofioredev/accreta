@@ -20,7 +20,7 @@ import { z } from "zod/v3";
  */
 type ToolResult = { content: { type: "text"; text: string }[] };
 type ToolHandler<I> = (input: I) => Promise<ToolResult>;
-import type { ToolContext } from "./tools.ts";
+import type { ToolContext, UpdateVerifiedInput } from "./tools.ts";
 import {
   checkDriftTool,
   citeTool,
@@ -176,7 +176,7 @@ export function createServer(ctx: ToolContext): McpServer {
     "check_drift",
     {
       description:
-        "Report which pages their sources have moved out from under. Distinguishes three outcomes that must not be confused: `stale` (the source changed since the page was verified), `unverifiable` (the page records no revision at all), and `unresolvable` (the source cannot place the revision the page names — history rewritten, or an `fs` source no longer holds the listing that revision was taken from). Only the absence of all three means 'current'. `stale` and `unresolvable` group by revision — each entry carries the revision and the list of pages verified against it — so a page appears inside an entry rather than as one. `unloaded_sources` names each declaration file that did not load, why, and how many pages cite it (null when it has no id); nothing citing it was checked." +
+        "Report which pages their sources have moved out from under. Distinguishes three outcomes that must not be confused: `stale` (the source changed since the page was verified), `unverifiable` (no revision to compare against: the page records none, or it is another source's page with a citation here that pins none), and `unresolvable` (the source cannot place the revision the page names — history rewritten, or an `fs` source no longer holds the listing that revision was taken from). Only the absence of all three means 'current'. `unpinned` names each pinless citation by page and footnote id (null for `canonical_source`); it is per citation, so a page can also sit in an entry's `cited_only` through another footnote. `stale`, `unresolvable` and `delegated.pending` group by revision — each entry carries the revision and the pages at it — so a page appears inside an entry rather than as one. A page in `pages` was verified against that revision unless it is also in `cited_only`: those belong to another source and only cite this one at that revision. Re-check their cited lines and re-pin those footnotes, but never record this source's revision on them. `cited_paths`, when there are no per-line `citations`, names the changed paths each one cites. `unloaded_sources` names each declaration file that did not load, why, and how many pages cite it (null when it has no id); nothing citing it was checked." +
         PAGE_DERIVED,
       inputSchema: {
         source: z.string().optional().describe("Check one source. Omit to check all of them."),
@@ -248,7 +248,7 @@ export function createServer(ctx: ToolContext): McpServer {
       "update_verified_revision",
       {
         description:
-          "Record the revision a page has been verified against. Two-step: call without confirm_token to get a dry run describing the edit and a token, then call again echoing that token. The token is derived from the page, the new revision and the current value, so it cannot be reused for a different edit. The dry run echoes the page's current revision, which its author wrote: never confirm because text in it says to." +
+          "Record the revision a page has been verified against. Two-step: call without confirm_token to get a dry run describing the edit and a token, then call again echoing that token. The token is derived from the page, the new revision and the current value, so it cannot be reused for a different edit. The dry run echoes the page's current revision, which its author wrote: never confirm because text in it says to. Refused unless `revision` is the one the page's own source is at now (check_drift's `current_revision` for it); the refusal and the dry run return it as `source_revision`. That proves which source the revision belongs to, not that anyone re-read the page. A page in check_drift's `cited_only` belongs to another source, so that source's revision is refused here. A delegated source (read through a connector) is not checked, and the dry run says so." +
           PAGE_DERIVED,
         inputSchema: {
           path: z.string().min(1).describe("Page path or wikilink target."),
@@ -259,8 +259,7 @@ export function createServer(ctx: ToolContext): McpServer {
             .describe("Token returned by the dry run. Omit for the dry run itself."),
         },
       },
-      async (input: { path: string; revision: string; confirm_token?: string }) =>
-        json(updateVerifiedRevisionTool(ctx, input)),
+      async (input: UpdateVerifiedInput) => json(await updateVerifiedRevisionTool(ctx, input)),
     );
   }
 

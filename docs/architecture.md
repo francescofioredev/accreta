@@ -165,9 +165,9 @@ Every rebuild happens beside the live index and is moved into place with
 the whole new one; the path never names a half-rebuilt database.
 
 A connection that outlives the swap is a different matter, and the outcome depends on the
-platform. On Linux the unlinked inode stays alive behind the open descriptor, so a stale
-handle keeps serving the old rows; on macOS SQLite revalidates the file and fails that
-connection with `SQLITE_IOERR`. Both behaviours were observed against the same code, one
+SQLite build. On Linux, and with the SQLite Node bundles, the unlinked inode stays alive behind
+the open descriptor, so a stale handle keeps serving the old rows; Apple's system SQLite, which
+Bun loads on macOS, revalidates the file and fails that connection with `SQLITE_IOERR`. Both behaviours were observed against the same code, one
 locally and one in CI.
 
 A long-lived reader therefore has to reopen after a rebuild rather than rely on either. The MCP

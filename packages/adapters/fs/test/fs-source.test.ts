@@ -173,7 +173,7 @@ describe("FsSource", () => {
 const setTime = (file: string, ms: number) => utimesSync(file, ms / 1000, ms / 1000);
 
 function verify(db: Database, page: string, revision: string): void {
-  db.query(
+  db.prepare(
     `INSERT INTO pages (path, type, title, source, last_verified_revision, frontmatter_json, body, mtime)
      VALUES (?, 'note', ?, 'docs', ?, '{}', '', 0)
      ON CONFLICT(path) DO UPDATE SET last_verified_revision = excluded.last_verified_revision`,
@@ -542,7 +542,10 @@ describe("FsSource snapshots on disk", () => {
       console.log(failures);
     `;
     const procs = Array.from({ length: 6 }, () =>
-      Bun.spawn([process.execPath, "-e", script], { stdout: "pipe", stderr: "pipe" }),
+      Bun.spawn([process.execPath, "--conditions=@accreta/source", "-e", script], {
+        stdout: "pipe",
+        stderr: "pipe",
+      }),
     );
     const failures = await Promise.all(
       procs.map(async (p) => {

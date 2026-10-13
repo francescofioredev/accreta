@@ -17,7 +17,7 @@ export const AGENT = "claude-opus-5-5";
 export const RUNS = 3;
 export const BUDGET_USD = 20;
 export const RUNS_DIR = join(EXTERNAL, "got-runs");
-const CLI = join(REPO, "packages", "cli", "src", "main.ts");
+const CLI = join(REPO, "packages", "cli", "src", "bin.ts");
 
 function scaffold(run: number): string {
   const dir = join(RUNS_DIR, `run${run}`);
@@ -25,7 +25,9 @@ function scaffold(run: number): string {
   mkdirSync(join(dir, "kb"), { recursive: true });
   execFileSync("git", ["clone", "--quiet", GOT_URL, join(dir, "repo")]);
   execFileSync("git", ["-C", join(dir, "repo"), "checkout", "--quiet", FROM_TAG]);
-  execFileSync("bun", [CLI, "init", "--preset", "codebase"], { cwd: join(dir, "kb") });
+  execFileSync("bun", ["--conditions=@accreta/source", CLI, "init", "--preset", "codebase"], {
+    cwd: join(dir, "kb"),
+  });
   rmSync(join(dir, "kb", "sources", "example.yaml"), { force: true });
   writeFileSync(
     join(dir, "kb", "sources", "got.yaml"),

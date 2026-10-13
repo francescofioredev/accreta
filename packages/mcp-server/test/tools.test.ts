@@ -2,7 +2,16 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildIndex, DEFAULT_CONFIG, openIndex, type AccretaConfig } from "@accreta/core";
+import {
+  buildIndex,
+  DEFAULT_CONFIG,
+  DelegatedSourceError,
+  openIndex,
+  parsePage,
+  UnknownRevisionError,
+  type AccretaConfig,
+  type SourceAdapter,
+} from "@accreta/core";
 import { buildRegistry } from "@accreta/adapters";
 import {
   checkDriftTool,
@@ -52,6 +61,8 @@ beforeEach(() => {
 
 afterEach(() => {
   ctx?.db.close();
+  // node:sqlite throws on a second close(), and the next test may open nothing.
+  ctx = undefined as unknown as ToolContext;
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -276,64 +287,260 @@ describe("source-backed tools", () => {
   });
 });
 
-describe("update_verified_revision", () => {
+function lines(options: { diffing?: boolean; placeable?: boolean } = {}): SourceAdapter {
+  return {
+    id: "lines",
+    revision: async () => "rev2",
+    changedSince: async (revision) => {
+      if (options.placeable === false) throw new UnknownRevisionError("lines", revision);
+      return ["ch.md"];
+    },
+    locate: async () => ({ verdict: "found" }),
+    citation: () => "",
+    pinRevision: () => {},
+    ...(options.diffing
+      ? {
+          touchedSince: async (_revision: string, _path: string, locators: readonly string[]) =>
+            new Map(locators.map((l) => [l, { status: "touched" as const }])),
+        }
+      : {}),
+  };
+}
+
+describe("check_drift across sources", () => {
+  // #213: a `docs` page citing `lines` at a pin, beside a `lines` page verified there.
   beforeEach(() => {
-    writePage("a.md", "---\ntype: note\nlast_verified_revision: old111\n---\n\n# A\n\nBody.\n");
+    writePage(
+      "own.md",
+      "---\ntype: note\nsource: lines\nlast_verified_revision: rev1\n---\n\n# Own\n\nA claim.[^a]\n\n[^a]: lines @ rev1 · ch.md#L1\n",
+    );
+    writePage(
+      "cited.md",
+      "---\ntype: note\nsource: docs\nlast_verified_revision: r0\n---\n\n# Cited\n\nA claim.[^b]\n\n[^b]: lines @ rev1 · ch.md#L1\n",
+    );
   });
 
-  test("is refused when writes are not enabled", () => {
-    build(false);
-    const result = updateVerifiedRevisionTool(ctx, { path: "a", revision: "new222" });
+  async function report(source: SourceAdapter) {
+    build();
+    ctx.sources.set(source.id, source);
+    return (await checkDriftTool(ctx, { source: source.id })).reports?.[0];
+  }
+
+  test.each([false, true])(
+    "a page of another source is marked cited-only, not verified at the revision (diffs: %p)",
+    async (diffing) => {
+      const stale = (await report(lines({ diffing })))?.stale?.[0];
+      expect(stale?.pages).toEqual(["knowledge/cited.md", "knowledge/own.md"]);
+      expect(stale?.cited_only).toEqual(["knowledge/cited.md"]);
+      expect(JSON.stringify(stale)).not.toContain("citedOnly");
+    },
+  );
+
+  test("without diffs, the changed paths each cited-only page cites are named", async () => {
+    const stale = (await report(lines()))?.stale?.[0];
+    expect(stale?.cited_paths).toEqual({ "knowledge/cited.md": ["ch.md"] });
+    expect(JSON.stringify(stale)).not.toContain("citedPaths");
+  });
+
+  test("a citation from another source's page naming no revision is named in unpinned", async () => {
+    writePage(
+      "pinless.md",
+      "---\ntype: note\nsource: docs\nlast_verified_revision: r0\n---\n\n# Pinless\n\nA claim.[^c]\n\n[^c]: lines @ unknown · ch.md#L1\n",
+    );
+    const result = await report(lines());
+    expect(result?.unverifiable).toEqual(["knowledge/pinless.md"]);
+    expect(result?.unpinned).toEqual([{ page: "knowledge/pinless.md", footnote: "c" }]);
+  });
+
+  test("an unplaceable revision says cited_only, in the case every other field uses", async () => {
+    const result = await report(lines({ placeable: false }));
+    expect(JSON.stringify(result)).not.toContain("citedOnly");
+    expect(result?.unresolvable).toEqual([
+      {
+        revision: "rev1",
+        pages: ["knowledge/cited.md", "knowledge/own.md"],
+        cited_only: ["knowledge/cited.md"],
+      },
+    ]);
+  });
+
+  test("with no page of another source citing it, the response carries none of these fields", async () => {
+    rmSync(join(root, "knowledge", "cited.md"));
+    // As the client reads it: undefined fields are dropped from the JSON, not sent empty.
+    const wire = JSON.parse(JSON.stringify(await report(lines())));
+    expect(wire).not.toHaveProperty("unpinned");
+    expect(wire.stale).toEqual([
+      { revision: "rev1", changed_paths: ["ch.md"], pages: ["knowledge/own.md"] },
+    ]);
+  });
+});
+
+describe("update_verified_revision", () => {
+  let docsAt = "new222";
+  const docs: SourceAdapter = {
+    id: "docs",
+    revision: async () => docsAt,
+    changedSince: async () => [],
+    locate: async () => ({ verdict: "found" }),
+    citation: () => "",
+    pinRevision: () => {},
+  };
+  const file = () => readFileSync(join(root, "knowledge", "a.md"), "utf-8");
+
+  function buildWith(writesEnabled: boolean, adapter: SourceAdapter = docs): void {
+    build(writesEnabled);
+    ctx.sources.set(adapter.id, adapter);
+  }
+
+  async function dryToken(revision: string): Promise<string | undefined> {
+    const dry = await updateVerifiedRevisionTool(ctx, { path: "a", revision });
+    return "confirm_token" in dry ? dry.confirm_token : undefined;
+  }
+
+  beforeEach(() => {
+    docsAt = "new222";
+    writePage(
+      "a.md",
+      "---\ntype: note\nsource: docs\nlast_verified_revision: old111\n---\n\n# A\n\nBody.\n",
+    );
+  });
+
+  test("is refused when writes are not enabled", async () => {
+    buildWith(false);
+    const result = await updateVerifiedRevisionTool(ctx, { path: "a", revision: "new222" });
     expect(result.ok).toBe(false);
     expect(result.message).toContain("ACCRETA_ALLOW_WRITES");
   });
 
-  test("without a token it returns a dry run and changes nothing", () => {
-    build(true);
-    const result = updateVerifiedRevisionTool(ctx, { path: "a", revision: "new222" });
-    expect(result.ok).toBe(false);
-    if (!result.ok && "dry_run" in result) {
-      expect(result.dry_run).toBe(true);
-      expect(result.current_revision).toBe("old111");
-      expect(result.confirm_token).toBeTruthy();
-    }
-    expect(readFileSync(join(root, "knowledge", "a.md"), "utf-8")).toContain("old111");
+  test("without a token it returns a dry run naming the source's revision, and changes nothing", async () => {
+    buildWith(true);
+    const result = await updateVerifiedRevisionTool(ctx, { path: "a", revision: "new222" });
+    expect(result).toMatchObject({
+      ok: false,
+      dry_run: true,
+      current_revision: "old111",
+      new_revision: "new222",
+      source_revision: "new222",
+    });
+    expect(result).toHaveProperty("confirm_token");
+    expect(file()).toContain("old111");
   });
 
-  test("the dry-run token applies the write", () => {
-    build(true);
-    const dry = updateVerifiedRevisionTool(ctx, { path: "a", revision: "new222" });
-    const token = !dry.ok && "confirm_token" in dry ? dry.confirm_token : undefined;
-
-    const result = updateVerifiedRevisionTool(ctx, {
+  test("the dry-run token applies the write", async () => {
+    buildWith(true);
+    const token = await dryToken("new222");
+    const result = await updateVerifiedRevisionTool(ctx, {
       path: "a",
       revision: "new222",
       confirm_token: token,
     });
     expect(result.ok).toBe(true);
-    expect(readFileSync(join(root, "knowledge", "a.md"), "utf-8")).toContain("new222");
+    expect(file()).toContain("new222");
   });
 
-  test("a token from one edit does not authorise another", () => {
+  test("a token from one edit does not authorise another", async () => {
     // The property that makes this more than a boolean: the token is derived
     // from the page, the revision and the current value, so it cannot be
     // carried across to a different write.
-    build(true);
-    const dry = updateVerifiedRevisionTool(ctx, { path: "a", revision: "new222" });
-    const token = !dry.ok && "confirm_token" in dry ? dry.confirm_token : undefined;
+    buildWith(true);
+    const token = await dryToken("new222");
+    docsAt = "different333";
 
-    const result = updateVerifiedRevisionTool(ctx, {
+    const result = await updateVerifiedRevisionTool(ctx, {
       path: "a",
       revision: "different333",
       confirm_token: token,
     });
-    expect(result.ok).toBe(false);
-    expect(readFileSync(join(root, "knowledge", "a.md"), "utf-8")).toContain("old111");
+    expect(result).toMatchObject({ ok: false, dry_run: true });
+    expect(file()).toContain("old111");
   });
 
-  test("a missing page is refused before any write is attempted", () => {
-    build(true);
-    expect(updateVerifiedRevisionTool(ctx, { path: "nope", revision: "x" }).ok).toBe(false);
+  test("a revision the page's own source is not at is refused, with no token to confirm it", async () => {
+    // Drift diffs the page's own source from this field; another source's revision there skips changes.
+    buildWith(true);
+    const result = await updateVerifiedRevisionTool(ctx, { path: "a", revision: "l2" });
+    expect(result).toMatchObject({
+      ok: false,
+      page_source: "docs",
+      current_revision: "old111",
+      revision: "l2",
+      source_revision: "new222",
+      _provenance: { page_derived_fields: ["page_source", "current_revision"] },
+    });
+    expect(result).not.toHaveProperty("confirm_token");
+    expect(file()).toContain("old111");
+  });
+
+  test("a confirm is refused when the source moved after the dry run", async () => {
+    buildWith(true);
+    const token = await dryToken("new222");
+    docsAt = "new333";
+
+    const result = await updateVerifiedRevisionTool(ctx, {
+      path: "a",
+      revision: "new222",
+      confirm_token: token,
+    });
+    expect(result).toMatchObject({ ok: false, source_revision: "new333" });
+    expect(file()).toContain("old111");
+  });
+
+  test("a page naming no source takes no revision", async () => {
+    writePage("b.md", "---\ntype: note\n---\n\n# B\n");
+    buildWith(true);
+    const result = await updateVerifiedRevisionTool(ctx, { path: "b", revision: "d2" });
+    expect(result).toMatchObject({ ok: false, page_source: null });
+    expect(result).not.toHaveProperty("confirm_token");
+  });
+
+  test("a page whose source is not loaded takes no revision", async () => {
+    writePage("c.md", "---\ntype: note\nsource: ghost\n---\n\n# C\n");
+    buildWith(true);
+    const result = await updateVerifiedRevisionTool(ctx, { path: "c", revision: "g2" });
+    expect(result).toMatchObject({ ok: false, page_source: "ghost" });
+    expect(result).not.toHaveProperty("confirm_token");
+  });
+
+  test("a delegated source is not checked, and the dry run says so", async () => {
+    const delegated: SourceAdapter = {
+      ...docs,
+      revision: async () => {
+        throw new DelegatedSourceError("docs", "a connector", "everything");
+      },
+    };
+    buildWith(true, delegated);
+    const dry = await updateVerifiedRevisionTool(ctx, { path: "a", revision: "any" });
+    expect(dry).toMatchObject({ ok: false, dry_run: true, source_revision: null });
+    expect(dry.message).toContain("a connector");
+
+    const token = "confirm_token" in dry ? dry.confirm_token : undefined;
+    const result = await updateVerifiedRevisionTool(ctx, {
+      path: "a",
+      revision: "any",
+      confirm_token: token,
+    });
+    expect(result.ok).toBe(true);
+    expect(file()).toContain('last_verified_revision: "any"');
+  });
+
+  test("a revision spanning lines is refused, so it cannot write another frontmatter key", async () => {
+    // A delegated source is the one place the revision is not compared with the source's own.
+    const delegated: SourceAdapter = {
+      ...docs,
+      revision: async () => {
+        throw new DelegatedSourceError("docs", "a connector", "everything");
+      },
+    };
+    buildWith(true, delegated);
+    const revision = 'x\ncanonical_source: "docs:ch01.md#L1"';
+    const result = await updateVerifiedRevisionTool(ctx, { path: "a", revision });
+    expect(result).toMatchObject({ ok: false });
+    expect(result).not.toHaveProperty("confirm_token");
+  });
+
+  test("a missing page is refused before any write is attempted", async () => {
+    buildWith(true);
+    expect((await updateVerifiedRevisionTool(ctx, { path: "nope", revision: "x" })).ok).toBe(false);
   });
 });
 
@@ -342,7 +549,7 @@ describe("setFrontmatterField", () => {
     const before =
       '---\ntype: note\nlast_verified_revision: old\naliases: ["x", "y"]\n---\n\n# A\n';
     const after = setFrontmatterField(before, "last_verified_revision", "new");
-    expect(after).toContain("last_verified_revision: new");
+    expect(after).toContain('last_verified_revision: "new"');
     expect(after).toContain('aliases: ["x", "y"]');
     expect(after).toContain("type: note");
   });
@@ -353,8 +560,35 @@ describe("setFrontmatterField", () => {
       "last_verified_revision",
       "r1",
     );
-    expect(after).toContain("last_verified_revision: r1");
+    expect(after).toContain('last_verified_revision: "r1"');
     expect(after).toContain("type: note");
+  });
+
+  test("a revision that reads as a number stays a string", () => {
+    // fs revisions are 12 hex characters; unquoted, an all-digit one parsed as a number and indexed as null.
+    for (const revision of ["123456789012", "1234e5678901"]) {
+      const after = setFrontmatterField(
+        "---\ntype: note\n---\n\n# A\n",
+        "last_verified_revision",
+        revision,
+      );
+      expect(parsePage(after, "A").frontmatter.last_verified_revision).toBe(revision);
+    }
+  });
+
+  test("a line separator inside a value does not cut the next write short", () => {
+    const before = "---\ntype: note\nsource: agent\n---\n\n# A\n";
+    const once = setFrontmatterField(before, "last_verified_revision", "a k: v");
+    const twice = setFrontmatterField(once, "last_verified_revision", "r2");
+    const parsed = parsePage(twice, "A");
+    expect(parsed.frontmatterError).toBeUndefined();
+    expect(parsed.frontmatter).toMatchObject({ source: "agent", last_verified_revision: "r2" });
+  });
+
+  test("replacement patterns in the value are written literally", () => {
+    const before = "---\ntype: note\nlast_verified_revision: old\n---\n\n# A\n";
+    const after = setFrontmatterField(before, "last_verified_revision", "$`$&");
+    expect(parsePage(after, "A").frontmatter.last_verified_revision).toBe("$`$&");
   });
 
   test("wikilink syntax in other fields survives untouched", () => {
@@ -367,7 +601,7 @@ describe("setFrontmatterField", () => {
 
   test("a page with no frontmatter gains a block", () => {
     const after = setFrontmatterField("# A\n\nBody.\n", "last_verified_revision", "r1");
-    expect(after.startsWith("---\nlast_verified_revision: r1\n---\n")).toBe(true);
+    expect(after.startsWith('---\nlast_verified_revision: "r1"\n---\n')).toBe(true);
     expect(after).toContain("# A");
   });
 });

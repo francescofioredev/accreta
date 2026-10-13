@@ -215,8 +215,8 @@ it is easiest to make here, where nothing can catch you at it.
 {
   "mcpServers": {
     "accreta": {
-      "command": "bun",
-      "args": ["run", "node_modules/@accreta/mcp-server/src/main.ts"],
+      "command": "accreta",
+      "args": ["mcp"],
       "env": { "ACCRETA_ROOT": "../path/to/knowledge-base" }
     }
   }

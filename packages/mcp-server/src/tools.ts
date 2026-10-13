@@ -22,6 +22,7 @@ import {
   type Relation,
   type SearchHit,
   type SourceAdapter,
+  type UnresolvableRevision,
 } from "@accreta/core";
 import { countUnchecked, unloadedFindings, type UnloadedSource } from "@accreta/adapters";
 
@@ -241,19 +242,31 @@ const DRIFT_FIELDS = [
   "reports[].stale[].revision",
   "reports[].stale[].changed_paths",
   "reports[].stale[].pages",
+  "reports[].stale[].cited_only",
+  // Keyed by page path, so the keys are page-authored as well as the changed paths under them.
+  "reports[].stale[].cited_paths",
   "reports[].stale[].pages_by_change",
   "reports[].stale[].citations[].page",
   "reports[].stale[].citations[].footnote",
   "reports[].stale[].citations[].path",
   "reports[].stale[].citations[].locator",
   "reports[].unverifiable",
+  "reports[].unpinned[].page",
+  "reports[].unpinned[].footnote",
   "reports[].unresolvable[].revision",
   "reports[].unresolvable[].pages",
-  "reports[].unresolvable[].citedOnly",
+  "reports[].unresolvable[].cited_only",
   "reports[].delegated.pending[].revision",
   "reports[].delegated.pending[].pages",
-  "reports[].delegated.pending[].citedOnly",
+  "reports[].delegated.pending[].cited_only",
 ] as const;
+
+// The cross-source fields are left undefined when core omits them, so the JSON omits them too.
+const groupOut = (group: UnresolvableRevision) => ({
+  revision: group.revision,
+  pages: group.pages,
+  cited_only: group.citedOnly,
+});
 
 // The early returns carry no block: `unloaded_sources` quotes sources/*.yaml, not a page.
 export async function checkDriftTool(ctx: ToolContext, input: { source?: string }) {
@@ -308,6 +321,8 @@ export async function checkDriftTool(ctx: ToolContext, input: { source?: string 
             revision: entry.revision,
             changed_paths: entry.changedPaths,
             pages: entry.pages,
+            cited_only: entry.citedOnly,
+            cited_paths: entry.citedPaths,
           };
         }
         const byChange = (change: PageChange) => entry.pages.filter((p) => doubt.get(p) === change);
@@ -316,6 +331,7 @@ export async function checkDriftTool(ctx: ToolContext, input: { source?: string 
           revision: entry.revision,
           changed_paths: entry.changedPaths,
           pages: entry.pages,
+          cited_only: entry.citedOnly,
           // Grouped by how much doubt each is in; none of them is verified.
           pages_by_change: {
             changed: byChange("changed"),
@@ -338,14 +354,15 @@ export async function checkDriftTool(ctx: ToolContext, input: { source?: string 
         };
       }),
       unverifiable: report.unverifiable,
-      unresolvable: report.unresolvable,
+      unpinned: report.unpinned,
+      unresolvable: report.unresolvable.map(groupOut),
       // Present only when accreta cannot reach the source. Kept out of
       // `unresolvable`, which says the recorded revision is gone and the work
       // has to start over — a different instruction entirely.
       delegated: report.delegated && {
         via: report.delegated.via,
         scope: report.delegated.guidance,
-        pending: report.delegated.pending,
+        pending: report.delegated.pending.map(groupOut),
       },
     })),
     unloaded_sources,
@@ -499,7 +516,7 @@ export interface UpdateVerifiedInput {
  * it silently, on a model's initiative, is the one tool most worth making
  * difficult.
  */
-export function updateVerifiedRevisionTool(ctx: ToolContext, input: UpdateVerifiedInput) {
+export async function updateVerifiedRevisionTool(ctx: ToolContext, input: UpdateVerifiedInput) {
   if (!ctx.writesEnabled) {
     return {
       ok: false as const,
@@ -508,26 +525,73 @@ export function updateVerifiedRevisionTool(ctx: ToolContext, input: UpdateVerifi
     };
   }
 
+  if (/[\p{Cc}\p{Zl}\p{Zp}]/u.test(input.revision)) {
+    return { ok: false as const, message: "A revision is one line with no control characters." };
+  }
+
   const page = getPage(ctx.db, input.path, ctx.config);
   if (!page) {
     return { ok: false as const, message: `No page matches "${input.path}".` };
+  }
+
+  // Drift diffs a page's own source from this field, so another source's revision here skips changes silently.
+  const adapter = page.source === null ? undefined : ctx.sources.get(page.source);
+  if (!adapter) {
+    return {
+      ok: false as const,
+      path: page.path,
+      page_source: page.source,
+      message:
+        page.source === null
+          ? "This page names no source, so no revision can be recorded on it. Set its `source` first."
+          : "This page's source, page_source, is not loaded, so the revision cannot be checked against it.",
+      _provenance: provenance(["page_source"]),
+    };
+  }
+
+  let sourceRevision: string | null;
+  let delegatedVia: string | undefined;
+  try {
+    sourceRevision = await adapter.revision();
+  } catch (error) {
+    if (!(error instanceof DelegatedSourceError)) throw error;
+    sourceRevision = null;
+    delegatedVia = error.via;
+  }
+  if (sourceRevision !== null && sourceRevision !== input.revision) {
+    return {
+      ok: false as const,
+      path: page.path,
+      page_source: page.source,
+      current_revision: page.lastVerifiedRevision,
+      revision: input.revision,
+      source_revision: sourceRevision,
+      message: `This page belongs to page_source, which is at source_revision. Record source_revision only after re-checking ${page.lastVerifiedRevision === null ? "everything this page takes from page_source: it records no verified revision" : "what this page takes from page_source since current_revision"}. If you came here from another source's \`cited_only\`, re-pin the page's footnotes with \`cite\` instead and record no revision.`,
+      _provenance: provenance(["page_source", "current_revision"]),
+    };
   }
 
   const current = page.lastVerifiedRevision ?? "";
   const token = confirmToken(page.path, input.revision, current);
 
   if (input.confirm_token !== token) {
+    const unchecked =
+      delegatedVia === undefined
+        ? ""
+        : ` The page's source is read through ${delegatedVia}, so accreta cannot check this revision against it.`;
     return {
       ok: false as const,
       dry_run: true as const,
       path: page.path,
       current_revision: page.lastVerifiedRevision,
       new_revision: input.revision,
+      source_revision: sourceRevision,
       confirm_token: token,
       message:
-        input.confirm_token === undefined
+        (input.confirm_token === undefined
           ? "Dry run. Call again with this confirm_token to apply."
-          : "confirm_token does not match this edit. Re-run the dry run and use the token it returns.",
+          : "confirm_token does not match this edit. Re-run the dry run and use the token it returns.") +
+        unchecked,
       _provenance: provenance(["current_revision"]),
     };
   }
@@ -555,16 +619,20 @@ export function updateVerifiedRevisionTool(ctx: ToolContext, input: UpdateVerifi
  * exists to accommodate. This edits the one line, or inserts it.
  */
 export function setFrontmatterField(raw: string, field: string, value: string): string {
+  // Quoted: unquoted, an all-digit fs revision parses as a number and a newline starts a new key.
+  const line = `${field}: ${JSON.stringify(value)}`;
   const match = raw.match(/^---\s*\r?\n([\s\S]*?)\r?\n---\s*(\r?\n|$)/);
   if (!match) {
-    return `---\n${field}: ${value}\n---\n\n${raw}`;
+    return `---\n${line}\n---\n\n${raw}`;
   }
 
   const block = match[1] ?? "";
-  const lineRe = new RegExp(`^(\\s*)${field}\\s*:.*$`, "m");
+  // Lines end at \n only: `m`, `.` and `\s` also break at U+2028, which YAML keeps inside a value.
+  const lineRe = new RegExp(`(^|\\n)([ \\t]*)${field}[ \\t]*:[^\\r\\n]*`);
+  // A function, so `$` sequences in the value are not read as replacement patterns.
   const newBlock = lineRe.test(block)
-    ? block.replace(lineRe, `$1${field}: ${value}`)
-    : `${block}\n${field}: ${value}`;
+    ? block.replace(lineRe, (_, lead: string, indent: string) => `${lead}${indent}${line}`)
+    : `${block}\n${line}`;
 
   return (
     raw.slice(0, match.index ?? 0) +

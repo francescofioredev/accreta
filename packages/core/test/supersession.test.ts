@@ -146,20 +146,20 @@ describe("inconsistent-supersession", () => {
   test("a loop through 20,000 pages lints in linear time and its detail stays small", () => {
     const n = 20_000;
     db = openIndex(indexPath);
-    const page = db.query(
+    const page = db.prepare(
       `INSERT INTO pages (path, type, title, canonical_source, last_verified_revision, frontmatter_json, body, mtime)
        VALUES (?, 'note', ?, 's:x#L1', 'abc', '{}', '', 0)`,
     );
-    const link = db.query(
+    const link = db.prepare(
       `INSERT INTO links (src_path, dst_path, kind) VALUES (?, ?, 'supersedes')`,
     );
     const path = (i: number) => `knowledge/${padded(i)}.md`;
-    db.transaction(() => {
-      for (let i = 0; i < n; i++) {
-        page.run(path(i), padded(i));
-        link.run(path(i), path((i + 1) % n));
-      }
-    })();
+    db.exec("BEGIN");
+    for (let i = 0; i < n; i++) {
+      page.run(path(i), padded(i));
+      link.run(path(i), path((i + 1) % n));
+    }
+    db.exec("COMMIT");
 
     const t0 = performance.now();
     const findings = lint(db!, config).findings.filter(

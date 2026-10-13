@@ -10,7 +10,7 @@ import {
   pageChanges,
   UnknownRevisionError,
 } from "@accreta/core";
-import { GitSource } from "../src/index.ts";
+import { GitCommandError, GitSource } from "../src/index.ts";
 
 let root = "";
 
@@ -231,6 +231,20 @@ describe("GitSource", () => {
     }
   });
 
+  test("a failing git command rejects with its exit code and stderr", async () => {
+    const plain = mkdtempSync(join(tmpdir(), "accreta-not-git-"));
+    try {
+      const failure = await new GitSource({ id: "x", root: plain, citationFormat: "{path}" })
+        .revision()
+        .catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(GitCommandError);
+      expect(failure).toMatchObject({ exitCode: 128 });
+      expect((failure as GitCommandError).stderr).toContain("not a git repository");
+    } finally {
+      rmSync(plain, { recursive: true, force: true });
+    }
+  });
+
   test("git that cannot start is not reported as git refusing the repository", async () => {
     write("a.md", "one");
     await commit("first");
@@ -330,6 +344,10 @@ describe("GitSource scoped to paths", () => {
 const lines = (n: number, edit: Record<number, string> = {}) =>
   Array.from({ length: n }, (_, i) => edit[i + 1] ?? `line ${i + 1}`).join("\n") + "\n";
 
+/** About 1.4 MB, so a diff that rewrites every line is over 2 MiB. */
+const big = (tag: string) =>
+  Array.from({ length: 40_000 }, (_, i) => `${tag} line ${i + 1} ${"x".repeat(20)}`).join("\n");
+
 describe("GitSource.touchedSince", () => {
   async function after(change: () => void, locators: string[]) {
     write("doc.md", lines(20));
@@ -340,6 +358,19 @@ describe("GitSource.touchedSince", () => {
     await commit("second");
     return Object.fromEntries(await git.touchedSince(from, "doc.md", locators));
   }
+
+  // execFile's default maxBuffer is 1 MiB; past it the diff would be an error, not hunks.
+  test("a diff over 1 MiB is read whole", async () => {
+    write("big.md", big("old"));
+    await commit("first");
+    const git = source();
+    const from = await git.revision();
+    write("big.md", big("new"));
+    await commit("second");
+
+    const result = await git.touchedSince(from, "big.md", ["L39999-L40000"]);
+    expect(Object.fromEntries(result)).toEqual({ "L39999-L40000": { status: "touched" } });
+  });
 
   test("an edit inside a range touches it, one beside it does not", async () => {
     const result = await after(
