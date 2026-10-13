@@ -33,6 +33,7 @@ beforeEach(async () => {
     '---\ntype: concept\naliases: ["climate forcing"]\ncanonical_source: "ipcc:ch07.md#L1"\nlast_verified_revision: abc123\nreviewed: 2026-01-02\nrelated: [[notes/a]]\n---\n\n# Radiative forcing\n\ntropopause flux\n',
   );
   writePage("notes/a.md", "---\ntype: note\n---\n\n# A note\n\ntropopause aside\n");
+  writePage("notes/tagged.md", "---\n!!timestamp 2026-01-02\n---\n\n# T\n\nzebraword\n");
   const indexPath = join(root, ".accreta", "index.sqlite");
   buildIndex({ root, config, indexPath });
   ctx = {
@@ -100,6 +101,13 @@ describe("outputSchema", () => {
     expect(page.title).toBe("Radiative forcing");
     expect(typeof page.frontmatter.reviewed).toBe("string");
     expect(structuredContent?._provenance).toBeDefined();
+  });
+
+  test("get_page on a page whose frontmatter is a tagged scalar validates", async () => {
+    const { structuredContent } = await call("get_page", { path: "notes/tagged" });
+    const page = structuredContent?.page as { title: string; frontmatter: unknown };
+    expect(page.title).toBe("T");
+    expect(page.frontmatter).toEqual({});
   });
 
   test("get_page returns a miss that validates", async () => {

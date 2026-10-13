@@ -279,7 +279,10 @@ export function parsePage(raw: string, fallbackTitle: string): ParsedPage {
   if (match) {
     try {
       const loaded = parseYaml(preprocessFrontmatter(match[1] ?? ""));
-      if (loaded && typeof loaded === "object" && !Array.isArray(loaded)) {
+      // A tagged scalar such as !!timestamp loads as a Date: an object, but not a set of fields.
+      const proto =
+        loaded && typeof loaded === "object" ? Object.getPrototypeOf(loaded) : undefined;
+      if (proto === Object.prototype || proto === null) {
         frontmatter = loaded as Frontmatter;
       } else if (loaded !== null && loaded !== undefined) {
         // A fence that parses to a scalar or a sequence is the quieter of the
