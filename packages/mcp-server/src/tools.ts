@@ -525,6 +525,10 @@ export async function updateVerifiedRevisionTool(ctx: ToolContext, input: Update
     };
   }
 
+  if (/\p{Cc}/u.test(input.revision)) {
+    return { ok: false as const, message: "A revision is one line with no control characters." };
+  }
+
   const page = getPage(ctx.db, input.path, ctx.config);
   if (!page) {
     return { ok: false as const, message: `No page matches "${input.path}".` };
@@ -558,10 +562,13 @@ export async function updateVerifiedRevisionTool(ctx: ToolContext, input: Update
     return {
       ok: false as const,
       path: page.path,
+      page_source: page.source,
+      current_revision: page.lastVerifiedRevision,
       revision: input.revision,
       source_revision: sourceRevision,
       message:
-        "The page's own source is at source_revision, not this revision. Re-read what the page cites at source_revision, then record that. A page that only cites another source is re-pinned in its footnotes, not here.",
+        "This page belongs to page_source, which is at source_revision. Record source_revision only after re-checking what this page takes from page_source since current_revision. If you came here from another source's `cited_only`, re-pin the page's footnotes with `cite` instead and record no revision.",
+      _provenance: provenance(["page_source", "current_revision"]),
     };
   }
 
@@ -613,16 +620,19 @@ export async function updateVerifiedRevisionTool(ctx: ToolContext, input: Update
  * exists to accommodate. This edits the one line, or inserts it.
  */
 export function setFrontmatterField(raw: string, field: string, value: string): string {
+  // Quoted: unquoted, an all-digit fs revision parses as a number and a newline starts a new key.
+  const line = `${field}: ${JSON.stringify(value)}`;
   const match = raw.match(/^---\s*\r?\n([\s\S]*?)\r?\n---\s*(\r?\n|$)/);
   if (!match) {
-    return `---\n${field}: ${value}\n---\n\n${raw}`;
+    return `---\n${line}\n---\n\n${raw}`;
   }
 
   const block = match[1] ?? "";
   const lineRe = new RegExp(`^(\\s*)${field}\\s*:.*$`, "m");
+  // A function, so `$` sequences in the value are not read as replacement patterns.
   const newBlock = lineRe.test(block)
-    ? block.replace(lineRe, `$1${field}: ${value}`)
-    : `${block}\n${field}: ${value}`;
+    ? block.replace(lineRe, (_, indent: string) => `${indent}${line}`)
+    : `${block}\n${line}`;
 
   return (
     raw.slice(0, match.index ?? 0) +

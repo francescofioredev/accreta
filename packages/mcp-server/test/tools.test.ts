@@ -7,6 +7,7 @@ import {
   DEFAULT_CONFIG,
   DelegatedSourceError,
   openIndex,
+  parsePage,
   UnknownRevisionError,
   type AccretaConfig,
   type SourceAdapter,
@@ -456,7 +457,14 @@ describe("update_verified_revision", () => {
     // Drift diffs the page's own source from this field; another source's revision there skips changes.
     buildWith(true);
     const result = await updateVerifiedRevisionTool(ctx, { path: "a", revision: "l2" });
-    expect(result).toMatchObject({ ok: false, revision: "l2", source_revision: "new222" });
+    expect(result).toMatchObject({
+      ok: false,
+      page_source: "docs",
+      current_revision: "old111",
+      revision: "l2",
+      source_revision: "new222",
+      _provenance: { page_derived_fields: ["page_source", "current_revision"] },
+    });
     expect(result).not.toHaveProperty("confirm_token");
     expect(file()).toContain("old111");
   });
@@ -510,7 +518,22 @@ describe("update_verified_revision", () => {
       confirm_token: token,
     });
     expect(result.ok).toBe(true);
-    expect(file()).toContain("last_verified_revision: any");
+    expect(file()).toContain('last_verified_revision: "any"');
+  });
+
+  test("a revision spanning lines is refused, so it cannot write another frontmatter key", async () => {
+    // A delegated source is the one place the revision is not compared with the source's own.
+    const delegated: SourceAdapter = {
+      ...docs,
+      revision: async () => {
+        throw new DelegatedSourceError("docs", "a connector", "everything");
+      },
+    };
+    buildWith(true, delegated);
+    const revision = 'x\ncanonical_source: "docs:ch01.md#L1"';
+    const result = await updateVerifiedRevisionTool(ctx, { path: "a", revision });
+    expect(result).toMatchObject({ ok: false });
+    expect(result).not.toHaveProperty("confirm_token");
   });
 
   test("a missing page is refused before any write is attempted", async () => {
@@ -524,7 +547,7 @@ describe("setFrontmatterField", () => {
     const before =
       '---\ntype: note\nlast_verified_revision: old\naliases: ["x", "y"]\n---\n\n# A\n';
     const after = setFrontmatterField(before, "last_verified_revision", "new");
-    expect(after).toContain("last_verified_revision: new");
+    expect(after).toContain('last_verified_revision: "new"');
     expect(after).toContain('aliases: ["x", "y"]');
     expect(after).toContain("type: note");
   });
@@ -535,8 +558,26 @@ describe("setFrontmatterField", () => {
       "last_verified_revision",
       "r1",
     );
-    expect(after).toContain("last_verified_revision: r1");
+    expect(after).toContain('last_verified_revision: "r1"');
     expect(after).toContain("type: note");
+  });
+
+  test("a revision that reads as a number stays a string", () => {
+    // fs revisions are 12 hex characters; unquoted, an all-digit one parsed as a number and indexed as null.
+    for (const revision of ["123456789012", "1234e5678901"]) {
+      const after = setFrontmatterField(
+        "---\ntype: note\n---\n\n# A\n",
+        "last_verified_revision",
+        revision,
+      );
+      expect(parsePage(after, "A").frontmatter.last_verified_revision).toBe(revision);
+    }
+  });
+
+  test("replacement patterns in the value are written literally", () => {
+    const before = "---\ntype: note\nlast_verified_revision: old\n---\n\n# A\n";
+    const after = setFrontmatterField(before, "last_verified_revision", "$`$&");
+    expect(parsePage(after, "A").frontmatter.last_verified_revision).toBe("$`$&");
   });
 
   test("wikilink syntax in other fields survives untouched", () => {
@@ -549,7 +590,7 @@ describe("setFrontmatterField", () => {
 
   test("a page with no frontmatter gains a block", () => {
     const after = setFrontmatterField("# A\n\nBody.\n", "last_verified_revision", "r1");
-    expect(after.startsWith("---\nlast_verified_revision: r1\n---\n")).toBe(true);
+    expect(after.startsWith('---\nlast_verified_revision: "r1"\n---\n')).toBe(true);
     expect(after).toContain("# A");
   });
 });

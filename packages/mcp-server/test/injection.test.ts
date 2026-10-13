@@ -44,6 +44,9 @@ const PROBES: Record<string, Probe[]> = {
   [WRITE_TOOL]: [
     // Refused: the page's own source is page text, echoed back.
     { path: "notes/foreign-source", revision: "deadbeef" },
+    { path: "notes/unsourced", revision: "deadbeef" },
+    // A delegated source is not checked: a dry run, never confirmed.
+    { path: "notes/relayed", revision: "deadbeef" },
     // Refused: not the revision `docs` is at, which the refusal names.
     { path: "concepts/injected", revision: "deadbeef" },
     (refused) => ({
@@ -261,6 +264,7 @@ describe("every tool response, against pages that try to give instructions", () 
   const shapesBy = new Map<string, Map<string, Set<string>>>();
   const tools: string[] = [];
   let capabilities: Record<string, unknown> = {};
+  let lastWrite: unknown;
 
   beforeAll(async () => {
     // Writes on, so the write tool is enumerated and swept like the rest.
@@ -288,6 +292,7 @@ describe("every tool response, against pages that try to give instructions", () 
           const result = await client.callTool({ name: tool.name, arguments: args });
           const audited = auditResult(result);
           previous = audited.payloads[0];
+          if (tool.name === WRITE_TOOL) lastWrite = previous;
           for (const payload of audited.payloads) shapesOf(payload, "", shapes);
           for (const field of audited.declared) declared.add(field);
           for (const leak of audited.leaks) {
@@ -309,6 +314,10 @@ describe("every tool response, against pages that try to give instructions", () 
   test("the server exposes tools only, so no other surface bypasses this sweep", () => {
     expect(capabilities.resources).toBeUndefined();
     expect(capabilities.prompts).toBeUndefined();
+  });
+
+  test("the write probes reach a confirmed write, so the write's reply is swept too", () => {
+    expect(lastWrite).toMatchObject({ ok: true });
   });
 
   test("every registered tool has a probe", () => {
