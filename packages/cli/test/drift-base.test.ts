@@ -11,6 +11,7 @@ import {
   type SourceAdapter,
 } from "@accreta/core";
 import { readBase, toJson } from "../src/commands/drift.ts";
+import { run } from "../src/main.ts";
 
 class ScriptedSource implements SourceAdapter {
   constructor(
@@ -104,5 +105,112 @@ describe("drift --base", () => {
 
     expect(json.pages_in_doubt).toBe(1);
     expect(json.pages_newly_in_doubt).toBe(0);
+  });
+});
+
+describe("drift --base on source declarations that did not load", () => {
+  let output: string[] = [];
+  const cli = (...argv: string[]) =>
+    run(argv, { cwd: root, out: (line) => output.push(line), err: () => {} });
+  const writeSource = (name: string, body: string) =>
+    writeFileSync(join(root, "sources", name), body, "utf-8");
+  const BROKEN = "id: broken\ntype: fss\n";
+
+  /** What the action does on the base branch: `drift --json`, kept even when it exits 1. */
+  async function baseReport(): Promise<string> {
+    output = [];
+    await cli("drift", "--json");
+    const path = join(root, "base.json");
+    writeFileSync(path, output.join("\n"), "utf-8");
+    output = [];
+    return path;
+  }
+
+  beforeEach(async () => {
+    delete process.env.ACCRETA_INDEX_PATH;
+    delete process.env.ACCRETA_ROOT;
+    await cli("init");
+    await cli("reindex");
+    output = [];
+  });
+
+  test("one already broken on the base is listed, as inherited, and passes", async () => {
+    writeSource("broken.yaml", BROKEN);
+    const base = await baseReport();
+    // A new reason on the same file is still the same declaration.
+    writeSource("broken.yaml", "id: broken\ntype: fsss\n");
+
+    expect(await cli("drift", "--base", base)).toBe(0);
+    expect(output.join("\n")).toContain("sources/broken.yaml — did not load on the base branch");
+
+    output = [];
+    expect(await cli("drift", "--json", "--base", base)).toBe(0);
+    const json = JSON.parse(output.join("\n"));
+    expect(json.sources_newly_unloaded).toBe(0);
+    expect(json.unloaded_sources).toMatchObject([{ file: "sources/broken.yaml", on_base: true }]);
+
+    output = [];
+    expect(await cli("drift", "--format", "github", "--base", base)).toBe(0);
+    const out = output.join("\n");
+    const folded = out.indexOf("<details>");
+    expect(folded).toBeGreaterThan(-1);
+    expect(out.indexOf("`sources/broken.yaml`")).toBeGreaterThan(folded);
+    expect(out).toContain("already did not load on the base branch");
+  });
+
+  test("one the change broke fails", async () => {
+    writeSource("broken.yaml", "id: broken\ntype: fs\nroot: .\n");
+    const base = await baseReport();
+    writeSource("broken.yaml", BROKEN);
+
+    expect(await cli("drift", "--json", "--base", base)).toBe(1);
+    const json = JSON.parse(output.join("\n"));
+    expect(json.sources_newly_unloaded).toBe(1);
+    expect(json.unloaded_sources).toMatchObject([{ file: "sources/broken.yaml", on_base: false }]);
+
+    output = [];
+    expect(await cli("drift", "--format", "github", "--base", base)).toBe(1);
+    const out = output.join("\n");
+    expect(out.indexOf("- `sources/broken.yaml` did not load")).toBeLessThan(out.indexOf("**"));
+    expect(out).not.toContain("<details>");
+  });
+
+  test("one added broken fails, next to one inherited", async () => {
+    writeSource("broken.yaml", BROKEN);
+    const base = await baseReport();
+    writeSource("added.yaml", "id: added\ntype: fss\n");
+
+    expect(await cli("drift", "--json", "--base", base)).toBe(1);
+    const json = JSON.parse(output.join("\n"));
+    expect(json.sources_newly_unloaded).toBe(1);
+    expect(json.unloaded_sources).toMatchObject([
+      { file: "sources/added.yaml", on_base: false },
+      { file: "sources/broken.yaml", on_base: true },
+    ]);
+  });
+
+  test("without --base, one inherited still fails", async () => {
+    writeSource("broken.yaml", BROKEN);
+
+    expect(await cli("drift")).toBe(1);
+    output = [];
+    expect(await cli("drift", "--json")).toBe(1);
+    const json = JSON.parse(output.join("\n"));
+    expect(json.sources_newly_unloaded).toBe(1);
+    expect(json.unloaded_sources[0]).not.toHaveProperty("on_base");
+  });
+
+  test("a base report from before the marking is read by file", async () => {
+    writeSource("broken.yaml", BROKEN);
+    const base = join(root, "old-base.json");
+    // As drift wrote it after #176: unloaded_sources, but no on_base and no newly count.
+    const old = { pages_in_doubt: 0, pages_newly_in_doubt: 0, pages_unplaceable: 0 };
+    const unloaded = [{ file: "sources/broken.yaml", id: "broken", reason: "older", pages: 0 }];
+    writeFileSync(base, JSON.stringify({ ...old, sources: [], unloaded_sources: unloaded }));
+    expect(await cli("drift", "--base", base)).toBe(0);
+
+    // From before #176: no unloaded_sources at all, so nothing is inherited.
+    writeFileSync(base, JSON.stringify({ ...old, sources: [] }));
+    expect(await cli("drift", "--base", base)).toBe(1);
   });
 });

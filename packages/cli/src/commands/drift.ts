@@ -77,12 +77,12 @@ export async function drift(
 
   const loaded = loadSources(workspace);
   const reports: DriftReport[] = [];
-  let unloaded: UncheckedSource[] = [];
+  let unloaded: UnloadedEntry[] = [];
   if (loaded.sources.length > 0 || loaded.unloaded.length > 0) {
     const db = openIndex(workspace.indexPath, { readonly: true });
     try {
       for (const adapter of loaded.sources) reports.push(await detectDrift(db, adapter));
-      unloaded = countUnchecked(db, loaded.unloaded);
+      unloaded = markUnloaded(countUnchecked(db, loaded.unloaded), base);
     } finally {
       db.close();
     }
@@ -94,7 +94,8 @@ export async function drift(
     ctx.out(toGithub(reports, base, GITHUB_BODY_LIMIT, unloaded));
   } else {
     for (const source of unloaded) {
-      ctx.out(`${source.file} — did not load, so ${uncheckedPages(source.pages)}`);
+      const when = source.on_base ? " on the base branch either" : "";
+      ctx.out(`${source.file} — did not load${when}, so ${uncheckedPages(source.pages)}`);
       ctx.out(`  ${source.reason}`);
     }
     if (reports.length === 0 && unloaded.length === 0) {
@@ -103,7 +104,8 @@ export async function drift(
   }
 
   // "I cannot tell", like `unresolvable`: a typo in `type` must not turn a failing run green.
-  const failed = reports.some((report) => fails(report, strict)) || unloaded.length > 0;
+  const failed =
+    reports.some((report) => fails(report, strict)) || unloaded.some((u) => !u.on_base);
   return failed ? 1 : 0;
 }
 
@@ -288,8 +290,13 @@ interface DriftJson {
   pages_newly_unplaceable: number;
   sources: SourceVerdict[];
   /** Declarations that did not build; nothing citing them was checked. */
-  unloaded_sources: UncheckedSource[];
+  unloaded_sources: UnloadedEntry[];
+  /** Of those, the ones the base report did not have; all of them without one. */
+  sources_newly_unloaded: number;
 }
+
+/** With `--base`, `on_base` says the base branch already failed to load the same file. */
+type UnloadedEntry = UncheckedSource & { on_base?: boolean };
 
 /** Keys of what a base report already had in doubt or could not place. */
 type BaseKeys = Set<string>;
@@ -301,6 +308,8 @@ const citationKey = (source: string, page: string, c: DoubtedCitation) =>
 const fileKey = (source: string, page: string) => JSON.stringify(["file", source, page]);
 const unplacedKey = (source: string, page: string, revision: string) =>
   JSON.stringify(["unplaced", source, page, revision]);
+// By file, not reason: a declaration broken on the base stays inherited when its error changes.
+const unloadedKey = (file: string) => JSON.stringify(["unloaded", file]);
 
 export function readBase(path: string): BaseKeys {
   let json: DriftJson;
@@ -327,7 +336,13 @@ export function readBase(path: string): BaseKeys {
       for (const page of entry.pages) keys.add(unplacedKey(source.source_id, page, entry.revision));
     }
   }
+  // Absent from reports written before unloaded sources were reported: then none is inherited.
+  for (const source of json.unloaded_sources ?? []) keys.add(unloadedKey(source.file));
   return keys;
+}
+
+function markUnloaded(unloaded: UnloadedEntry[], base?: BaseKeys): UnloadedEntry[] {
+  return base ? unloaded.map((u) => ({ ...u, on_base: base.has(unloadedKey(u.file)) })) : unloaded;
 }
 
 const isNew = (page: DoubtedPage) =>
@@ -337,8 +352,9 @@ const isNew = (page: DoubtedPage) =>
 export function toJson(
   reports: DriftReport[],
   base?: BaseKeys,
-  unloaded: UncheckedSource[] = [],
+  unloaded: UnloadedEntry[] = [],
 ): DriftJson {
+  const marked = markUnloaded(unloaded, base);
   const sources = reports.map((report) => verdict(report, base));
   const doubted = sources.flatMap((source) => source.in_doubt);
   const unplaced = sources.flatMap((source) =>
@@ -352,7 +368,8 @@ export function toJson(
     pages_unplaceable: distinct(unplaced.map((u) => u.page)),
     pages_newly_unplaceable: distinct(unplaced.filter((u) => !base?.has(u.key)).map((u) => u.page)),
     sources,
-    unloaded_sources: unloaded,
+    unloaded_sources: marked,
+    sources_newly_unloaded: marked.filter((u) => !u.on_base).length,
   };
 }
 
@@ -456,18 +473,17 @@ export function toGithub(
   reports: DriftReport[],
   base?: BaseKeys,
   limit = GITHUB_BODY_LIMIT,
-  unloaded: UncheckedSource[] = [],
+  unloaded: UnloadedEntry[] = [],
 ): string {
   const json = toJson(reports, base, unloaded);
   const lines: Line[] = [{ text: "### accreta drift" }, { text: "" }];
   const text = (...values: string[]) => lines.push(...values.map((value) => ({ text: value })));
+  const unloadedLine = (source: UnloadedEntry) =>
+    `- ${code(source.file)} did not load, so ${uncheckedPages(source.pages)}: ${code(source.reason)}`;
+  const inherited = json.unloaded_sources.filter((u) => u.on_base);
   // Before the headline, so the counts-only fallback comment still carries them.
-  for (const source of unloaded) {
-    text(
-      `- ${code(source.file)} did not load, so ${uncheckedPages(source.pages)}: ${code(source.reason)}`,
-    );
-  }
-  if (unloaded.length > 0) text("");
+  for (const source of json.unloaded_sources) if (!source.on_base) text(unloadedLine(source));
+  if (json.sources_newly_unloaded > 0) text("");
   let groups = 0;
   const table = (header: string[], values: string[], row: (index: number) => 0 | 1 = () => 1) => {
     const group = groups++;
@@ -481,6 +497,17 @@ export function toGithub(
     return fit(lines, limit);
   }
   text(headline(json, base !== undefined));
+  if (inherited.length > 0) {
+    text(
+      "",
+      "<details>",
+      `<summary>${inherited.length} source declaration(s) already did not load on the base branch.</summary>`,
+      "",
+      ...inherited.map(unloadedLine),
+      "",
+      "</details>",
+    );
+  }
 
   for (const source of json.sources) {
     text("");
@@ -587,10 +614,11 @@ export function toGithub(
 }
 
 function headline(json: DriftJson, compared: boolean): string {
-  const n = json.unloaded_sources.length;
+  const n = json.sources_newly_unloaded;
   if (n === 0) return pagesHeadline(json, compared);
+  const cause = compared ? " because of this change" : "";
   return (
-    `**${n} source declaration(s) did not load; pages citing them were not checked.** ` +
+    `**${n} source declaration(s) did not load${cause}; pages citing them were not checked.** ` +
     pagesHeadline(json, compared)
   );
 }
