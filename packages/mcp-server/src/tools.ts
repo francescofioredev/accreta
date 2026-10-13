@@ -503,8 +503,6 @@ function confirmToken(path: string, revision: string, currentValue: string): str
 
 export interface UpdateVerifiedInput {
   path: string;
-  /** The source the revision belongs to; it must be the page's own. */
-  source: string;
   revision: string;
   confirm_token?: string;
 }
@@ -518,7 +516,7 @@ export interface UpdateVerifiedInput {
  * it silently, on a model's initiative, is the one tool most worth making
  * difficult.
  */
-export function updateVerifiedRevisionTool(ctx: ToolContext, input: UpdateVerifiedInput) {
+export async function updateVerifiedRevisionTool(ctx: ToolContext, input: UpdateVerifiedInput) {
   if (!ctx.writesEnabled) {
     return {
       ok: false as const,
@@ -533,7 +531,8 @@ export function updateVerifiedRevisionTool(ctx: ToolContext, input: UpdateVerifi
   }
 
   // Drift diffs a page's own source from this field, so another source's revision here skips changes silently.
-  if (page.source !== input.source) {
+  const adapter = page.source === null ? undefined : ctx.sources.get(page.source);
+  if (!adapter) {
     return {
       ok: false as const,
       path: page.path,
@@ -541,8 +540,28 @@ export function updateVerifiedRevisionTool(ctx: ToolContext, input: UpdateVerifi
       message:
         page.source === null
           ? "This page names no source, so no revision can be recorded on it. Set its `source` first."
-          : `This page belongs to page_source, not "${input.source}". A page that only cites "${input.source}" is re-pinned in its footnotes, not here.`,
+          : "This page's source, page_source, is not loaded, so the revision cannot be checked against it.",
       _provenance: provenance(["page_source"]),
+    };
+  }
+
+  let sourceRevision: string | null;
+  let delegatedVia: string | undefined;
+  try {
+    sourceRevision = await adapter.revision();
+  } catch (error) {
+    if (!(error instanceof DelegatedSourceError)) throw error;
+    sourceRevision = null;
+    delegatedVia = error.via;
+  }
+  if (sourceRevision !== null && sourceRevision !== input.revision) {
+    return {
+      ok: false as const,
+      path: page.path,
+      revision: input.revision,
+      source_revision: sourceRevision,
+      message:
+        "The page's own source is at source_revision, not this revision. Re-read what the page cites at source_revision, then record that. A page that only cites another source is re-pinned in its footnotes, not here.",
     };
   }
 
@@ -550,17 +569,23 @@ export function updateVerifiedRevisionTool(ctx: ToolContext, input: UpdateVerifi
   const token = confirmToken(page.path, input.revision, current);
 
   if (input.confirm_token !== token) {
+    const unchecked =
+      delegatedVia === undefined
+        ? ""
+        : ` The page's source is read through ${delegatedVia}, so accreta cannot check this revision against it.`;
     return {
       ok: false as const,
       dry_run: true as const,
       path: page.path,
       current_revision: page.lastVerifiedRevision,
       new_revision: input.revision,
+      source_revision: sourceRevision,
       confirm_token: token,
       message:
-        input.confirm_token === undefined
+        (input.confirm_token === undefined
           ? "Dry run. Call again with this confirm_token to apply."
-          : "confirm_token does not match this edit. Re-run the dry run and use the token it returns.",
+          : "confirm_token does not match this edit. Re-run the dry run and use the token it returns.") +
+        unchecked,
       _provenance: provenance(["current_revision"]),
     };
   }

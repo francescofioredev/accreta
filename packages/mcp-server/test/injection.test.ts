@@ -43,12 +43,16 @@ const PROBES: Record<string, Probe[]> = {
   ],
   [WRITE_TOOL]: [
     // Refused: the page's own source is page text, echoed back.
-    { path: "notes/foreign-source", source: "docs", revision: "deadbeef" },
-    { path: "concepts/injected", source: "docs", revision: "deadbeef" },
+    { path: "notes/foreign-source", revision: "deadbeef" },
+    // Refused: not the revision `docs` is at, which the refusal names.
+    { path: "concepts/injected", revision: "deadbeef" },
+    (refused) => ({
+      path: "concepts/injected",
+      revision: (refused as { source_revision?: string }).source_revision,
+    }),
     (dryRun) => ({
       path: "concepts/injected",
-      source: "docs",
-      revision: "deadbeef",
+      revision: (dryRun as { source_revision?: string }).source_revision,
       confirm_token: (dryRun as { confirm_token?: string }).confirm_token,
     }),
   ],
