@@ -183,7 +183,7 @@ one epic per phase.
 ## Install
 
 ```bash
-bun add -g accreta          # or: bunx accreta --help
+bun add -g accreta          # or: bunx --bun accreta --help
 ```
 
 The setup skill that walks an agent through the rest is a separate install, from this

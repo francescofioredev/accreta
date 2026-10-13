@@ -65,7 +65,7 @@ jobs:
       # is a broken install for anyone who runs `npm i` in that window.
       #
       # `npm publish` runs prepack, which copies templates/ and skills/ into the
-      # CLI package. Verified to produce the same 12 files as `bun pm pack`.
+      # CLI package.
       - name: Publish
         run: |
           version="${GITHUB_REF_NAME#v}"

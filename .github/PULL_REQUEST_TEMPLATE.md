@@ -25,7 +25,7 @@ Fixes #
 
 ## Checklist
 
-- [ ] `bun test` passes
+- [ ] `bun run test` passes
 - [ ] `bun run typecheck` passes
 - [ ] `bun run lint` passes
 - [ ] A bug fix includes a test that fails without the fix

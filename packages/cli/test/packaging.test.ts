@@ -370,6 +370,13 @@ describe.each(UNSUPPORTED)("the installed bins under %s", (runtime) => {
     expect(result.stderr).toContain(UNSUPPORTED_MESSAGE);
     expect(result.code).toBe(1);
   });
+
+  // Without node:sqlite the bin refuses on stderr; with it but no FTS5, doctor's runtime section does.
+  test("accreta doctor names the supported range and exits non-zero", () => {
+    const result = exec([runtime, accreta, "doctor"], dir);
+    expect(`${result.stdout}${result.stderr}`).toContain(UNSUPPORTED_MESSAGE);
+    expect(result.code).toBe(1);
+  });
 });
 
 test("the published manifests name real versions, not workspace protocols", () => {
