@@ -132,33 +132,63 @@ export interface Footnote {
   claim: string;
 }
 
+/** A footnote that cannot pair up: a reference nothing defines, or a definition no claim leads to. */
+export interface FootnoteOrphan {
+  id: string;
+  /** 1-based line of the reference or definition, in the text it was read from. */
+  line: number;
+  role: "reference" | "definition";
+}
+
 const DEFINITION_RE = /^\[\^([^\]\s]+)\]:\s*(.*?)\s*$/;
 const FENCE_RE = /^\s*(```|~~~)/;
 const REFERENCE_RE = /\[\^([^\]\s]+)\](?!:)/g;
+const INLINE_CODE_RE = /(`+).*?\1/g;
 
 /**
  * Every footnote definition in a page body, with the claim that cites it. A claim is the
  * sentence carrying the marker, since a paragraph makes several; fenced code is an example.
  */
 export function extractFootnotes(body: string): Footnote[] {
-  if (!body.includes("[^")) return [];
+  return readFootnotes(body).footnotes;
+}
+
+/**
+ * `extractFootnotes`, plus the footnotes that do not pair up. A definition counts as referenced
+ * only if a claim in the body leads to it, directly or through other definitions.
+ */
+export function readFootnotes(body: string): { footnotes: Footnote[]; orphans: FootnoteOrphan[] } {
+  if (!body.includes("[^")) return { footnotes: [], orphans: [] };
   const lines = body.split("\n");
   const definitions: Omit<Footnote, "claim">[] = [];
+  const references: { id: string; line: number; within: string | null }[] = [];
   const prose: string[] = [];
   let fenced = false;
+  let within: string | null = null;
 
   lines.forEach((line, index) => {
     if (FENCE_RE.test(line)) {
       fenced = !fenced;
+      within = null;
       prose.push("");
       return;
     }
-    const definition = fenced ? null : line.match(DEFINITION_RE);
+    if (fenced) {
+      prose.push("");
+      return;
+    }
+    const definition = line.match(DEFINITION_RE);
     if (definition) {
-      definitions.push({ id: definition[1]!, line: index + 1, text: definition[2]! });
+      within = definition[1]!;
+      definitions.push({ id: within, line: index + 1, text: definition[2]! });
       prose.push("");
     } else {
-      prose.push(fenced ? "" : line);
+      // Indented lines continue the definition above them, as a multi-paragraph footnote does.
+      if (/^\S/.test(line)) within = null;
+      prose.push(line);
+    }
+    for (const match of line.replace(INLINE_CODE_RE, "").matchAll(REFERENCE_RE)) {
+      references.push({ id: match[1]!, line: index + 1, within });
     }
   });
 
@@ -177,7 +207,33 @@ export function extractFootnotes(body: string): Footnote[] {
     }
   }
 
-  return definitions.map((d) => ({ ...d, claim: (claims.get(d.id) ?? []).join("\n") }));
+  const cites = new Map<string | null, string[]>();
+  for (const { id, within: from } of references) {
+    const list = cites.get(from);
+    if (list) list.push(id);
+    else cites.set(from, [id]);
+  }
+  const reached = new Set<string>();
+  const queue = [...(cites.get(null) ?? [])];
+  for (let id = queue.pop(); id !== undefined; id = queue.pop()) {
+    if (reached.has(id)) continue;
+    reached.add(id);
+    queue.push(...(cites.get(id) ?? []));
+  }
+  const defined = new Set(definitions.map((d) => d.id));
+  const orphans: FootnoteOrphan[] = [
+    ...references
+      .filter((r) => !defined.has(r.id))
+      .map((r) => ({ id: r.id, line: r.line, role: "reference" as const })),
+    ...definitions
+      .filter((d) => !reached.has(d.id))
+      .map((d) => ({ id: d.id, line: d.line, role: "definition" as const })),
+  ];
+
+  return {
+    footnotes: definitions.map((d) => ({ ...d, claim: (claims.get(d.id) ?? []).join("\n") })),
+    orphans,
+  };
 }
 
 // Markers usually follow the full stop, so a sentence can end on one. A capture group rather

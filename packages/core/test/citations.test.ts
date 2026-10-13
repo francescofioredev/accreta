@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { compileCitationTemplate, extractFootnotes } from "../src/citations.ts";
+import { compileCitationTemplate, extractFootnotes, readFootnotes } from "../src/citations.ts";
 import { DEFAULT_CONFIG } from "../src/config.ts";
 import { formatCitation } from "../src/source/adapter.ts";
 
@@ -171,5 +171,29 @@ describe("extractFootnotes", () => {
   test("definitions inside a code fence are examples, not citations", () => {
     const body = "```markdown\n[^x]: s @ r · p.md#L1\n```\n";
     expect(extractFootnotes(body)).toEqual([]);
+  });
+});
+
+describe("readFootnotes", () => {
+  test("a reference on a definition's indented continuation leads from that definition", () => {
+    const body = [
+      "A claim.[^a]",
+      "",
+      "[^a]: s @ r · p.md#L1",
+      "    read alongside [^b].",
+      "[^b]: s @ r · p.md#L2",
+      "[^c]: s @ r · p.md#L3",
+      "    which cites [^d].",
+      "[^d]: s @ r · p.md#L4",
+    ].join("\n");
+    expect(readFootnotes(body).orphans).toEqual([
+      { id: "c", line: 6, role: "definition" },
+      { id: "d", line: 8, role: "definition" },
+    ]);
+  });
+
+  test("a body line after the definitions is a claim again", () => {
+    const body = "[^a]: s @ r · p.md#L1\nLater prose.[^a]";
+    expect(readFootnotes(body).orphans).toEqual([]);
   });
 });

@@ -114,6 +114,16 @@ CREATE TABLE IF NOT EXISTS citations (
 CREATE INDEX IF NOT EXISTS idx_citations_source
   ON citations(source, page_path, line, path, footnote, revision, locator);
 
+-- A footnote reference nothing defines, or a definition no claim leads to: role 'reference' or
+-- 'definition'. Kept like broken_links, since a reference with no definition reads as cited.
+CREATE TABLE IF NOT EXISTS footnote_orphans (
+  page_path TEXT NOT NULL,
+  footnote TEXT NOT NULL,
+  line INTEGER NOT NULL,
+  role TEXT NOT NULL,
+  PRIMARY KEY (page_path, line, footnote, role)
+);
+
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL

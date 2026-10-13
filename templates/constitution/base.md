@@ -272,6 +272,8 @@ an interruption to work around.
 - **citations that name no revision, or one the source never had** — `unknown` where a
   revision belongs, or a commit that is not in the history
 - **footnotes that do not read as the configured format**, and footnote ids defined twice
+- **footnotes that do not pair up** — a reference with no definition, whose claim reads as cited
+  and is not, or a definition no claim on the page leads to
 - **inconsistent supersession** — pages that supersede one another in a loop, or a replacement
   only one of its two pages records. Resolve it by checking the source; never add the missing
   half just to clear the finding.
