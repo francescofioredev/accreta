@@ -65,7 +65,7 @@ describe("parsePage", () => {
     const page = parsePage("---\n&top\ntype: note\nself: *top\n---\n\n# R\n", "fb");
     expect(page.frontmatter).toEqual({});
     expect(page.title).toBe("R");
-    expect(page.frontmatterError).toContain("recursive");
+    expect(page.frontmatterError).toContain("cannot be stored as JSON");
   });
 
   test("aliases survive as a list", () => {

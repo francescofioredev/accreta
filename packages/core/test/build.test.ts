@@ -200,7 +200,7 @@ describe("buildIndex", () => {
     expect(rows[0]?.frontmatter_error).toBeNull();
     for (const row of rows.slice(1)) {
       expect(row.frontmatter_json).toBe("{}");
-      expect(row.frontmatter_error).toContain("recursive");
+      expect(row.frontmatter_error).toContain("cannot be stored as JSON");
     }
   });
 

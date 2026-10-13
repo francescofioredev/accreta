@@ -263,12 +263,12 @@ function preprocessFrontmatter(yamlSource: string): string {
   return out.join("\n");
 }
 
-function serialises(value: unknown): boolean {
+function serialisationError(value: unknown): string | undefined {
   try {
     JSON.stringify(value);
-    return true;
-  } catch {
-    return false;
+    return undefined;
+  } catch (error) {
+    return error instanceof Error ? (error.message.split("\n")[0] ?? "") : String(error);
   }
 }
 
@@ -293,8 +293,9 @@ export function parsePage(raw: string, fallbackTitle: string): ParsedPage {
         loaded && typeof loaded === "object" ? Object.getPrototypeOf(loaded) : undefined;
       if (proto === Object.prototype || proto === null) {
         // The index stores frontmatter as JSON; a recursive alias would throw there and stop every page.
-        if (serialises(loaded)) frontmatter = loaded as Frontmatter;
-        else frontmatterError = "frontmatter has a recursive alias or a value JSON cannot hold";
+        const unstorable = serialisationError(loaded);
+        if (unstorable === undefined) frontmatter = loaded as Frontmatter;
+        else frontmatterError = `frontmatter cannot be stored as JSON: ${unstorable}`;
       } else if (loaded !== null && loaded !== undefined) {
         // A fence that parses to a scalar or a sequence is the quieter of the
         // two failures: nothing throws, and the page simply arrives with no
