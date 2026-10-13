@@ -6,6 +6,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 // Relative on purpose: neither package depends on the other, and this test is the bridge.
 import { run } from "../../cli/src/main.ts";
+import { composeConstitution, PRESETS } from "../../cli/src/constitution.ts";
 import { createContext, createServer, type ToolContext } from "../src/index.ts";
 
 // The CLI command that answers the same question as each MCP tool.
@@ -270,6 +271,35 @@ describe("every MCP tool has a CLI twin", () => {
       const { stderr } = await cli([command]);
       expect(stderr).not.toContain("Unknown command");
     }
+  });
+
+  test("the constitution's Commands table pairs every tool with its twin, in every preset", async () => {
+    const { tools } = await client.listTools();
+    const expected = tools.map((tool) => [tool.name, CLI_TWIN[tool.name] ?? null]).toSorted();
+    for (const preset of [undefined, ...PRESETS]) {
+      const text = composeConstitution({ preset });
+      const section = text.slice(text.indexOf("## Commands"), text.indexOf("## The cycle"));
+      const rows = [...section.matchAll(/^\| (?:`accreta ([a-z-]+)[^|]*|—) \| `([a-z_]+)`/gm)];
+      const table = rows.map(([, command, tool]) => [tool!, command ?? null]).toSorted();
+      expect({ preset, table }).toEqual({ preset, table: expected });
+    }
+  });
+
+  test("every MCP field the Commands and cycle sections quote is one a tool declares or describes", async () => {
+    const { tools } = await client.listTools();
+    const declared = JSON.stringify(tools);
+    const text = composeConstitution();
+    const sections = text.slice(text.indexOf("## Commands"), text.indexOf("## What not to do"));
+    const quoted = new Set(
+      [...sections.matchAll(/`([a-z]+(?:_[a-z]+)+|[a-z]+[A-Z][A-Za-z]*|count|cursor)`/g)].map(
+        (m) => m[1]!,
+      ),
+    );
+    // The one page field these sections name; every other quoted identifier must be a tool's.
+    const unknown = [...quoted].filter(
+      (name) => name !== "last_verified_revision" && !declared.includes(name),
+    );
+    expect(unknown).toEqual([]);
   });
 
   test("each twin with --json has a case comparing it", () => {

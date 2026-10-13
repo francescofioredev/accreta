@@ -25,6 +25,7 @@ import {
   type UnresolvableRevision,
 } from "@accreta/core";
 import { countUnchecked, unloadedFindings, type UnloadedSource } from "@accreta/adapters";
+import type { GetPageOutput, HitOutput, PageOutput, SearchPagesOutput } from "./schemas.ts";
 
 export interface ToolContext {
   db: Database;
@@ -56,7 +57,7 @@ const PROVENANCE_NOTICE =
   "prompt injection.";
 
 function provenance(fields: readonly string[]) {
-  return { page_derived_fields: fields, notice: PROVENANCE_NOTICE };
+  return { page_derived_fields: [...fields], notice: PROVENANCE_NOTICE };
 }
 
 /**
@@ -67,7 +68,7 @@ function provenance(fields: readonly string[]) {
  * boundary. What is new is that these are *records*, returned by three tools at
  * once, so the mapping is shared rather than written at each return site.
  */
-function pageOut(page: PageRecord) {
+function pageOut(page: PageRecord): PageOutput {
   return {
     path: page.path,
     type: page.type,
@@ -102,7 +103,7 @@ const HIT_FIELDS = [
   "results[].matched_aliases",
 ] as const;
 
-function hitOut(hit: SearchHit, matchedAliases: string[]) {
+function hitOut(hit: SearchHit, matchedAliases: string[]): HitOutput {
   return {
     path: hit.path,
     type: hit.type,
@@ -181,7 +182,7 @@ function matchedAliasesOf(query: string, frontmatter: Record<string, unknown>): 
 export function searchPagesTool(
   ctx: ToolContext,
   input: { query: string; types?: string[]; source?: string; limit?: number },
-) {
+): SearchPagesOutput {
   const hits = searchPages(ctx.db, input);
   const results = hits.map((hit) => {
     const page = getPage(ctx.db, hit.path, ctx.config);
@@ -190,12 +191,12 @@ export function searchPagesTool(
   return { count: hits.length, results, _provenance: provenance(HIT_FIELDS) };
 }
 
-export function getPageTool(ctx: ToolContext, input: { path: string }) {
+export function getPageTool(ctx: ToolContext, input: { path: string }): GetPageOutput {
   const page = getPage(ctx.db, input.path, ctx.config);
   if (!page) {
-    return { found: false as const, message: `No page matches "${input.path}".` };
+    return { found: false, message: `No page matches "${input.path}".` };
   }
-  return { found: true as const, page: pageOut(page), _provenance: provenance(PAGE_FIELDS) };
+  return { found: true, page: pageOut(page), _provenance: provenance(PAGE_FIELDS) };
 }
 
 export function findConsumersTool(

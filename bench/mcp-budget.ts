@@ -101,13 +101,26 @@ function expectProbe(tool: string, ok: boolean, detail: string): void {
 
 interface Call {
   bytes: number;
+  /** The whole JSON-RPC response, serialized as the stdio transport sends it, minus its newline. */
+  wire: number;
   text: string;
   value: any;
+  structured?: any;
 }
+
+// Bytes of the last response each client's server sent: calls are sequential, so it is the call's.
+const lastResponse = new WeakMap<Client, { bytes: number }>();
 
 async function connect(ctx: ToolContext): Promise<Client> {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "mcp-budget", version: "0.0.0" });
+  const response = { bytes: 0 };
+  lastResponse.set(client, response);
+  const send = serverTransport.send.bind(serverTransport);
+  serverTransport.send = (message, options) => {
+    if ("result" in message) response.bytes = Buffer.byteLength(JSON.stringify(message), "utf-8");
+    return send(message, options);
+  };
   await Promise.all([createServer(ctx).connect(serverTransport), client.connect(clientTransport)]);
   return client;
 }
@@ -115,12 +128,20 @@ async function connect(ctx: ToolContext): Promise<Client> {
 async function call(client: Client, tool: string, args: Record<string, unknown>): Promise<Call> {
   const result = (await client.callTool({ name: tool, arguments: args })) as {
     content: { type: string; text?: string }[];
+    structuredContent?: unknown;
     isError?: boolean;
   };
   const text = result.content.length === 1 ? result.content[0]?.text : undefined;
   if (result.isError) throw new Error(`${tool}: returned an error: ${text}`);
   const bytes = checkText(tool, text);
-  return { bytes, text: text!, value: JSON.parse(text!) };
+  const wire = lastResponse.get(client)!.bytes;
+  return {
+    bytes,
+    wire,
+    text: text!,
+    value: JSON.parse(text!),
+    structured: result.structuredContent,
+  };
 }
 
 // Pages 2..31 link to the mixed page, and it links to 32 onwards: inbound and outbound share a page.
@@ -206,6 +227,8 @@ function indexed(root: string): { config: AccretaConfig; db: ReturnType<typeof o
 export interface Row {
   pages: number;
   search: number;
+  /** search_pages' whole JSON-RPC response, its hits twice: text and structuredContent. */
+  searchWire: number;
   /** search_pages on the shared alias, so every hit carries `matched_aliases`. */
   searchAliased: number;
   /** Pages the aliased probe matches in the index, before search_pages' limit. */
@@ -223,6 +246,8 @@ export interface Row {
   lintFindings: number;
   /** get_page minus its JSON-encoded body: the part accreta decides. */
   getPageEnvelope: number;
+  /** get_page's JSON-RPC response minus every copy of the body in it. */
+  getPageWireEnvelope: number;
   /** Entries each list tool returned, and its `count`; fewer returned means one page. */
   entries: Record<ListTool, { returned: number; count: number }>;
 }
@@ -301,10 +326,15 @@ export async function measure(size: number, options: { bodyBytes?: number } = {}
         `count ${lint.value.count}, want ${corpus.lintFindings}`,
       );
 
-      const bodyJson = Buffer.byteLength(JSON.stringify(page.value.page.body), "utf-8");
+      const body = page.value.page.body as string;
+      const bodyJson = Buffer.byteLength(JSON.stringify(body), "utf-8");
+      // The text copy is encoded twice on the wire: once into the text, once into the message.
+      const bodyInText = Buffer.byteLength(JSON.stringify(JSON.stringify(body)), "utf-8") - 2;
+      const bodyInStructured = page.structured?.page?.body === body ? bodyJson : 0;
       return {
         pages: size,
         search: search.bytes,
+        searchWire: search.wire,
         searchAliased: aliased.bytes,
         searchAliasedMatches,
         getPage: page.bytes,
@@ -316,6 +346,7 @@ export async function measure(size: number, options: { bodyBytes?: number } = {}
         lint: lint.bytes,
         lintFindings: lint.value.count,
         getPageEnvelope: page.bytes - bodyJson,
+        getPageWireEnvelope: page.wire - bodyInText - bodyInStructured,
         entries: {
           search: entries(search, "results"),
           searchAliased: entries(aliased, "results"),

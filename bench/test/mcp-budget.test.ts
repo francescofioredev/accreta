@@ -28,6 +28,7 @@ test("the generated body size is reported, and get_page follows it", async () =>
   expect(small.bodyBytes).toBe(1_000);
   expect(large.bodyBytes).toBe(29_889);
   expect(large.getPage - small.getPage).toBe(large.bodyBytes - small.bodyBytes);
+  expect(large.getPageWireEnvelope).toBe(small.getPageWireEnvelope);
 });
 
 test("a body too short to hold the search probe word is refused", async () => {
