@@ -725,7 +725,7 @@ describe("accreta drift for a pull request", () => {
 
     output = [];
     await cli("drift", "--format", "github");
-    expect(stdout()).toContain("1 page(s) need re-pinning");
+    expect(stdout()).toContain("1 citation(s) to re-pin on 1 page(s)");
     expect(stdout()).toContain(
       `| \`knowledge/third.md\` | \`c.md#L1-L2\` \`[^c]\` | \`${from.slice(0, 7)}\` | \`L2-L3\` |`,
     );
@@ -740,6 +740,11 @@ describe("accreta drift for a pull request", () => {
       `---\ntype: note\nsource: docs\nlast_verified_revision: ${from}\n---\n\n# first\n\n` +
         `A claim.[^c] Another.[^d]\n\n[^c]: docs @ ${short} · a.md#L3-L5\n` +
         `[^d]: docs @ ${short} · a.md#L15-L16\n`,
+    );
+    writePage(
+      "second.md",
+      `---\ntype: note\nsource: docs\nlast_verified_revision: ${from}\n---\n\n# second\n\n` +
+        `A claim.[^c]\n\n[^c]: docs @ ${short} · a.md#L18\n`,
     );
     await cli("reindex");
     const lines = twentyLines({ 4: "rewritten" }).split("\n");
@@ -760,13 +765,20 @@ describe("accreta drift for a pull request", () => {
           { footnote: "d", path: "a.md", locator: "L15-L16", cited_at: short, now: "L16-L17" },
         ],
       },
+      {
+        page: "knowledge/second.md",
+        verified_at: from,
+        citations: [{ footnote: "c", path: "a.md", locator: "L18", cited_at: short, now: "L19" }],
+      },
     ]);
 
     output = [];
     await cli("drift");
-    expect(stdout()).toContain("1 cited range(s) changed; re-pin 1 moved locator(s)");
+    expect(stdout()).toContain("1 cited range(s) changed; re-pin a.md#L15-L16 → L16-L17");
     output = [];
     await cli("drift", "--format", "github");
+    // A citation sits in one table only, so the summary counts citations, not pages.
+    expect(stdout()).toContain("2 citation(s) to re-pin on 2 page(s)");
     expect(stdout()).toContain(
       `| \`knowledge/first.md\` | \`a.md#L15-L16\` \`[^d]\` | \`${short}\` | \`L16-L17\` |`,
     );

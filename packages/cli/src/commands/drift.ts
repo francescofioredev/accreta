@@ -218,7 +218,10 @@ function explainDoubt(doubt: PageChange, entry: StaleRevision, page: string): st
   switch (doubt) {
     case "changed": {
       const changed = `${count("touched") + count("unknown")} cited range(s) changed`;
-      return count("moved") > 0 ? `${changed}; re-pin ${count("moved")} moved locator(s)` : changed;
+      const moved = mine.flatMap((c) =>
+        c.change.status === "moved" ? [`${c.path}#${c.locator} → ${c.change.locator}`] : [],
+      );
+      return moved.length > 0 ? `${changed}; re-pin ${moved.join(", ")}` : changed;
     }
     case "moved":
       return `cited lines moved, not changed: re-pin ${count("moved")} locator(s)`;
@@ -254,6 +257,7 @@ interface DoubtedCitation {
   on_base?: boolean;
 }
 
+/** Moved citations of a page; the page may also be in `in_doubt` for its other citations. */
 interface RepinPage {
   page: string;
   verified_at?: string;
@@ -271,6 +275,7 @@ interface SourceVerdict {
   source_id: string;
   current_revision: string | null;
   in_doubt: DoubtedPage[];
+  /** Overlaps `in_doubt` by page, never by citation: do not add the two page counts. */
   repin: RepinPage[];
   /** Pages on a stale revision whose cited lines are untouched: lower in doubt, not verified. */
   other_stale_pages: number;
@@ -526,7 +531,7 @@ export function toGithub(
       text(
         "",
         "<details>",
-        `<summary>${distinct(source.repin.map((p) => p.page))} page(s) need re-pinning: the cited lines moved, unchanged.</summary>`,
+        `<summary>${source.repin.flatMap((p) => p.citations).length} citation(s) to re-pin on ${distinct(source.repin.map((p) => p.page))} page(s): the cited lines moved, unchanged.</summary>`,
       );
       table(
         ["", "| Page | Cited lines | Lines as of | Now at |", "|---|---|---|---|"],
