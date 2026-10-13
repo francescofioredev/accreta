@@ -99,7 +99,30 @@ describe("loadSources", () => {
       for (const other of files.filter((f) => f !== file)) expect(reason).toContain(other);
       expect(reason).not.toContain(file);
       expect(reason).not.toContain(root);
+      expect(reason).toEndWith("give each a distinct id or remove all but one");
     }
+  });
+
+  test("a declaration missing its type still claims its id, so the other does not win", () => {
+    writeSource("a.yaml", "id: docs\ntype: fs\nroot: one\n");
+    writeSource("b.yaml", "id: docs\nroot: two\n");
+    writeSource("c.yaml", 'id: notes\ntype: ""\n');
+
+    const { sources, unloaded } = loadSources(ctx());
+    expect(sources.size).toBe(0);
+    expect(unloaded).toEqual([
+      {
+        file: join("sources", "a.yaml"),
+        id: "docs",
+        reason: expect.stringContaining(`also declared in ${join("sources", "b.yaml")}`),
+      },
+      {
+        file: join("sources", "b.yaml"),
+        id: "docs",
+        reason: expect.stringContaining(`also declared in ${join("sources", "a.yaml")}`),
+      },
+      { file: join("sources", "c.yaml"), id: "notes", reason: expect.stringContaining("`type`") },
+    ]);
   });
 
   test("an unknown type is reported against its file, naming the types this build does have", () => {
