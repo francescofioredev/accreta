@@ -688,6 +688,24 @@ describe("page-derived fields are named as such", () => {
     expect(result.results[0]?.matched_aliases).not.toContain("unrelated");
   });
 
+  test("an alias matched on a word FTS5 would read as an operator is reported", () => {
+    writePage(
+      "concepts/logic.md",
+      '---\ntype: concept\naliases: ["OR gate", "NOT NULL"]\n---\n\n# Logic\n\nboolean circuits\n',
+    );
+    build();
+    const aliasesFor = (query: string) =>
+      searchPagesTool(ctx, { query }).results.find((r) => r.path === "knowledge/concepts/logic.md")
+        ?.matched_aliases;
+    expect(aliasesFor("OR")).toEqual(["OR gate"]);
+    expect(aliasesFor("NOT")).toEqual(["NOT NULL"]);
+  });
+
+  test("an input field beyond the declared ones cannot switch on FTS5 operators", () => {
+    const smuggled = { query: "entropy OR quiescent", syntax: "fts5" };
+    expect(searchPagesTool(ctx, smuggled as { query: string }).count).toBe(0);
+  });
+
   test("a hit with no matching alias carries no matched_aliases at all", () => {
     const result = searchPagesTool(ctx, { query: "entropy" });
     expect(result.results[0]).not.toHaveProperty("matched_aliases");
