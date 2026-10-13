@@ -53,6 +53,14 @@ describe("parsePage", () => {
     expect(page.frontmatterError).toContain("list");
   });
 
+  test("a frontmatter that is one tagged scalar is recorded, not taken as fields", () => {
+    // yaml resolves !!timestamp to a Date, which is an object but not a set of fields.
+    const page = parsePage("---\n!!timestamp 2026-01-02\n---\n\n# T\n\nzebraword\n", "fb");
+    expect(page.frontmatter).toEqual({});
+    expect(Object.getPrototypeOf(page.frontmatter)).toBe(Object.prototype);
+    expect(page.frontmatterError).toContain("scalar");
+  });
+
   test("aliases survive as a list", () => {
     const page = parsePage(
       '---\naliases: ["radiative forcing", "climate forcing"]\n---\n\n# X\n',
