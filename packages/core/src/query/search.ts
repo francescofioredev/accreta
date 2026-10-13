@@ -23,7 +23,7 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
 
 /**
- * Full-text search over titles and bodies.
+ * Full-text search over titles, declared aliases, and bodies.
  *
  * Page types are not validated against the configured vocabulary here. A filter
  * naming a type no page uses returns nothing, which is the same answer

@@ -134,6 +134,62 @@ describe("one delegated source still missing its scope, next to a git source", (
   });
 });
 
+describe("two declarations sharing an id, next to a git source", () => {
+  async function shared(): Promise<{ docs: string }> {
+    const { docs } = await workspace();
+    rmSync(join(root, "sources", "design-docs.yaml"));
+    writeFileSync(join(root, "sources", "a.yaml"), "id: notes\ntype: fs\nroot: one\n");
+    writeFileSync(join(root, "sources", "b.yaml"), "id: notes\ntype: fs\nroot: two\n");
+    writeFileSync(
+      join(root, "knowledge", "b.md"),
+      "---\ntype: note\nsource: notes\nlast_verified_revision: 2026-08-01\n---\n\n# B\n",
+    );
+    await cli("reindex");
+    output = [];
+    return { docs };
+  }
+
+  test("lint checks the git source and names both files", async () => {
+    await shared();
+
+    expect(await cli("lint")).toBe(1);
+    expect(stdout()).toContain("1 citation(s) checked against their source.");
+    expect(stdout()).toContain("sources/a.yaml: did not load, so 1 page(s) cite it");
+    expect(stdout()).toContain("sources/b.yaml: did not load, so 1 page(s) cite it");
+    expect(stdout()).toContain("id `notes` is also declared in sources/b.yaml");
+    expect(stdout()).toContain("id `notes` is also declared in sources/a.yaml");
+  });
+
+  test("drift checks the git source and names both files", async () => {
+    const { docs } = await shared();
+    writeFileSync(join(docs, "a.md"), "one\nchanged\nthree\n", "utf-8");
+    await git(docs, "commit", "-qam", "second");
+
+    expect(await cli("drift")).toBe(1);
+    expect(stdout()).toContain("1 page(s) may have drifted");
+    expect(stdout()).toContain(
+      "sources/a.yaml — did not load, so 1 page(s) cite it and were not checked",
+    );
+    expect(stdout()).toContain(
+      "sources/b.yaml — did not load, so 1 page(s) cite it and were not checked",
+    );
+    expect(stdout()).toContain("id `notes` is also declared in sources/b.yaml");
+    expect(stdout()).toContain("id `notes` is also declared in sources/a.yaml");
+  });
+
+  test("drift --json counts the pages citing the shared id against both files", async () => {
+    await shared();
+
+    expect(await cli("drift", "--json")).toBe(1);
+    const report = JSON.parse(stdout());
+    expect(report.sources.map((s: { source_id: string }) => s.source_id)).toEqual(["docs"]);
+    expect(report.unloaded_sources).toEqual([
+      { file: "sources/a.yaml", id: "notes", reason: expect.any(String), pages: 1 },
+      { file: "sources/b.yaml", id: "notes", reason: expect.any(String), pages: 1 },
+    ]);
+  });
+});
+
 describe("a declaration that cannot build at all", () => {
   test("a typo in `type` fails drift, as it did when it threw", async () => {
     await workspace();

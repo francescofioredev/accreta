@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   countPagesCiting,
   parseSourceDeclaration,
+  SourceDeclarationError,
   SourceRegistry,
   type Database,
   type SourceAdapter,
@@ -50,7 +51,7 @@ export function readDeclarations(root: string) {
 
 /** One `sources/*.yaml` file, relative to the workspace root: its declaration, or why it is not one. */
 export type DeclarationFile =
-  { file: string; declaration: SourceDeclaration } | { file: string; error: string };
+  { file: string; declaration: SourceDeclaration } | { file: string; error: string; id?: string };
 
 /** Every declaration file, each read on its own so a bad one is reported against itself. */
 export function readDeclarationFiles(root: string): DeclarationFile[] {
@@ -58,7 +59,8 @@ export function readDeclarationFiles(root: string): DeclarationFile[] {
     try {
       return { file, declaration: parseSourceDeclaration(readFileSync(join(root, file), "utf-8")) };
     } catch (error) {
-      return { file, error: firstLine(error) };
+      const id = error instanceof SourceDeclarationError ? error.sourceId : undefined;
+      return { file, error: firstLine(error), ...(id === undefined ? {} : { id }) };
     }
   });
 }
@@ -81,27 +83,38 @@ export interface LoadedSources {
 /**
  * Every source that builds, plus each declaration that did not: one half-written file
  * must not stop lint, drift and the MCP server for every other source.
- * A shared id still throws, since keeping either declaration would be picking a winner.
+ * A shared id loads none of its declarations, since keeping one would be picking a winner.
  */
 export function loadSources(ctx: SourceContext): LoadedSources {
   const registry = buildRegistry(ctx);
   const sources = new Map<string, SourceAdapter>();
   const unloaded: UnloadedSource[] = [];
-  const seen = new Set<string>();
+  const entries = readDeclarationFiles(ctx.root);
+  const filesById = new Map<string, string[]>();
+  for (const entry of entries) {
+    const id = idOf(entry);
+    if (id !== undefined) filesById.set(id, [...(filesById.get(id) ?? []), entry.file]);
+  }
 
-  for (const entry of readDeclarationFiles(ctx.root)) {
-    if ("error" in entry) {
-      unloaded.push({ file: entry.file, reason: entry.error });
+  for (const entry of entries) {
+    const { file } = entry;
+    const id = idOf(entry);
+    const others = id === undefined ? [] : filesById.get(id)!.filter((other) => other !== file);
+    if (others.length > 0) {
+      unloaded.push({
+        file,
+        id,
+        reason:
+          `id \`${id}\` is also declared in ${others.join(", ")}; ` +
+          `give each a distinct id or remove all but one`,
+      });
       continue;
     }
-    const { file, declaration } = entry;
-    if (seen.has(declaration.id)) {
-      throw new Error(
-        `Two sources in sources/ are declared with id "${declaration.id}". ` +
-          `An id names a source in every citation, so it has to name only one.`,
-      );
+    if ("error" in entry) {
+      unloaded.push({ file, ...(id === undefined ? {} : { id }), reason: entry.error });
+      continue;
     }
-    seen.add(declaration.id);
+    const { declaration } = entry;
     try {
       sources.set(declaration.id, registry.create(declaration));
     } catch (error) {
@@ -110,6 +123,9 @@ export function loadSources(ctx: SourceContext): LoadedSources {
   }
   return { sources, unloaded };
 }
+
+// A declaration that failed only on `type` still claims its id, or the other one would win.
+const idOf = (entry: DeclarationFile) => ("error" in entry ? entry.id : entry.declaration.id);
 
 /** An unloaded source and how many pages cite it; `pages` is null when there is no id to count by. */
 export interface UncheckedSource extends UnloadedSource {

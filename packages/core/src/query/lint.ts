@@ -27,6 +27,7 @@ export const LINT_FINDING_KINDS = [
   "citation-revision-unknown",
   "duplicate-footnote",
   "unreadable-provenance-format",
+  "unpinned-provenance-format",
   "unloaded-source",
   "inconsistent-supersession",
   "unreadable-supersession-fields",
@@ -134,6 +135,14 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
       kind: "unreadable-provenance-format",
       path: "accreta.config.yaml",
       detail: `${format.reason}; footnote citations are not checked`,
+    });
+  }
+  if (!config.provenanceFormat.includes("{rev}")) {
+    findings.push({
+      kind: "unpinned-provenance-format",
+      path: "accreta.config.yaml",
+      detail:
+        "provenance.format has no {rev}, so no footnote names its revision; add {rev}, then re-cite existing footnotes with `accreta cite`, as until then they may not read as citations",
     });
   }
 

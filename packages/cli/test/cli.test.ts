@@ -1165,7 +1165,7 @@ describe("accreta cite", () => {
     output = [];
 
     expect(await cli("cite", "docs:a.md#L9")).toBe(1);
-    expect(output[0]).toBe("location: missing locator: cites L9-L9 but a.md has 3 line(s)");
+    expect(output[0]).toBe("location: missing locator: cites L9-L9 but a.md has 2 line(s)");
     expect(stdout()).not.toContain(footnote);
   });
 });
@@ -1360,6 +1360,29 @@ describe("accreta doctor", () => {
 
     await cli("doctor");
     expect(stdout()).toContain("still uses {start} and {end}");
+  });
+
+  test("a provenance format that names no revision is flagged once", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    writeFileSync(
+      join(root, "accreta.config.yaml"),
+      'knowledge_base: knowledge\nprovenance:\n  format: "{source} · {path}#{locator}"\n',
+      "utf-8",
+    );
+    output = [];
+
+    await cli("doctor");
+    expect(stdout().match(/has no \{rev\}/g)).toHaveLength(1);
+    expect(stdout()).toContain("accreta cite");
+  });
+
+  test("the default provenance format is not flagged for its revision", async () => {
+    await cli("init");
+    output = [];
+
+    await cli("doctor");
+    expect(stdout()).not.toContain("unpinned:");
   });
 
   test("a provenance format footnotes cannot be read back through is flagged", async () => {

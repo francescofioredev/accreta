@@ -117,8 +117,11 @@ lint groups unknowns by detail and lists the paths under each group itself.
 
 **A locator is opaque to everything but you.** A file source reads `L142-L158`; a page source
 might read `block-a1b2c3`. If yours is line-oriented, parse it with `parseLineLocator()` from
-the core rather than writing the regex again — two file-backed sources that read `L142-L158`
-differently would make a citation mean different things depending on which source it named.
+the core rather than writing the regex again, and bound it with `countLines()` — two
+file-backed sources that read `L142-L158` differently would make a citation mean different
+things depending on which source it named. If yours is backed by files on disk,
+`resolveCitedFile()` refuses what no revision can hold: a symlink, a path spelled other than
+the source names it, anything that is not a regular file.
 
 `citation()` renders the configured provenance format. Use `formatCitation()` from the core
 rather than building the string yourself — it drops the `#{locator}` decoration when there is
@@ -163,8 +166,7 @@ The citation the agent pastes does not come from `citation()`. The core's `cite(
 from your `revision()` and `locate()` and renders it with `formatCitation()`, without pinning
 you: one adapter serves every caller, so a pin set for one lookup would leak into the next. So
 `locate()` must not say `found` for content your `revision()` does not hold. `git` answers
-`unknown` for a file with uncommitted changes, and `cite()` then names no revision. `fs` with
-`extensions` and `git` with `paths` do not yet enforce this (#178).
+`unknown` for a file with uncommitted changes, and `cite()` then names no revision.
 
 `locate()` may be called for many places at once, as `lint` does. If each answer costs a process
 or a request, batch the calls that arrive together, as `git` does with one `git status`.

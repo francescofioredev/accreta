@@ -17,6 +17,17 @@ export interface SourceDeclaration {
 
 export type SourceFactory = (declaration: SourceDeclaration) => SourceAdapter;
 
+/** A declaration that names its id but is unusable, so a loader can still tell what it claims. */
+export class SourceDeclarationError extends Error {
+  constructor(
+    message: string,
+    readonly sourceId: string,
+  ) {
+    super(message);
+    this.name = "SourceDeclarationError";
+  }
+}
+
 /**
  * Parse a `sources/*.yaml` document.
  *
@@ -40,7 +51,7 @@ export function parseSourceDeclaration(source: string): SourceDeclaration {
     throw new Error("A source declaration needs a non-empty `id`");
   }
   if (typeof type !== "string" || type.length === 0) {
-    throw new Error(`Source "${id}" needs a non-empty \`type\``);
+    throw new SourceDeclarationError(`Source "${id}" needs a non-empty \`type\``, id);
   }
 
   return { id, type, options };
