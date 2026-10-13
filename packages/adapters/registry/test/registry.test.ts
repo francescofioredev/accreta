@@ -219,6 +219,15 @@ describe("loadSources", () => {
     expect(reasons.scalar).toContain("declares `paths` as a string, not a list");
   });
 
+  test("a git paths list made only of exclusions goes unloaded", () => {
+    writeSource("excl.yaml", 'id: excl\ntype: git\nroot: .\npaths: [":!docs", ":(exclude)x"]\n');
+
+    const { sources, unloaded } = loadSources(ctx());
+    expect([...sources.keys()]).toEqual([]);
+    expect(unloaded.map((u) => u.id)).toEqual(["excl"]);
+    expect(unloaded[0]!.reason).toContain('only exclusions; add "." to keep the whole root');
+  });
+
   test("a git paths entry that climbs back into the root, or names the root, still loads", () => {
     mkdirSync(join(root, "sub"));
     writeSource("back.yaml", 'id: back\ntype: git\nroot: sub\npaths: ["../sub/docs"]\n');
@@ -425,6 +434,24 @@ describe("git preflight", () => {
     const preflight = await kindFor("git")!.preflight(declaration, ctx());
     expect(preflight.reachable).toBe("no");
     expect(preflight.detail).toContain('"../x"');
+  });
+
+  test("agrees with the loader on a paths entry that escapes a symlinked root", async () => {
+    mkdirSync(join(root, "a", "sub"), { recursive: true });
+    symlinkSync(join(root, "a", "sub"), join(root, "lnk"));
+    writeSource("linked.yaml", 'id: linked\ntype: git\nroot: lnk\npaths: ["../lnk/docs"]\n');
+    const declaration = {
+      id: "linked",
+      type: "git",
+      options: { root: "lnk", paths: ["../lnk/docs"] },
+    };
+
+    const preflight = await kindFor("git")!.preflight(declaration, ctx());
+    expect(preflight.reachable).toBe("no");
+    expect(preflight.detail).toContain("outside the source root");
+    expect(loadSources(ctx()).unloaded.map((u) => u.reason)).toEqual([
+      expect.stringContaining("outside the source root"),
+    ]);
   });
 
   test("reports git's refusal of a pathspec the loader cannot judge", async () => {

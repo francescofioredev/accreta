@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { constants } from "node:os";
 import { isAbsolute, relative, resolve, sep } from "node:path";
@@ -158,7 +159,8 @@ function submoduleAbove(root: string, scope: string): string | undefined {
 export function scopeProblem(root: string, paths: unknown): string | undefined {
   if (paths === undefined || paths === null) return undefined;
   if (!Array.isArray(paths)) return `declares \`paths\` as a ${typeof paths}, not a list`;
-  const base = resolve(root);
+  // Git works from the real directory, so `..` through a symlinked root lands beside its target.
+  const base = realRoot(root);
   let positive = false;
   for (const entry of paths as unknown[]) {
     if (typeof entry !== "string") {
@@ -176,18 +178,35 @@ export function scopeProblem(root: string, paths: unknown): string | undefined {
     if (top && !exclude) {
       return `declares paths entry ${shown}, which is relative to the repository top; name it relative to \`root\``;
     }
-    if (exclude) continue;
+    const target = resolve(base, pattern);
+    if (exclude) {
+      // Nothing left in scope: rev-list finds no commit and the revision falls back to HEAD.
+      if (!escapes(relative(target, base))) {
+        return `declares paths entry ${shown}, which excludes the whole source root`;
+      }
+      continue;
+    }
     positive = true;
-    const inside = relative(base, resolve(base, pattern));
-    if (inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute(inside)) {
+    if (escapes(relative(base, target))) {
       return `declares paths entry ${shown}, which resolves outside the source root`;
     }
   }
   // Git reads an exclude-only pathspec from the repository top, widening the source past its root.
   if (paths.length > 0 && !positive) {
-    return "declares `paths` with only exclusions; add a positive entry or omit `paths`";
+    return 'declares `paths` with only exclusions; add "." to keep the whole root, or omit `paths`';
   }
   return undefined;
+}
+
+const escapes = (rel: string): boolean =>
+  rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel);
+
+function realRoot(root: string): string {
+  try {
+    return realpathSync(root);
+  } catch {
+    return resolve(root);
+  }
 }
 
 const scalarOrType = (value: unknown): string =>

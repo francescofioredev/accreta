@@ -927,8 +927,36 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
   });
 
   test("a scope made only of exclusions is refused", () => {
-    expect(() => sub([":(exclude)other.md"])).toThrow("add a positive entry or omit `paths`");
+    expect(() => sub([":(exclude)other.md"])).toThrow(
+      'add "." to keep the whole root, or omit `paths`',
+    );
     expect(() => sub([":!a.md", ":^b.md"])).toThrow("only exclusions");
+  });
+
+  test("an exclusion of the root itself is refused, since it leaves nothing in scope", () => {
+    for (const entry of [":!", ":!.", ":(exclude)", ":(exclude).", ":^", ":^.", ":!.."]) {
+      expect(() => sub(["docs", entry])).toThrow(
+        `${JSON.stringify(entry)}, which excludes the whole source root`,
+      );
+    }
+    expect(() => sub([".", ":!docs"])).not.toThrow();
+  });
+
+  test("a scope path is judged from where the root really is, not through a symlink", async () => {
+    symlinkSync(join(root, "sub"), join(root, "lnk"));
+    const linked = (paths: string[]) =>
+      new GitSource({ id: "repo", root: join(root, "lnk"), citationFormat: "{path}", paths });
+    expect(() => linked(["../lnk/docs"])).toThrow("outside the source root");
+    expect(await linked(["../sub/docs"]).revision()).toBe(await head());
+    expect(
+      () =>
+        new GitSource({
+          id: "repo",
+          root: join(root, "nowhere"),
+          citationFormat: "",
+          paths: ["docs"],
+        }),
+    ).not.toThrow();
   });
 
   test("git's own reading of paths is checked: its refusal, or a match outside the root", async () => {
