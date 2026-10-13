@@ -65,6 +65,7 @@ export function priceOf(model: string): Price {
   return PRICES[id]!;
 }
 
+// Geography is read from `usage`, the main model's, and applied to every model; Haiku's background calls are negligible.
 function geoMultiplier(s: Session, p: Price): number {
   const geo = s.usage.inference_geo;
   if (geo === undefined || geo === "global" || geo === "not_available") return 1;
@@ -167,7 +168,23 @@ export interface CostReport {
   prices: { source: string; checked: string };
 }
 
+/** One arm's sessions; without `arm`, the file must hold a single arm, so arms never pool. */
+export function sessionsOfArm(sessions: readonly Session[], arm?: string): Session[] {
+  if (arm !== undefined) {
+    const mine = sessions.filter((s) => s.arm === arm);
+    if (mine.length === 0) throw new Error(`no sessions for arm "${arm}"`);
+    return mine;
+  }
+  const arms = new Set(sessions.map((s) => s.arm));
+  if (arms.size > 1) throw new Error(`sessions from ${arms.size} arms: pass --arm`);
+  return [...sessions];
+}
+
 export function costReport(sessions: readonly Session[], counts: CostCounts): CostReport {
+  const rate = counts.supportRate;
+  if (rate !== undefined && !(rate >= 0 && rate <= 1)) {
+    throw new Error(`support rate must be between 0 and 1, not ${rate}`);
+  }
   const usd = sessions.reduce((s, x) => s + sessionCost(x), 0);
   const per = (n: number) => (n > 0 ? usd / n : NaN);
   return {

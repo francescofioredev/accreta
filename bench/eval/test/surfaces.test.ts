@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runSurfaces } from "../surfaces.ts";
+import { sha256 } from "../lib/answers.ts";
 import { claudeArgs, dryAgent, readArms } from "../lib/agent.ts";
 import { succeeded, validateTasks } from "../lib/surfaces.ts";
 
@@ -66,13 +68,14 @@ test("dry run: CLI-only against MCP-only, success and tokens", async () => {
   expect(s.tokenRatio.ofTotals).toBeCloseTo(26280 / 35730, 9);
   expect(s.tokenRatio.geometricMean).toBeLessThan(s.tokenRatio.perTask.max);
   expect(s.inference).toBe("descriptive only");
-  await expect(
-    runSurfaces({
-      tasks: join(FIXTURES, "tasks.json"),
-      arms: join(FIXTURES, "arms.json"),
-      a: "cli-only",
-      b: "mcp-only",
-      live: true,
-    }),
-  ).rejects.toThrow(/20 registered tasks/);
+  const live = {
+    tasks: join(FIXTURES, "tasks.json"),
+    arms: join(FIXTURES, "arms.json"),
+    a: "cli-only",
+    b: "mcp-only",
+    live: true,
+  };
+  await expect(runSurfaces({ ...live, tasksSha256: "0" })).rejects.toThrow(/tasks-sha256/);
+  const tasksSha256 = sha256(readFileSync(live.tasks));
+  await expect(runSurfaces({ ...live, tasksSha256 })).rejects.toThrow(/20 registered tasks/);
 });

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Session } from "../lib/agent.ts";
-import { costReport, priceOf, PRICES, sessionCost } from "../lib/cost.ts";
+import { costReport, priceOf, PRICES, sessionCost, sessionsOfArm } from "../lib/cost.ts";
 
 const JEV = join(import.meta.dir, "..", "..", "jev", "results");
 const recorded = ["r-a-ingest.json", "r-c-ingest.json"].flatMap(
@@ -125,4 +125,17 @@ test("cost per page, per resolving footnote, per cited and per supported claim",
   expect(
     costReport([s], { pages: 1, resolvingFootnotes: 1, citedClaims: 1 }).perSupportedClaim,
   ).toBeNaN();
+});
+
+test("a support rate outside 0..1 is refused; arms are never pooled", () => {
+  const s = session({ cache_creation: SPLIT }, "claude-opus-5-5");
+  const counts = { pages: 1, resolvingFootnotes: 1, citedClaims: 1 };
+  for (const supportRate of [NaN, -0.1, 1.5]) {
+    expect(() => costReport([s], { ...counts, supportRate })).toThrow(/between 0 and 1/);
+  }
+  const two = [s, { ...s, arm: "b" }];
+  expect(() => sessionsOfArm(two)).toThrow(/pass --arm/);
+  expect(sessionsOfArm(two, "b")).toHaveLength(1);
+  expect(() => sessionsOfArm(two, "c")).toThrow(/no sessions/);
+  expect(sessionsOfArm(recorded)).toHaveLength(9);
 });

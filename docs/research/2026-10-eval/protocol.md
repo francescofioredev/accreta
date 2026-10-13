@@ -115,7 +115,8 @@ The outcomes:
   a negative: the evidence still exists, and only the locator needs re-pinning.
 - **Changed:** not found, or the file was deleted. This is the only positive.
 - **Whole-file citations:** a citation with no locator cites its whole file. It is untouched
-  only if the file is unchanged.
+  only if the file is byte-identical at the same path. It is moved if the file was renamed and
+  is byte-identical. Otherwise it is changed.
 
 **Prediction.** Drift flags a citation when `accreta drift --json` lists it under `in_doubt`.
 It also flags every citation of a page that drift judged per file or could not place. A
@@ -132,7 +133,8 @@ page, footnote, path and locator.
 - the path is missing at its revision;
 - the range runs past the end of the file;
 - the block occurs more than once in its own file at its revision ("ambiguous at its
-  revision"), because an edited block with a surviving twin would read as moved;
+  revision"), because an edited block with a surviving twin would read as moved. A deleted
+  file is still a change;
 - the block is found more than once elsewhere at HEAD.
 
 `canonical_source` is excluded too, because the gate counts footnotes.
@@ -247,11 +249,13 @@ bun bench/eval/answers.ts run --questions q.json --arms arms.json --baseline <ar
 bun bench/eval/answers.ts disagreements --first a.csv --second b.csv --key key.json --out settle.csv
 bun bench/eval/answers.ts score --first a.csv --second b.csv [--settled settle.csv] \
   --sources s.csv --key key.json --baseline <arm>
-bun bench/eval/surfaces.ts --tasks t.json --arms arms.json (--canned c.json | --live)
-bun bench/eval/cost.ts --sessions <file> --kb <kb> --at v4.12.34 [--support-rate <0..1>]
+bun bench/eval/surfaces.ts --tasks t.json --arms arms.json \
+  (--canned c.json | --live --tasks-sha256 <hex>)
+bun bench/eval/cost.ts --sessions <file> --kb <kb> --at v4.12.34 [--arm <id>] [--support-rate <0..1>]
 ```
 
 Each command runs with `--conditions=@accreta/source`. No model runs in part 1. Every runner
 works dry from canned sessions (`--canned`), with no network. `--live` runs `claude -p` with a
 budget cap per session. A live run refuses a question or task count other than the registered
-one, and a seed or questions file whose hash is not the registered one.
+one, and a seed, questions file or tasks file whose hash is not the registered one. The cost
+command prices one arm at a time and refuses a file that mixes arms without `--arm`.

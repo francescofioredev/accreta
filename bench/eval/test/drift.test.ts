@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { measureDrift } from "../drift-score.ts";
 import { kbAt } from "../lib/accreta.ts";
 import { scoreDrift, type DriftJson } from "../lib/drift-match.ts";
-import { judgeBlock, occurrences, type CitationTruth } from "../lib/drift-truth.ts";
+import { judgeBlock, judgeWhole, occurrences, type CitationTruth } from "../lib/drift-truth.ts";
 import { git } from "../lib/git.ts";
 import { commit, declareGit, kbDir, lines, page, repo, write } from "./fixture.ts";
 
@@ -37,6 +37,26 @@ describe("judgeBlock", () => {
       "range outside the file",
     );
     expect(occurrences(["a", "b", "a", "b"], ["a", "b"])).toEqual([1, 3]);
+  });
+
+  test("a deleted file is a change even when the cited block had a twin", () => {
+    expect(judgeBlock("}\nx\n}\n", [1, 1], "f.ts", null)).toEqual({
+      status: "changed",
+      excluded: null,
+    });
+  });
+
+  test("a whole-file citation is untouched only while the file is byte-identical", () => {
+    const old = "one\ntwo\n";
+    expect(judgeWhole(old, "f.ts", { path: "f.ts", text: "one\ntwo\nthree\n" }).status).toBe(
+      "changed",
+    );
+    expect(judgeWhole(old, "f.ts", { path: "f.ts", text: old }).status).toBe("untouched");
+    expect(judgeWhole(old, "f.ts", { path: "g.ts", text: old })).toMatchObject({
+      status: "moved",
+      now: { path: "g.ts", locator: "L1-L2" },
+    });
+    expect(judgeWhole(old, "f.ts", null).status).toBe("changed");
   });
 
   test("a block with a twin at its own revision is ambiguous, edited or not", () => {

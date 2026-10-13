@@ -74,11 +74,11 @@ export function judgeBlock(
   const old = splitLines(before);
   if (range[1] > old.length) return { status: null, excluded: "range outside the file" };
   const block = old.slice(range[0] - 1, range[1]);
+  if (after === null) return { status: "changed", excluded: null };
   // An edited block with a twin left intact would read as moved.
   if (occurrences(old, block).length > 1) {
     return { status: null, excluded: "ambiguous at its revision" };
   }
-  if (after === null) return { status: "changed", excluded: null };
   const found = occurrences(splitLines(after.text), block);
   if (after.path === path && found.includes(range[0])) {
     return { status: "untouched", excluded: null };
@@ -89,6 +89,22 @@ export function judgeBlock(
   const end = start + block.length - 1;
   const locator = start === end ? `L${start}` : `L${start}-L${end}`;
   return { status: "moved", excluded: null, now: { path: after.path, locator } };
+}
+
+/** A citation with no locator cites the whole file: any byte changed is a change. */
+export function judgeWhole(
+  before: string,
+  path: string,
+  after: { path: string; text: string } | null,
+): Pick<CitationTruth, "status" | "excluded" | "now"> {
+  if (after === null || after.text !== before) return { status: "changed", excluded: null };
+  if (after.path === path) return { status: "untouched", excluded: null };
+  const n = splitLines(before).length;
+  return {
+    status: "moved",
+    excluded: null,
+    now: { path: after.path, locator: n === 1 ? "L1" : `L1-L${n}` },
+  };
 }
 
 /**
@@ -156,9 +172,10 @@ export function driftTruth(
     const text = target === null ? null : showAt(source.root, to, target);
     const after = target === null || text === null ? null : { path: target, text };
 
-    // A whole-file citation is its whole file.
-    const whole: [number, number] = [1, splitLines(before).length];
-    const judged = judgeBlock(before, range ?? whole, row.path, after);
+    const judged =
+      range === null
+        ? judgeWhole(before, row.path, after)
+        : judgeBlock(before, range, row.path, after);
     return [{ ...base, ...judged, fileChanged: moves.has(row.path) }];
   });
 }

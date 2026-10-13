@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { dryAgent, liveAgent, readArms, runArms, type Canned } from "./lib/agent.ts";
+import { sha256 } from "./lib/answers.ts";
 import {
   scoreSurfaces,
   TASKS_REQUIRED,
@@ -20,9 +21,15 @@ export async function runSurfaces(opts: {
   b: string;
   canned?: string;
   live?: boolean;
+  /** Live runs only: the pre-registered hash the tasks file must match. */
+  tasksSha256?: string;
   out?: string;
 }): Promise<SurfacesScore> {
-  const tasks = validateTasks(readJson<unknown>(opts.tasks));
+  const bytes = readFileSync(opts.tasks);
+  if (opts.live && sha256(bytes) !== opts.tasksSha256) {
+    throw new Error("the tasks file's SHA-256 is not the pre-registered --tasks-sha256");
+  }
+  const tasks = validateTasks(JSON.parse(bytes.toString("utf-8")));
   if (opts.live && tasks.length !== TASKS_REQUIRED) {
     throw new Error(
       `a live run needs the ${TASKS_REQUIRED} registered tasks, found ${tasks.length}`,
@@ -55,6 +62,7 @@ if (import.meta.main) {
       b: { type: "string", default: "mcp-only" },
       canned: { type: "string" },
       live: { type: "boolean", default: false },
+      "tasks-sha256": { type: "string" },
       out: { type: "string" },
     },
   });
@@ -62,6 +70,13 @@ if (import.meta.main) {
     console.error("usage: surfaces.ts --tasks t.json --arms arms.json (--canned c.json | --live)");
     process.exit(2);
   }
-  const score = await runSurfaces({ ...v, tasks: v.tasks, arms: v.arms, a: v.a!, b: v.b! });
+  const score = await runSurfaces({
+    ...v,
+    tasks: v.tasks,
+    arms: v.arms,
+    a: v.a!,
+    b: v.b!,
+    tasksSha256: v["tasks-sha256"],
+  });
   console.log(JSON.stringify(score, null, 2));
 }
