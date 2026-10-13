@@ -25,7 +25,7 @@ import {
   type UnresolvableRevision,
 } from "@accreta/core";
 import { countUnchecked, unloadedFindings, type UnloadedSource } from "@accreta/adapters";
-import type { GetPageOutput, SearchPagesOutput } from "./schemas.ts";
+import type { GetPageOutput, HitOutput, PageOutput, SearchPagesOutput } from "./schemas.ts";
 
 export interface ToolContext {
   db: Database;
@@ -68,7 +68,7 @@ function provenance(fields: readonly string[]) {
  * boundary. What is new is that these are *records*, returned by three tools at
  * once, so the mapping is shared rather than written at each return site.
  */
-function pageOut(page: PageRecord) {
+function pageOut(page: PageRecord): PageOutput {
   return {
     path: page.path,
     type: page.type,
@@ -103,7 +103,7 @@ const HIT_FIELDS = [
   "results[].matched_aliases",
 ] as const;
 
-function hitOut(hit: SearchHit, matchedAliases: string[]) {
+function hitOut(hit: SearchHit, matchedAliases: string[]): HitOutput {
   return {
     path: hit.path,
     type: hit.type,
