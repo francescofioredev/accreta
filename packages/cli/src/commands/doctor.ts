@@ -37,6 +37,10 @@ export async function doctor(ctx: CommandContext, version: string): Promise<numb
     ctx.out("  stale: provenance.format still uses {start} and {end}");
     ctx.out(`    → replace them with {locator}: "${DEFAULT_CONFIG.provenanceFormat}"`);
   }
+  if (!workspace.config.provenanceFormat.includes("{rev}")) {
+    ctx.out("  unpinned: provenance.format has no {rev}, so no footnote names its revision");
+    ctx.out(`    → add {rev}: "${DEFAULT_CONFIG.provenanceFormat}"`);
+  }
 
   ctx.out("\nruntime");
   const runtime = process.versions.bun ? `bun ${process.versions.bun}` : `node ${process.version}`;

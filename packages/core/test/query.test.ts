@@ -670,4 +670,23 @@ describe("lintCitations on footnotes", () => {
     expect(format).toHaveLength(1);
     expect(format[0]?.path).toBe("accreta.config.yaml");
   });
+
+  test("a format that names no revision is one finding against the config", () => {
+    writePage("a.md", page(["[^a]: s · doc.md#L1"]));
+    const noRev = { ...config, provenanceFormat: "{source} · {path}#{locator}" };
+    buildIndex({ root, config: noRev, indexPath });
+    db = openIndex(indexPath, { readonly: true });
+    const unpinned = lint(db, noRev).findings.filter(
+      (f) => f.kind === "unpinned-provenance-format",
+    );
+    expect(unpinned).toHaveLength(1);
+    expect(unpinned[0]?.path).toBe("accreta.config.yaml");
+  });
+
+  test("the default format names a revision", () => {
+    writePage("a.md", page(["[^a]: s @ r1 · doc.md#L1"]));
+    reindex();
+    const kinds = lint(db, config).findings.map((f) => f.kind);
+    expect(kinds).not.toContain("unpinned-provenance-format");
+  });
 });
