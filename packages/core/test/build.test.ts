@@ -372,12 +372,14 @@ describe("buildIndex", () => {
     writePage("own.md", "---\ntype: note\nsource: noaa\ncanonical_source: noaa:a.md#L1\n---\n");
     writePage("other.md", "---\ntype: note\nsource: ipcc\ncanonical_source: noaa:b.md#L2\n---\n");
     writePage("loose.md", "---\ntype: note\nsource: ipcc\ncanonical_source: not one\n---\n");
+    writePage("sourceless.md", "---\ntype: note\ncanonical_source: noaa:c.md#L3\n---\n");
     build();
     const db = openIndex(indexPath, { readonly: true });
     const rows = db.prepare("SELECT * FROM canonical_cites").all();
     db.close();
     expect(rows).toEqual([
       { source: "noaa", page_path: "knowledge/other.md", canonical_source: "noaa:b.md#L2" },
+      { source: "noaa", page_path: "knowledge/sourceless.md", canonical_source: "noaa:c.md#L3" },
     ]);
   });
 });

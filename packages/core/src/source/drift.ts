@@ -373,7 +373,7 @@ function citationsInto(db: Database, sourceId: string, ownRows: PageRow[]): Cita
     });
   }
 
-  // The build keeps the values parseCitation reads as another page's, so drift and lint agree.
+  // The build keeps only values parseCitation attributes to a source other than the page's.
   const canonicalRows = db
     .prepare(
       `SELECT page_path AS path, canonical_source FROM canonical_cites WHERE source = $source`,

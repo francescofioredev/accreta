@@ -30,6 +30,9 @@ page_types: [note]
 
 // The SQL citationsInto runs, kept in step with packages/core/src/source/drift.ts.
 const CANONICAL_SQL = `SELECT page_path AS path, canonical_source FROM canonical_cites WHERE source = $source`;
+// What it ran before #239, so the bench still measures a commit without canonical_cites.
+const CANONICAL_SQL_BEFORE = `SELECT path, canonical_source FROM pages
+  WHERE (source IS NULL OR source <> $source) AND instr(canonical_source, $source || ':') > 0`;
 const FOOTNOTE_SQL = `SELECT page_path, footnote, revision, path, locator FROM citations
   WHERE source = $source AND path IS NOT NULL ORDER BY page_path, line`;
 
@@ -120,6 +123,10 @@ async function measure(size: number) {
     const indexPath = join(root, ".accreta", "index.sqlite");
     const build = buildIndex({ root, config: parseConfig(CONFIG_YAML), indexPath });
     const db = openIndex(indexPath, { readonly: true });
+    const hasTable = db
+      .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'canonical_cites'")
+      .get();
+    const canonicalSql = hasTable ? CANONICAL_SQL : CANONICAL_SQL_BEFORE;
     const adapters = SOURCES.map((id) => new MovedSource(id));
     const drift: number[] = [];
     const canonical: number[] = [];
@@ -131,14 +138,14 @@ async function measure(size: number) {
         await detectDrift(db, adapter);
         drift.push(performance.now() - t0);
         t0 = performance.now();
-        db.prepare(CANONICAL_SQL).all({ $source: adapter.id });
+        db.prepare(canonicalSql).all({ $source: adapter.id });
         canonical.push(performance.now() - t0);
         t0 = performance.now();
         db.prepare(FOOTNOTE_SQL).all({ $source: adapter.id });
         footnotes.push(performance.now() - t0);
       }
     }
-    const plans = { canonical: plan(db, CANONICAL_SQL), footnotes: plan(db, FOOTNOTE_SQL) };
+    const plans = { canonical: plan(db, canonicalSql), footnotes: plan(db, FOOTNOTE_SQL) };
     db.close();
     return {
       pages: build.pages,

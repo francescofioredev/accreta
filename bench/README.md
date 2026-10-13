@@ -100,7 +100,22 @@ bun run --cwd packages/core build && node --experimental-strip-types bench/drift
 ```
 
 Node reads the built `dist/`, so rebuild it after changing core. The canonical query is copied
-from `drift.ts`; keep the two in step. #239's PR has the numbers before and after its indexes.
+from `drift.ts`; keep the two in step. On an index without `canonical_cites` it runs the `instr()`
+scan drift ran before #239, so the same file measures either side.
+
+**Before and after #239.** Extract the commit before it with
+`git archive <commit> | tar -x -C <dir>`, run `bun install` there, copy this file into its
+`bench/`, and run both directories with the same command. Median of 5 runs, Apple M3, 16 GB:
+
+| | Bun 1.4.2 before → after | Node 22.16.0 before → after |
+| --- | --- | --- |
+| drift per source, 1k pages | 0.60 → 0.24 ms | 1.17 → 0.42 ms |
+| drift per source, 10k pages | 17.41 → 1.84 ms | 15.48 → 3.55 ms |
+| canonical query, 10k | 8.22 → 0.01 ms | 5.89 → 0.01 ms |
+| footnote query, 10k | 5.89 → 0.66 ms | 5.41 → 1.17 ms |
+| index file, 1k | 5,632,000 → 5,836,800 B (+3.6%) | 5,623,808 → 5,824,512 B (+3.6%) |
+| index file, 10k | 55,762,944 → 57,798,656 B (+3.7%) | 55,812,096 → 57,774,080 B (+3.5%) |
+| rebuild | no measurable change | no measurable change |
 
 # MCP response budget
 

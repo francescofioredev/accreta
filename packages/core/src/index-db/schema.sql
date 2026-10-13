@@ -63,8 +63,9 @@ CREATE TABLE IF NOT EXISTS aliases (
   PRIMARY KEY (alias, path)
 ) WITHOUT ROWID;
 
--- A canonical_source naming another source than its page's, keyed by the source it names.
+-- A canonical_source naming a source other than its page's, keyed by the source it names.
 -- Drift looks these up per source; an instr() over pages.canonical_source scans every page.
+-- Only a fresh staging file is opened for writing, so IF NOT EXISTS never meets an older shape.
 CREATE TABLE IF NOT EXISTS canonical_cites (
   source TEXT NOT NULL,
   page_path TEXT NOT NULL,
