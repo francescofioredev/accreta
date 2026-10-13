@@ -49,7 +49,7 @@ export {
   parseLineLocator,
   resolveInside,
 } from "./source/adapter.ts";
-export type { Citation } from "./source/cite.ts";
+export type { Citation, CiteOptions } from "./source/cite.ts";
 export { cite } from "./source/cite.ts";
 export type {
   CitedChange,

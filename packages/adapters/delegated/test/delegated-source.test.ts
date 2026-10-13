@@ -72,6 +72,20 @@ describe("DelegatedSource", () => {
     expect(cited.canonicalSource).toBe("design-docs:2f1a4b#block-a1b2c3");
   });
 
+  test("cite pins the revision the agent observed, as the agent's", async () => {
+    const cited = await cite(
+      new Map([["design-docs", source()]]),
+      FORMAT,
+      { sourceId: "design-docs", path: "2f1a4b", locator: "block-a1b2c3" },
+      { observedRevision: "2026-08-01T10:22:00Z" },
+    );
+
+    expect(cited.revision).toBe("2026-08-01T10:22:00Z");
+    expect(cited.revisionFrom).toBe("agent");
+    expect(cited.location.verdict).toBe("unknown");
+    expect(cited.footnote).toBe("design-docs @ 2026-08-01T10:22:00Z · 2f1a4b#block-a1b2c3");
+  });
+
   test("a declaration with no scope is refused, not defaulted", () => {
     // An empty scope tells the agent to check "the connector", which is either
     // nothing or everything. A startup error naming the file to fix is better

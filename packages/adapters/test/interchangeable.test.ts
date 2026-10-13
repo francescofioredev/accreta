@@ -330,7 +330,21 @@ for (const [name, makeFixture] of QUESTIONABLE) {
       expect(cited.revision).not.toBe(before);
       expect(cited.footnote).toBe(`src @ ${cited.revision} · chapter-07.md#L1`);
       expect(cited.location).toEqual({ verdict: "found" });
+      expect(cited.revisionFrom).toBe("source");
       expect(cited.delegated).toBeUndefined();
+    });
+
+    test("cite refuses a revision the agent observed, since the source answers its own", async () => {
+      const { adapter } = await makeFixture();
+      const sources = new Map([["src", adapter]]);
+      await expect(
+        cite(
+          sources,
+          CITATION,
+          { sourceId: "src", path: "chapter-07.md" },
+          { observedRevision: "deadbeef" },
+        ),
+      ).rejects.toThrow('Source "src" reports its own revision');
     });
 
     test("cite passes on the source's verdict for a place that is not there", async () => {
