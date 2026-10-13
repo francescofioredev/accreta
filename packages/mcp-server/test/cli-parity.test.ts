@@ -152,7 +152,7 @@ const REFUSED: { argv: string[]; says: string }[] = [
   { argv: ["source", "remove", "docs"], says: "Usage: accreta source add" },
   { argv: ["cite"], says: "Usage: accreta cite" },
   { argv: ["cite", "forcing.md"], says: "is not source:path[#locator]" },
-  { argv: ["cite", "docs:forcing.md", "repo:a.md"], says: 'cite does not take "repo:a.md"' },
+  { argv: ["cite", "docs:forcing.md", "--format", "yaml"], says: "--format takes" },
   { argv: ["cite", "docs:forcing.md", "--limit", "1"], says: "cite does not take --limit" },
   {
     argv: ["cite", "docs:forcing.md", "--expect-revision"],
@@ -385,6 +385,14 @@ describe("cite", () => {
       expect(block.notice).toContain("the target you passed");
       expect(block.notice).toContain("does not prevent");
     }
+  });
+
+  test("several targets print the array of what the tool returns for each", async () => {
+    const targets = ["docs:forcing.md#L2", "repo:a.md#L1", "wiki:design-page#block-a1"];
+    const fromCli = await cli(["cite", ...targets, "--json"]);
+    const fromMcp = await Promise.all(targets.map((target) => mcp("cite", { target })));
+    expect(fromCli.code).toBe(0);
+    expect(JSON.parse(fromCli.stdout)).toStrictEqual(fromMcp.map((r) => JSON.parse(r.text)));
   });
 
   test("the expected revision passes when the source has not moved", async () => {
