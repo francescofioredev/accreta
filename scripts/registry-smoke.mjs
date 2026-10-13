@@ -37,17 +37,19 @@ export async function waitForVersion(
   version,
   { packages = PACKAGES, view = npmView, sleep = pause, delays = DELAYS, log = console.log } = {},
 ) {
+  // One budget for all packages: per package, seven of them could wait over an hour.
+  let attempt = 0;
   for (const name of packages) {
     const spec = `${name}@${version}`;
-    for (let attempt = 0; ; attempt++) {
+    for (;;) {
       let seen = "";
       try {
         seen = view(spec);
       } catch {}
       if (seen === version) break;
-      const delay = delays[attempt];
+      const delay = delays[attempt++];
       if (delay === undefined) {
-        throw new Error(`${spec} is still not on the registry after ${attempt + 1} attempts`);
+        throw new Error(`${spec} is still not on the registry after ${attempt} attempts`);
       }
       log(`${spec} is not visible yet; retrying in ${delay}s`);
       await sleep(delay);
@@ -73,37 +75,75 @@ export function handshake(argv, { cwd, timeoutMs = 60_000 } = {}) {
     { jsonrpc: "2.0", id: 2, method: "tools/list" },
   ];
   return new Promise((resolve) => {
-    const server = spawn(argv[0], argv.slice(1), { cwd, stdio: ["pipe", "pipe", "pipe"] });
+    // Its own process group: npx and bunx run the server as a grandchild, which a kill of the
+    // direct child leaves alive and holding the pipes.
+    const server = spawn(argv[0], argv.slice(1), {
+      cwd,
+      detached: true,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
     let stdout = "";
     let stderr = "";
+    let code = null;
     let timedOut = false;
+    let done = false;
+    const killGroup = () => {
+      try {
+        process.kill(-server.pid, "SIGKILL");
+      } catch {}
+    };
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      const responses = [];
+      const invalid = [];
+      for (const line of stdout.split("\n")) {
+        if (!line.trim()) continue;
+        try {
+          const message = JSON.parse(line);
+          if (message?.jsonrpc !== "2.0") throw new Error("not JSON-RPC");
+          responses.push(message);
+        } catch {
+          invalid.push(line);
+        }
+      }
+      resolve({ code, stderr, responses, invalid, timedOut });
+    };
+    // Pipes still open a second after the end belong to a straggler; stop waiting on them.
+    const settle = () => {
+      killGroup();
+      setTimeout(finish, 1000).unref();
+    };
     // npx and bunx may download first, so the limit covers an install as well as the server.
     const timer = setTimeout(() => {
       timedOut = true;
-      server.kill("SIGKILL");
+      settle();
     }, timeoutMs);
     server.stdout.on("data", (chunk) => (stdout += chunk));
     server.stderr.on("data", (chunk) => (stderr += chunk));
-    server.on("error", (error) => (stderr += String(error)));
-    server.on("close", (code) => {
-      clearTimeout(timer);
-      const responses = [];
-      for (const line of stdout.split("\n")) {
-        try {
-          if (line.trim()) responses.push(JSON.parse(line));
-        } catch {}
-      }
-      resolve({ code, stderr, responses, timedOut });
+    server.on("error", (error) => {
+      stderr += String(error);
+      finish();
     });
+    server.on("exit", (exitCode) => {
+      code = exitCode;
+      settle();
+    });
+    server.on("close", finish);
     server.stdin.on("error", () => {});
     server.stdin.end(messages.map((message) => `${JSON.stringify(message)}\n`).join(""));
   });
 }
 
 /** What is wrong with a handshake's result; empty when the server named itself and its tools. */
-export function handshakeProblems({ code, stderr, responses, timedOut }, version) {
+export function handshakeProblems({ code, stderr, responses, invalid = [], timedOut }, version) {
   if (timedOut) return [`timed out; stderr: ${stderr.trim()}`];
   const problems = [];
+  // Clients read stdout as protocol (see packages/mcp-server/src/stdio.ts): one log line breaks them.
+  for (const line of invalid) {
+    problems.push(`stdout carried a line that is not JSON-RPC: ${JSON.stringify(line)}`);
+  }
   const initialize = responses.find((response) => response.id === 1)?.result;
   const list = responses.find((response) => response.id === 2)?.result;
   if (initialize?.serverInfo?.version !== version) {
@@ -139,16 +179,13 @@ function step(argv, cwd, label = argv.slice(-1)[0]) {
 }
 
 /**
- * `--version`, then init, reindex, lint, a page found by search, and an MCP handshake, in a
+ * `--version`, then init, reindex, lint, drift, a page found by search, and an MCP handshake, in a
  * fresh directory outside any checkout so a template missing from the package cannot be found.
  */
 export async function check(version, cli, { init = cli, mcp = [] } = {}) {
-  const printed = run([...cli, "--version"]);
-  if (printed.stdout.trim() !== version) {
-    throw new Error(
-      `${cli.join(" ")} --version printed "${printed.stdout.trim()}", not ${version}\n` +
-        printed.stderr,
-    );
+  const printed = step([...cli, "--version"], undefined).trim();
+  if (printed !== version) {
+    throw new Error(`${cli.join(" ")} --version printed "${printed}", not ${version}`);
   }
   console.log(`ok  --version is ${version}`);
 
@@ -163,6 +200,9 @@ export async function check(version, cli, { init = cli, mcp = [] } = {}) {
     // A CLI that never ran its command also exits 0, so the output is what is asserted.
     const lint = step([...cli, "lint"], dir);
     if (!lint.includes("nothing to report")) throw new Error(`lint reported:\n${lint}`);
+    // init declares an fs source, so drift loads an adapter from the package.
+    const drift = step([...cli, "drift"], dir);
+    if (!drift.includes("up to date")) throw new Error(`drift reported:\n${drift}`);
 
     writeFileSync(
       join(dir, "knowledge", "albedo.md"),

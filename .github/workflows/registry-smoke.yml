@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Published version to test, without the leading v
+        description: Published version to test, without the leading v (a release that ships this workflow)
         required: true
         type: string
   # Lets publish.yml call this as a job of its own run, should it ever want to.
@@ -58,9 +58,13 @@ jobs:
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
+      # The release's own script: main's would fail it on commands it never had. So a release
+      # older than this file (0.1.x) cannot be tested, by dispatch or otherwise.
       - uses: actions/checkout@v4
         with:
+          ref: v${{ needs.version.outputs.version }}
           sparse-checkout: scripts
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -93,9 +97,13 @@ jobs:
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
+      # The release's own script: main's would fail it on commands it never had. So a release
+      # older than this file (0.1.x) cannot be tested, by dispatch or otherwise.
       - uses: actions/checkout@v4
         with:
+          ref: v${{ needs.version.outputs.version }}
           sparse-checkout: scripts
+          persist-credentials: false
 
       - uses: oven-sh/setup-bun@v2
         with:
