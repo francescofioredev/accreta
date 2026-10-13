@@ -77,7 +77,8 @@ previous commit when the branch has merged main.
 - **Already in doubt on the base branch**, folded: citations the base branch already had in
   doubt at the same revision. They stay listed, because this change may have touched the same
   lines again. A citation re-pinned since then names a new revision, so it counts as new.
-- **Re-pin only**, folded: cited lines that moved but did not change, with the new range.
+- **Re-pin**, folded: cited lines that moved but did not change, with the new range, including
+  those on a page that is also in doubt.
 - **Revisions nobody can place**, folded: the pages verified at them, by name.
 - **Other pages** on the old revision are counted, not named. Their cited lines are untouched.
   That lowers the doubt without clearing it: a claim can rest on a line nobody cited.

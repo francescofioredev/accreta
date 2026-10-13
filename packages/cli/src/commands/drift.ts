@@ -258,8 +258,13 @@ function explainDoubt(doubt: PageChange, entry: StaleRevision, page: string): st
   const mine = (entry.citations ?? []).filter((c) => c.page === page);
   const count = (status: string) => mine.filter((c) => c.change.status === status).length;
   switch (doubt) {
-    case "changed":
-      return `${count("touched") + count("unknown")} cited range(s) changed`;
+    case "changed": {
+      const changed = `${count("touched") + count("unknown")} cited range(s) changed`;
+      const moved = mine.flatMap((c) =>
+        c.change.status === "moved" ? [`${c.path}#${c.locator} → ${c.change.locator}`] : [],
+      );
+      return moved.length > 0 ? `${changed}; re-pin ${moved.join(", ")}` : changed;
+    }
     case "moved":
       return `re-pin ${mine
         .flatMap((c) =>
@@ -298,6 +303,7 @@ interface DoubtedCitation {
   on_base?: boolean;
 }
 
+/** Moved citations of a page; the page may also be in `in_doubt` for its other citations. */
 interface RepinPage {
   page: string;
   verified_at?: string;
@@ -315,6 +321,7 @@ interface SourceVerdict {
   source_id: string;
   current_revision: string | null;
   in_doubt: DoubtedPage[];
+  /** Overlaps `in_doubt` by page, never by citation: do not add the two page counts. */
   repin: RepinPage[];
   /** Pages on a stale revision whose cited lines are untouched: lower in doubt, not verified. */
   other_stale_pages: number;
@@ -440,27 +447,12 @@ function verdict(report: DriftReport, base?: BaseKeys): SourceVerdict {
             return cited;
           }),
         });
-      } else if (level === "moved") {
-        repin.push({
-          page,
-          ...at,
-          citations: mine.flatMap((c) =>
-            c.change.status === "moved" && c.locator !== null
-              ? [
-                  {
-                    footnote: c.footnote,
-                    path: c.path,
-                    locator: c.locator,
-                    cited_at: c.revision,
-                    now: c.change.locator,
-                  },
-                ]
-              : [],
-          ),
-        });
-      } else {
+      } else if (level !== "moved") {
         other++;
       }
+      // Also on a page in doubt: fixing only its changed citations would leave these locators stale.
+      const moved = mine.flatMap(repinOf);
+      if (moved.length > 0) repin.push({ page, ...at, citations: moved });
     }
   }
 
@@ -476,6 +468,19 @@ function verdict(report: DriftReport, base?: BaseKeys): SourceVerdict {
     delegated: report.delegated && { via: report.delegated.via, pending: report.delegated.pending },
   };
 }
+
+const repinOf = (c: CitedChange): RepinPage["citations"] =>
+  c.change.status === "moved" && c.locator !== null
+    ? [
+        {
+          footnote: c.footnote,
+          path: c.path,
+          locator: c.locator,
+          cited_at: c.revision,
+          now: c.change.locator,
+        },
+      ]
+    : [];
 
 const isChanged = (c: CitedChange) =>
   c.change.status === "touched" || c.change.status === "unknown";
@@ -572,7 +577,7 @@ export function toGithub(
       text(
         "",
         "<details>",
-        `<summary>${distinct(source.repin.map((p) => p.page))} page(s) only need re-pinning: the cited lines moved, unchanged.</summary>`,
+        `<summary>${source.repin.flatMap((p) => p.citations).length} citation(s) to re-pin on ${distinct(source.repin.map((p) => p.page))} page(s): the cited lines moved, unchanged.</summary>`,
       );
       table(
         ["", "| Page | Cited lines | Lines as of | Now at |", "|---|---|---|---|"],
