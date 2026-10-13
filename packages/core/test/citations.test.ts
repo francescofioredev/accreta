@@ -94,9 +94,19 @@ describe("compileCitationTemplate", () => {
       "Compare [[forcing#history]].",
       "See [the guide](guide.md#setup).",
       "Written in C# and F#.",
+      "Fixed in acme/api#412.",
+      "Needs C#10 or later.",
+      "Reverted pre-#125.",
     ]) {
       expect(template.attempts(prose)).toBe(false);
     }
+  });
+
+  test("a long run of punctuation is checked in linear time", () => {
+    const template = reader(DEFAULT_CONFIG.provenanceFormat);
+    const started = performance.now();
+    expect(template.attempts(`x a#b${".".repeat(1_000_000)}]`)).toBe(false);
+    expect(performance.now() - started).toBeLessThan(500);
   });
 });
 

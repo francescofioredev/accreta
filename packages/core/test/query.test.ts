@@ -696,8 +696,9 @@ describe("lintCitations on footnotes", () => {
     );
     expect(unpinned).toHaveLength(1);
     expect(unpinned[0]?.path).toBe("accreta.config.yaml");
-    // Adding {rev} alone leaves footnotes written without one unparseable until re-cited.
+    // Adding {rev} alone pins no footnote already written; each has to be re-cited.
     expect(unpinned[0]?.detail).toContain("accreta cite");
+    expect(unpinned[0]?.detail).toContain("can read as prose");
   });
 
   test("footnotes written before a format change stay findings (#249)", async () => {

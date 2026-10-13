@@ -1127,8 +1127,8 @@ describe("accreta lint — citations", () => {
     writeSource("doc.md", "one\ntwo\nthree\n");
     writePage(
       "a.md",
-      "---\ntype: note\n---\n\n# A\n\nOne.[^one] Two.[^two]\n\n" +
-        "[^one]: docs · doc.md#L1\n[^two]: docs · doc.md#L2\n",
+      '---\ntype: note\ncanonical_source: "docs:doc.md#L1"\nlast_verified_revision: r\n---\n\n' +
+        "# A\n\nOne.[^one] Two.[^two]\n\n[^one]: docs · doc.md#L1\n[^two]: docs · doc.md#L2\n",
     );
     await cli("init");
     await cli("reindex");
@@ -1136,7 +1136,7 @@ describe("accreta lint — citations", () => {
 
     expect(await cli("lint")).toBe(1);
     expect(stdout()).toContain("unparseable-citation (2)");
-    expect(stdout()).toContain("[^one] (line 9)");
+    expect(stdout()).toContain("[^one] (line 11)");
     expect(stdout()).toContain("accreta cite");
   });
 
@@ -1392,6 +1392,7 @@ describe("accreta doctor", () => {
     await cli("doctor");
     expect(stdout().match(/has no \{rev\}/g)).toHaveLength(1);
     expect(stdout()).toContain("accreta cite");
+    expect(stdout()).toContain("can read as prose");
   });
 
   test("the default provenance format is not flagged for its revision", async () => {
