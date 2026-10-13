@@ -81,27 +81,37 @@ export interface LoadedSources {
 /**
  * Every source that builds, plus each declaration that did not: one half-written file
  * must not stop lint, drift and the MCP server for every other source.
- * A shared id still throws, since keeping either declaration would be picking a winner.
+ * A shared id loads none of its declarations, since keeping one would be picking a winner.
  */
 export function loadSources(ctx: SourceContext): LoadedSources {
   const registry = buildRegistry(ctx);
   const sources = new Map<string, SourceAdapter>();
   const unloaded: UnloadedSource[] = [];
-  const seen = new Set<string>();
+  const entries = readDeclarationFiles(ctx.root);
+  const filesById = new Map<string, string[]>();
+  for (const entry of entries) {
+    if ("error" in entry) continue;
+    const files = filesById.get(entry.declaration.id) ?? [];
+    filesById.set(entry.declaration.id, [...files, entry.file]);
+  }
 
-  for (const entry of readDeclarationFiles(ctx.root)) {
+  for (const entry of entries) {
     if ("error" in entry) {
       unloaded.push({ file: entry.file, reason: entry.error });
       continue;
     }
     const { file, declaration } = entry;
-    if (seen.has(declaration.id)) {
-      throw new Error(
-        `Two sources in sources/ are declared with id "${declaration.id}". ` +
-          `An id names a source in every citation, so it has to name only one.`,
-      );
+    const others = filesById.get(declaration.id)!.filter((other) => other !== file);
+    if (others.length > 0) {
+      unloaded.push({
+        file,
+        id: declaration.id,
+        reason:
+          `id \`${declaration.id}\` is also declared in ${others.join(", ")}; ` +
+          `an id names one source in every citation, so none of them loads`,
+      });
+      continue;
     }
-    seen.add(declaration.id);
     try {
       sources.set(declaration.id, registry.create(declaration));
     } catch (error) {

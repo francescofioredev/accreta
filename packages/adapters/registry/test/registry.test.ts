@@ -57,15 +57,49 @@ describe("loadSources", () => {
     expect(loadSources(ctx()).sources.size).toBe(0);
   });
 
-  test("two declarations sharing an id are refused rather than resolved", () => {
+  test("two declarations sharing an id both go unloaded, each naming the other", () => {
     // An id names a source in every citation, so `docs:chapter.md` has to mean
     // one thing. This used to be silent, and silent differently in each
     // surface: the CLI built both and checked drift twice, the MCP server kept
-    // whichever file sorted last.
+    // whichever file sorted last. Keeping neither picks no winner and stops no other source.
     writeSource("a.yaml", "id: docs\ntype: fs\nroot: one\n");
     writeSource("b.yaml", "id: docs\ntype: fs\nroot: two\n");
+    writeSource("repo.yaml", "id: repo\ntype: git\nroot: .\n");
 
-    expect(() => loadSources(ctx())).toThrow(/declared with id "docs"/);
+    const { sources, unloaded } = loadSources(ctx());
+    expect([...sources.keys()]).toEqual(["repo"]);
+    expect(unloaded).toEqual([
+      {
+        file: join("sources", "a.yaml"),
+        id: "docs",
+        reason: expect.stringContaining(
+          `id \`docs\` is also declared in ${join("sources", "b.yaml")}`,
+        ),
+      },
+      {
+        file: join("sources", "b.yaml"),
+        id: "docs",
+        reason: expect.stringContaining(
+          `id \`docs\` is also declared in ${join("sources", "a.yaml")}`,
+        ),
+      },
+    ]);
+  });
+
+  test("three declarations sharing an id each name the other two, and nothing absolute", () => {
+    const files = ["a.yaml", "b.yaml", "c.yaml"].map((name) => join("sources", name));
+    writeSource("a.yaml", "id: docs\ntype: fs\nroot: one\n");
+    writeSource("b.yaml", "id: docs\ntype: fs\nroot: two\n");
+    writeSource("c.yaml", "id: docs\ntype: notion\n");
+
+    const { sources, unloaded } = loadSources(ctx());
+    expect(sources.size).toBe(0);
+    expect(unloaded.map((u) => u.file)).toEqual(files);
+    for (const { file, reason } of unloaded) {
+      for (const other of files.filter((f) => f !== file)) expect(reason).toContain(other);
+      expect(reason).not.toContain(file);
+      expect(reason).not.toContain(root);
+    }
   });
 
   test("an unknown type is reported against its file, naming the types this build does have", () => {

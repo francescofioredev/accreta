@@ -134,6 +134,38 @@ describe("one delegated source still missing its scope, next to a git source", (
   });
 });
 
+describe("two declarations sharing an id, next to a git source", () => {
+  async function shared(): Promise<{ docs: string }> {
+    const { docs } = await workspace();
+    rmSync(join(root, "sources", "design-docs.yaml"));
+    writeFileSync(join(root, "sources", "a.yaml"), "id: notes\ntype: fs\nroot: one\n");
+    writeFileSync(join(root, "sources", "b.yaml"), "id: notes\ntype: fs\nroot: two\n");
+    return { docs };
+  }
+
+  test("lint checks the git source and names both files", async () => {
+    await shared();
+
+    expect(await cli("lint")).toBe(1);
+    expect(stdout()).toContain("1 citation(s) checked against their source.");
+    expect(stdout()).toContain("id `notes` is also declared in sources/b.yaml");
+    expect(stdout()).toContain("id `notes` is also declared in sources/a.yaml");
+  });
+
+  test("drift checks the git source and names both files", async () => {
+    const { docs } = await shared();
+    writeFileSync(join(docs, "a.md"), "one\nchanged\nthree\n", "utf-8");
+    await git(docs, "commit", "-qam", "second");
+
+    expect(await cli("drift")).toBe(1);
+    expect(stdout()).toContain("1 page(s) may have drifted");
+    expect(stdout()).toContain("sources/a.yaml — did not load");
+    expect(stdout()).toContain("sources/b.yaml — did not load");
+    expect(stdout()).toContain("id `notes` is also declared in sources/b.yaml");
+    expect(stdout()).toContain("id `notes` is also declared in sources/a.yaml");
+  });
+});
+
 describe("a declaration that cannot build at all", () => {
   test("a typo in `type` fails drift, as it did when it threw", async () => {
     await workspace();
