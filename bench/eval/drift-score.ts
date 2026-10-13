@@ -4,23 +4,7 @@ import { parseArgs } from "node:util";
 import { accretaJson, kbAt, readIndex, reindex, type Kb } from "./lib/accreta.ts";
 import { scoreDrift, type DriftJson, type DriftScore } from "./lib/drift-match.ts";
 import { driftTruth } from "./lib/drift-truth.ts";
-import { revParse } from "./lib/git.ts";
-import { declaredSources } from "./lib/sources.ts";
-
-/** Drift compares against each source's HEAD, so `to` must be what every git source has checked out. */
-export function checkTarget(kb: Kb, to: string | undefined): Record<string, string> {
-  const heads: Record<string, string> = {};
-  for (const s of declaredSources(kb.root).filter((d) => d.type === "git")) {
-    const head = revParse(s.root, "HEAD");
-    if (to !== undefined && revParse(s.root, to) !== head) {
-      throw new Error(
-        `source "${s.id}" has ${head.slice(0, 12)} checked out, not ${to}: check it out first`,
-      );
-    }
-    heads[s.id] = head;
-  }
-  return heads;
-}
+import { checkTarget, declaredSources } from "./lib/sources.ts";
 
 export function measureDrift(kb: Kb, to?: string): DriftScore & { heads: Record<string, string> } {
   const heads = checkTarget(kb, to);

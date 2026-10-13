@@ -38,14 +38,32 @@ describe("judgeBlock", () => {
     );
     expect(occurrences(["a", "b", "a", "b"], ["a", "b"])).toEqual([1, 3]);
   });
+
+  test("a block with a twin at its own revision is ambiguous, edited or not", () => {
+    const twin = "a\nb\nc\na\nb\n";
+    expect(judgeBlock(twin, [1, 2], "f", { path: "f", text: "x\nb\nc\na\nb\n" })).toEqual({
+      status: null,
+      excluded: "ambiguous at its revision",
+    });
+    // A single edited line whose twin survives would otherwise read as moved.
+    const lone = "foo\nbar\nfoo\n";
+    expect(judgeBlock(lone, [1, 1], "f", { path: "f", text: "baz\nbar\nfoo\n" }).excluded).toBe(
+      "ambiguous at its revision",
+    );
+  });
 });
 
 describe("scoreDrift", () => {
-  const t = (page: string, footnote: string, status: CitationTruth["status"]): CitationTruth => ({
+  const t = (
+    page: string,
+    footnote: string,
+    status: CitationTruth["status"],
+    path = "a.py",
+  ): CitationTruth => ({
     page,
     footnote,
     source: "app",
-    path: "a.py",
+    path,
     locator: "L1",
     revision: "r",
     status,
@@ -59,7 +77,10 @@ describe("scoreDrift", () => {
           page,
           citations: [{ footnote, path: "a.py", locator: "L1", change: "touched" }],
         })),
-        repin: repin.map(([page, footnote]) => ({ page, citations: [{ footnote, path: "a.py" }] })),
+        repin: repin.map(([page, footnote]) => ({
+          page,
+          citations: [{ footnote, path: "a.py", locator: "L1" }],
+        })),
         unresolvable: [],
       },
     ],
@@ -70,13 +91,48 @@ describe("scoreDrift", () => {
     const s = scoreDrift(truth, json([["p", "a"]]));
     expect(s.perCitation).toMatchObject({ tp: 1, fp: 0, fn: 1, tn: 1 });
     expect(s.perCitation.recall.rate).toBe(0.5);
-    expect(s.perPage).toMatchObject({ tp: 1, fp: 0, fn: 0, tn: 1 });
+    expect(s.perPageAnyHit).toMatchObject({ tp: 1, fp: 0, fn: 0, tn: 1 });
+  });
+
+  test("the H2 gate needs few exclusions and positives spread over 20 files", () => {
+    const hits = (files: number) =>
+      Array.from({ length: 36 }, (_, i) => t(`p${i}`, "a", "changed", `f${i % files}.py`));
+    const flagAll = (truth: CitationTruth[]): DriftJson => ({
+      sources: [
+        {
+          source_id: "app",
+          in_doubt: truth.map((c) => ({
+            page: c.page,
+            citations: [{ footnote: "a", path: c.path, locator: "L1", change: "touched" }],
+          })),
+          repin: [],
+          unresolvable: [],
+        },
+      ],
+    });
+    expect(scoreDrift(hits(36), flagAll(hits(36))).h2).toEqual({ verdict: "met", reasons: [] });
+    const clustered = scoreDrift(hits(5), flagAll(hits(5)));
+    expect(clustered.perCitation.gate).toBe("met");
+    expect(clustered.h2.verdict).toBe("not shown");
+    expect(clustered.positiveFiles).toBe(5);
+    const out = { ...t("x", "z", null), excluded: "unpinned" as const };
+    const excluded = scoreDrift([...hits(36), ...Array(10).fill(out)], flagAll(hits(36)));
+    expect(excluded.h2.reasons[0]).toMatch(/10 of 46 citations excluded/);
+    expect(excluded.recallExclusionsAsMisses).toMatchObject({ k: 36, n: 46 });
   });
 
   test("a moved block drift asks to re-pin is a true negative", () => {
     const s = scoreDrift([t("p", "a", "moved")], json([], [["p", "a"]]));
     expect(s.perCitation).toMatchObject({ tp: 0, fp: 0, fn: 0, tn: 1 });
     expect(s.moved).toEqual({ total: 1, repin: 1, flagged: 0, quiet: 0 });
+    expect(s.defects).toEqual([]);
+  });
+
+  test("a moved block drift says nothing about is a defect; a one-line move is listed for audit", () => {
+    const one = { ...t("p", "a", "moved"), now: { path: "a.py", locator: "L5" } };
+    const s = scoreDrift([one], json([]));
+    expect(s.defects[0]).toMatch(/1 moved citation/);
+    expect(s.auditSingleLineMoved.map((c) => c.footnote)).toEqual(["a"]);
   });
 
   test("a page drift could only judge per file flags its citations into the changed files", () => {
@@ -159,12 +215,18 @@ test("the real drift on an edit, an untouched citation, a rename, a shift and a 
     expect(by.lib).toMatchObject({ source: "lib", status: "changed", prediction: "flagged" });
     expect(by.vague).toBeUndefined();
     expect(s.excluded).toEqual({ "not a line range": 1 });
+    expect(s.excludedShare).toMatchObject({ k: 1, n: 6 });
 
     expect(s.perCitation).toMatchObject({ tp: 2, fp: 1, fn: 0, tn: 2 });
     expect(s.perCitation.recall).toMatchObject({ k: 2, n: 2, rate: 1 });
     expect(s.perCitation.gate).toBe("not shown");
-    expect(s.perPage).toMatchObject({ tp: 2, fp: 0, fn: 0, tn: 1 });
+    expect(s.perPageAnyHit).toMatchObject({ tp: 2, fp: 0, fn: 0, tn: 1 });
     expect(s.moved).toEqual({ total: 2, repin: 1, flagged: 1, quiet: 0 });
+    // Every scored citation's file changed, so the trivial baseline flags all five.
+    expect(s.baselineFileChanged).toMatchObject({ tp: 2, fp: 3, fn: 0, tn: 0 });
+    expect(s.positiveFiles).toBe(2);
+    expect(s.h2.verdict).toBe("not shown");
+    expect(s.recallExclusionsAsMisses).toMatchObject({ k: 2, n: 3 });
     expect(() => measureDrift(kbAt(root), pin)).toThrow(/check it out first/);
   } finally {
     rmSync(root, { recursive: true, force: true });

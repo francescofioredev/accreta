@@ -73,12 +73,50 @@ export function positivesNeeded(target: number, misses = 0, alpha = 0.05, cap = 
   return Infinity;
 }
 
-/** Smallest b of b + c = `discordant` for which the two-sided exact McNemar p is below alpha. */
-export function mcnemarThreshold(discordant: number, alpha = 0.05): number | null {
+export type Sided = "one" | "two";
+
+const pOf = (m: McNemar, sided: Sided) => (sided === "one" ? m.pAGreater : m.pTwoSided);
+
+/** Smallest b of b + c = `discordant` for which the exact McNemar p is below alpha. */
+export function mcnemarThreshold(
+  discordant: number,
+  alpha = 0.05,
+  sided: Sided = "two",
+): number | null {
   for (let b = Math.ceil(discordant / 2); b <= discordant; b++) {
-    if (mcnemarExact(b, discordant - b).pTwoSided < alpha) return b;
+    if (pOf(mcnemarExact(b, discordant - b), sided) < alpha) return b;
   }
   return null;
+}
+
+/** log of the Binomial(n, p) pmf at k. */
+function logBinom(k: number, n: number, p: number): number {
+  let logC = 0;
+  for (let i = 1; i <= k; i++) logC += Math.log(n - i + 1) - Math.log(i);
+  const tail = (x: number, w: number) => (w === 0 ? 0 : w * Math.log(x));
+  return logC + tail(p, k) + tail(1 - p, n - k);
+}
+
+/**
+ * Exact power of the McNemar test on n pairs, when a pair is right only in arm A with
+ * probability `pA` and only in arm B with probability `pB`.
+ */
+export function mcnemarPower(
+  n: number,
+  pA: number,
+  pB: number,
+  alpha = 0.05,
+  sided: Sided = "one",
+) {
+  const pd = pA + pB;
+  let power = 0;
+  for (let d = 1; d <= n; d++) {
+    const t = mcnemarThreshold(d, alpha, sided);
+    if (t === null) continue;
+    const pDiscordant = Math.exp(logBinom(d, n, pd));
+    for (let b = t; b <= d; b++) power += pDiscordant * Math.exp(logBinom(b, d, pA / pd));
+  }
+  return power;
 }
 
 export interface Interval {

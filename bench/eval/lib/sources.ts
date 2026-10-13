@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseSourceDeclaration } from "@accreta/core";
+import { revParse } from "./git.ts";
 
 export interface DeclaredSource {
   file: string;
@@ -28,4 +29,19 @@ export function declaredSources(kbRoot: string): DeclaredSource[] {
     }
   }
   return out;
+}
+
+/** Drift compares against each source's HEAD, so `to` must be what every git source has checked out. */
+export function checkTarget(kb: { root: string }, to: string | undefined): Record<string, string> {
+  const heads: Record<string, string> = {};
+  for (const s of declaredSources(kb.root).filter((d) => d.type === "git")) {
+    const head = revParse(s.root, "HEAD");
+    if (to !== undefined && revParse(s.root, to) !== head) {
+      throw new Error(
+        `source "${s.id}" has ${head.slice(0, 12)} checked out, not ${to}: check it out first`,
+      );
+    }
+    heads[s.id] = head;
+  }
+  return heads;
 }

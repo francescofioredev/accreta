@@ -8,6 +8,7 @@ export interface Usage {
   cache_read_input_tokens: number;
   output_tokens: number;
   cache_creation?: { ephemeral_5m_input_tokens?: number; ephemeral_1h_input_tokens?: number };
+  inference_geo?: string;
 }
 
 export interface ModelUsage {
@@ -22,7 +23,8 @@ export interface ModelUsage {
 export interface Session {
   arm: string;
   item: string;
-  model: string;
+  /** Absent from the CLI's own record; the runners fill it from the arm. */
+  model?: string;
   result: string;
   is_error: boolean;
   num_turns: number;

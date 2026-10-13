@@ -1,0 +1,37 @@
+{
+  "type": "result",
+  "is_error": false,
+  "num_turns": 49,
+  "total_cost_usd": 2.3760016999999998,
+  "usage": {
+    "input_tokens": 54,
+    "cache_creation_input_tokens": 123001,
+    "cache_read_input_tokens": 2084768,
+    "output_tokens": 48733,
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 123001,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "service_tier": "standard",
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-5-5": {
+      "inputTokens": 1536,
+      "outputTokens": 21,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "costUSD": 0.00016410000000000003,
+      "canonicalModel": "claude-haiku-5-5"
+    },
+    "claude-opus-5-5": {
+      "inputTokens": 54,
+      "outputTokens": 48733,
+      "cacheReadInputTokens": 2084768,
+      "cacheCreationInputTokens": 123001,
+      "costUSD": 2.3758376,
+      "canonicalModel": "claude-opus-5-5"
+    }
+  }
+}

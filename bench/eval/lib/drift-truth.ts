@@ -8,12 +8,14 @@ export type TruthStatus = "changed" | "moved" | "untouched";
 
 /** Why a citation is left out of the score; protocol.md pre-registers these. */
 export type Exclusion =
+  | "not a citation"
   | "not a git source"
   | "unpinned"
   | "revision unknown"
   | "not a line range"
   | "path missing at its revision"
   | "range outside the file"
+  | "ambiguous at its revision"
   | "ambiguous: block found more than once";
 
 export interface CitationTruth {
@@ -28,10 +30,12 @@ export interface CitationTruth {
   excluded: Exclusion | null;
   /** Where the block is at the target, when it survived. */
   now?: { path: string; locator: string };
+  /** The cited file changed at all: what the trivial baseline flags. */
+  fileChanged?: boolean;
 }
 
-/** Old path to new path between two revisions, following renames; null for a deleted file. */
-export function renames(root: string, from: string, to: string): Map<string, string | null> {
+/** Each changed path between two revisions, to its new path; null when deleted. */
+export function changes(root: string, from: string, to: string): Map<string, string | null> {
   const out = git(root, "diff", "-M", "--name-status", "-z", "--relative", from, to);
   const fields = out.split("\0").filter((f) => f !== "");
   const map = new Map<string, string | null>();
@@ -42,7 +46,7 @@ export function renames(root: string, from: string, to: string): Map<string, str
       if (status.startsWith("R")) map.set(a, b);
     } else {
       const path = fields[i++]!;
-      if (status === "D") map.set(path, null);
+      if (status !== "A") map.set(path, status === "D" ? null : path);
     }
   }
   return map;
@@ -70,6 +74,10 @@ export function judgeBlock(
   const old = splitLines(before);
   if (range[1] > old.length) return { status: null, excluded: "range outside the file" };
   const block = old.slice(range[0] - 1, range[1]);
+  // An edited block with a twin left intact would read as moved.
+  if (occurrences(old, block).length > 1) {
+    return { status: null, excluded: "ambiguous at its revision" };
+  }
   if (after === null) return { status: "changed", excluded: null };
   const found = occurrences(splitLines(after.text), block);
   if (after.path === path && found.includes(range[0])) {
@@ -111,36 +119,38 @@ export function driftTruth(
   };
 
   return footnotes.flatMap((row): CitationTruth[] => {
-    if (row.source === null || row.path === null) return [];
     const base = {
       page: row.page_path,
       footnote: row.footnote,
-      source: row.source,
-      path: row.path,
-      locator: row.locator,
-      revision: row.revision,
+      source: row.source ?? "",
+      path: row.path ?? "",
+      locator: row.locator ?? null,
+      revision: row.revision ?? null,
     };
     const skip = (excluded: Exclusion): CitationTruth => ({ ...base, status: null, excluded });
+    if (row.source == null || row.path == null) return [skip("not a citation")];
 
     const source = byId.get(row.source);
     if (source?.type !== "git") return [skip("not a git source")];
     // A footnote without a pin borrows its page's revision, as drift does, but only on its own source.
     let revision = row.revision && row.revision !== UNPINNED_REVISION ? row.revision : null;
     if (revision === null && pageOf.get(row.page_path)?.source === row.source) {
-      revision = pageOf.get(row.page_path)!.last_verified_revision;
+      revision = pageOf.get(row.page_path)!.last_verified_revision ?? null;
     }
-    if (revision === null) return [skip("unpinned")];
+    if (!revision) return [skip("unpinned")];
     const from = resolve(source.root, revision);
     if (from === null) return [skip("revision unknown")];
-    const to = resolve(source.root, "HEAD")!;
+    const to = resolve(source.root, "HEAD");
+    if (to === null)
+      throw new Error(`source "${source.id}": git cannot resolve HEAD in ${source.root}`);
 
     const before = showAt(source.root, from, row.path);
     if (before === null) return [skip("path missing at its revision")];
-    const range = row.locator === null ? null : parseLineLocator(row.locator);
-    if (row.locator !== null && range === null) return [skip("not a line range")];
+    const range = row.locator == null ? null : parseLineLocator(row.locator);
+    if (row.locator != null && range === null) return [skip("not a line range")];
 
     const key = `${source.root}\0${from}`;
-    if (!renamed.has(key)) renamed.set(key, renames(source.root, from, to));
+    if (!renamed.has(key)) renamed.set(key, changes(source.root, from, to));
     const moves = renamed.get(key)!;
     const target = moves.has(row.path) ? moves.get(row.path)! : row.path;
     const text = target === null ? null : showAt(source.root, to, target);
@@ -148,6 +158,7 @@ export function driftTruth(
 
     // A whole-file citation is its whole file.
     const whole: [number, number] = [1, splitLines(before).length];
-    return [{ ...base, ...judgeBlock(before, range ?? whole, row.path, after) }];
+    const judged = judgeBlock(before, range ?? whole, row.path, after);
+    return [{ ...base, ...judged, fileChanged: moves.has(row.path) }];
   });
 }

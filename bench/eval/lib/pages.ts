@@ -1,6 +1,6 @@
 import { accretaJson, readIndex, reindex, type FootnoteRow, type Kb } from "./accreta.ts";
 import { claims } from "./claims.ts";
-import { declaredSources } from "./sources.ts";
+import { checkTarget, declaredSources } from "./sources.ts";
 import { gate, rate, summary, type GateVerdict, type Rate, type Summary } from "./stats.ts";
 
 export const RESOLVE_FLOOR = 0.95;
@@ -95,7 +95,9 @@ export function footnoteVerdicts(
   });
 }
 
-export function measurePages(kb: Kb): PageMetrics {
+/** `at`: the revision every git source must have checked out, so H1 is read at the pin. */
+export function measurePages(kb: Kb, at?: string): PageMetrics {
+  checkTarget(kb, at);
   reindex(kb);
   const { pages, footnotes } = readIndex(kb);
   const lint = accretaJson<LintJson>(kb, "lint", "--json");

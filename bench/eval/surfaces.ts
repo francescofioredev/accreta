@@ -4,7 +4,12 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { dryAgent, liveAgent, readArms, runArms, type Canned } from "./lib/agent.ts";
-import { scoreSurfaces, validateTasks, type SurfacesScore } from "./lib/surfaces.ts";
+import {
+  scoreSurfaces,
+  TASKS_REQUIRED,
+  validateTasks,
+  type SurfacesScore,
+} from "./lib/surfaces.ts";
 
 const readJson = <T>(path: string) => JSON.parse(readFileSync(path, "utf-8")) as T;
 
@@ -18,6 +23,11 @@ export async function runSurfaces(opts: {
   out?: string;
 }): Promise<SurfacesScore> {
   const tasks = validateTasks(readJson<unknown>(opts.tasks));
+  if (opts.live && tasks.length !== TASKS_REQUIRED) {
+    throw new Error(
+      `a live run needs the ${TASKS_REQUIRED} registered tasks, found ${tasks.length}`,
+    );
+  }
   const all = readArms(opts.arms);
   const arms = [opts.a, opts.b].map((id) => {
     const arm = all.find((x) => x.id === id);

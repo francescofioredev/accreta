@@ -2,9 +2,23 @@ import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { runSurfaces } from "../surfaces.ts";
 import { claudeArgs, dryAgent, readArms } from "../lib/agent.ts";
-import { validateTasks } from "../lib/surfaces.ts";
+import { succeeded, validateTasks } from "../lib/surfaces.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures");
+const SESSION = {
+  arm: "a",
+  item: "t",
+  result: "",
+  is_error: false,
+  num_turns: 1,
+  total_cost_usd: 0,
+  usage: {
+    input_tokens: 0,
+    cache_creation_input_tokens: 0,
+    cache_read_input_tokens: 0,
+    output_tokens: 0,
+  },
+};
 const arms = readArms(join(FIXTURES, "arms.json"));
 const arm = (id: string) => arms.find((a) => a.id === id)!;
 
@@ -24,8 +38,15 @@ test("a dry run with no canned session fails loudly rather than scoring a blank"
   await expect(dryAgent({})(arm("cli-only"), "t1", "")).rejects.toThrow(/no canned session/);
 });
 
-test("tasks need a pattern that compiles", () => {
+test("tasks need a pattern that compiles; a reject pattern fails an answer that matches", () => {
   expect(() => validateTasks([{ id: "t", prompt: "p", expect: ["("] }])).toThrow(/bad pattern/);
+  expect(() => validateTasks([{ id: "t", prompt: "p", expect: ["a"], reject: ["["] }])).toThrow(
+    /bad pattern/,
+  );
+  const task = { id: "t", prompt: "p", expect: ["routing"], reject: ["not .*routing"] };
+  const said = (result: string) => ({ ...SESSION, result });
+  expect(succeeded(task, said("knowledge/routing.md"))).toBe(true);
+  expect(succeeded(task, said("it is not knowledge/routing.md"))).toBe(false);
 });
 
 test("dry run: CLI-only against MCP-only, success and tokens", async () => {
@@ -41,6 +62,17 @@ test("dry run: CLI-only against MCP-only, success and tokens", async () => {
   expect(s.arms["cli-only"]!.tokens).toMatchObject({ n: 3, median: 11910 });
   expect(s.arms["mcp-only"]!.turns.mean).toBeCloseTo(7 / 3);
   expect(s.mcnemar).toMatchObject({ b: 0, c: 1, pTwoSided: 1 });
-  expect(s.tokenRatio.n).toBe(3);
-  expect(s.tokenRatio.max).toBeLessThan(1);
+  expect(s.tokenRatio.perTask.n).toBe(3);
+  expect(s.tokenRatio.ofTotals).toBeCloseTo(26280 / 35730, 9);
+  expect(s.tokenRatio.geometricMean).toBeLessThan(s.tokenRatio.perTask.max);
+  expect(s.inference).toBe("descriptive only");
+  await expect(
+    runSurfaces({
+      tasks: join(FIXTURES, "tasks.json"),
+      arms: join(FIXTURES, "arms.json"),
+      a: "cli-only",
+      b: "mcp-only",
+      live: true,
+    }),
+  ).rejects.toThrow(/20 registered tasks/);
 });

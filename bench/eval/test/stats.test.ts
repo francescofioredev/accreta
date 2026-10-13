@@ -4,6 +4,7 @@ import {
   gate,
   mcnemarExact,
   mcnemarPaired,
+  mcnemarPower,
   mcnemarThreshold,
   positivesNeeded,
   rate,
@@ -31,13 +32,26 @@ describe("intervals", () => {
 });
 
 describe("exact McNemar", () => {
-  test("six discordant pairs all one way is the smallest significant result", () => {
+  test("two-sided: six discordant pairs all one way is the smallest significant result", () => {
     close(mcnemarExact(6, 0).pTwoSided, 0.03125, 6);
     close(mcnemarExact(5, 0).pTwoSided, 0.0625, 6);
     close(mcnemarExact(9, 1).pTwoSided, 22 / 1024, 6);
     expect(mcnemarThreshold(5)).toBeNull();
     expect(mcnemarThreshold(6)).toBe(6);
     expect(mcnemarThreshold(10)).toBe(9);
+  });
+
+  test("one-sided: the protocol's H3 list", () => {
+    expect(mcnemarThreshold(4, 0.05, "one")).toBeNull();
+    expect([5, 6, 7, 8, 9, 10].map((d) => mcnemarThreshold(d, 0.05, "one"))).toEqual([
+      5, 6, 7, 7, 8, 9,
+    ]);
+  });
+
+  test("power at 20% and 5% discordance: 0.34 at 30 pairs, 0.8 first reached at 74", () => {
+    expect(mcnemarPower(30, 0.2, 0.05)).toBeCloseTo(0.344, 3);
+    expect(mcnemarPower(73, 0.2, 0.05)).toBeLessThan(0.8);
+    expect(mcnemarPower(74, 0.2, 0.05)).toBeGreaterThanOrEqual(0.8);
   });
 
   test("one-sided p counts only the pre-registered direction", () => {

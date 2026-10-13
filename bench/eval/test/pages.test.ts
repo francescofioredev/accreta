@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { kbAt } from "../lib/accreta.ts";
 import { measurePages } from "../lib/pages.ts";
-import { declareGit, kbDir, lines, page, repo } from "./fixture.ts";
+import { commit, declareGit, kbDir, lines, page, repo, write } from "./fixture.ts";
 
 test("four footnotes from #123, one on an undeclared source, and an uncited claim", () => {
   const root = kbDir();
@@ -63,8 +63,13 @@ test("a clean knowledge base resolves every footnote and lints clean", () => {
     canonical: "app:src/app.py#L1-L3",
     body: `The router matches paths in registration order.[^a]\n\n[^a]: app @ ${pin.slice(0, 7)} · src/app.py#L1-L3`,
   });
-  const m = measurePages(kbAt(root));
+  const m = measurePages(kbAt(root), pin);
   expect(m.citations.resolve).toMatchObject({ k: 1, n: 1 });
   expect(m.citations.gate).toBe("not shown");
   expect(m.lint.pagesClean).toMatchObject({ k: 1, n: 1 });
+
+  // H1 is read at the pin: a source already moved on is refused, not measured.
+  write(join(root, "sources", "app"), "src/app.py", lines(21));
+  commit(join(root, "sources", "app"), "move on");
+  expect(() => measurePages(kbAt(root), pin)).toThrow(/check it out first/);
 });
