@@ -1,0 +1,120 @@
+name: Registry smoke
+
+# The packaging test installs local tarballs. This installs what a user downloads, after it is
+# published, so a missing `files` entry or a broken `bin` shows up the day it ships.
+on:
+  workflow_run:
+    workflows: [Publish]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Published version to test, without the leading v (a release that ships this workflow)
+        required: true
+        type: string
+  # Lets publish.yml call this as a job of its own run, should it ever want to.
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: version
+    # workflow_run fires on every conclusion; a failed publish has nothing new to test.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      # For a tag push, the triggering run's head_branch is the tag name, e.g. `v0.1.4`.
+      - id: version
+        env:
+          INPUT: ${{ inputs.version }}
+          TAG: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          version="${INPUT:-${TAG#v}}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::'$version' is not a version (input '$INPUT', tag '$TAG')"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  node:
+    name: node ${{ matrix.node }} · ${{ matrix.os }}
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [22.16.0, current]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      # The release's own script: main's would fail it on commands it never had. So a release
+      # older than this file (0.1.x) cannot be tested, by dispatch or otherwise.
+      - uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.version.outputs.version }}
+          sparse-checkout: scripts
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Wait for the registry
+        run: node scripts/registry-smoke.mjs wait "$VERSION"
+
+      - name: Install globally
+        run: npm i -g "accreta@$VERSION"
+
+      # The global install links only accreta's own bin, so accreta-mcp is reached through npx.
+      - name: Check
+        run: >-
+          node scripts/registry-smoke.mjs check "$VERSION"
+          --init "npx -y accreta@$VERSION"
+          --mcp "npx -y -p @accreta/mcp-server@$VERSION accreta-mcp"
+          -- accreta
+
+  bun:
+    name: bun ${{ matrix.bun }} · ${{ matrix.os }}
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        bun: [1.4.0, latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      # The release's own script: main's would fail it on commands it never had. So a release
+      # older than this file (0.1.x) cannot be tested, by dispatch or otherwise.
+      - uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.version.outputs.version }}
+          sparse-checkout: scripts
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ matrix.bun }}
+
+      - name: Wait for the registry
+        run: bun scripts/registry-smoke.mjs wait "$VERSION"
+
+      # The bins have a node shebang; without --bun they would run under the runner's Node.
+      - name: Check
+        run: >-
+          bun scripts/registry-smoke.mjs check "$VERSION"
+          --mcp "bunx --bun -p @accreta/mcp-server@$VERSION accreta-mcp"
+          -- bunx --bun "accreta@$VERSION"
