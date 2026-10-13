@@ -154,11 +154,12 @@ With a shell, use the CLI. Without one, the MCP tool beside it does the same.
 | — | `list_recent_changes` | what changed in a source since a revision |
 | — | `update_verified_revision` | records a verified revision; only with `ACCRETA_ALLOW_WRITES=1` |
 
-- **`--json`** prints the MCP tool's reply, `_provenance` included. Use it when you parse the
-  output rather than read it. `drift --json` has a shape of its own.
+- **`--json`** prints the MCP tool's reply. Use it when you parse the output rather than read it.
+  `drift --json` has a shape of its own and names only the pages whose cited lines changed:
+  drive re-verification from `accreta drift` or `check_drift`.
 - **Long results come in pages.** `find_consumers`, `find_canonical` and `lint_knowledge_base`
   return at most 50 entries: `count` is the total, and passing `nextCursor` back as `cursor`
-  gets the rest. The CLI prints everything unless you pass `--limit` and `--cursor`.
+  gets the rest. The CLI prints everything unless you pass `--limit` or `--cursor`.
 
 ---
 
@@ -167,8 +168,7 @@ With a shell, use the CLI. Without one, the MCP tool beside it does the same.
 ### Ingesting
 
 1. **Cite the file, then read it.** `accreta cite <source>:<path>` returns the source's current
-   revision; keep it. A delegated source and an uncommitted or untracked git file have none.
-   Then actually read. Do not write a page from a filename.
+   revision; keep it. Then actually read. Do not write a page from a filename.
 2. **Decide whether it deserves a page.** Most of a source does not.
 3. **Write the page** with frontmatter, citations, and links to what already exists.
 4. **Get every citation from `cite`; never compose one.** Cite the exact place with
@@ -176,7 +176,7 @@ With a shell, use the CLI. Without one, the MCP tool beside it does the same.
    the footnote it returns. It fails if the source moved since you read it: re-read, cite again.
    With no revision from step 1, leave `--expect-revision` out. `location: missing` means the
    target is wrong; fix it rather than paste.
-5. **Record that revision** in `last_verified_revision`.
+5. **Record the revision of the page's own `source`** in `last_verified_revision`.
 6. **`accreta reindex`**, then **`accreta lint`**. Fix what it reports.
 
 A citation `cite` cannot pin comes back with `unknown` where the revision belongs, and lint
@@ -201,9 +201,9 @@ than it delivers.
 | | meaning | what to do |
 |---|---|---|
 | **stale** | the source changed after the page was verified | re-read the changed parts; update or re-verify |
-| **unverifiable** | the page records no revision, or cites the source without one | check the claims, then record the revision or re-pin the citation with `cite` |
+| **unverifiable** | the page records no revision, or cites the source without one | check the claims; record the revision if none is recorded, else re-pin the citation with `cite` |
 | **unresolvable** | the source cannot place the recorded revision | history was rewritten or the revision is foreign; re-verify from scratch |
-| **delegated** | accreta cannot reach this source; you can | read the listed pages at the source yourself, then record the revision |
+| **delegated** | accreta cannot reach this source; you can | read the listed pages at the source yourself, then record the revision on its own pages |
 
 **Only the absence of all four means current.** An unresolvable revision is not a small
 problem: the page claims to have been verified against something that cannot be found, so
@@ -213,18 +213,15 @@ Re-verifying means reading the source again. Bumping `last_verified_revision` wi
 re-reading converts a detectable problem into an undetectable one, and is the single most
 damaging thing you can do here.
 
-The loop is **drift → re-verify → cite → lint**:
-
-1. `accreta drift` names the pages in doubt.
-2. Cite the file for its revision, re-read the changed parts, and correct the page.
-3. Re-cite each claim you re-read with `--expect-revision`, and record that revision.
-4. `accreta reindex`, then `accreta lint`.
+The loop is **drift → re-verify → cite → lint**: for each page drift names, re-read the changed
+parts, then follow Ingesting 4–6 with `--expect-revision` set to drift's revision for that source
+(`source @ rev`; `current_revision` in JSON). If that fails, the source moved again: rerun drift.
+Repeat until drift names no page in doubt.
 
 A page can appear under a source it only cites (`cited_only`; "cited at" in `accreta drift`):
 re-check the cited lines and re-pin those footnotes with `cite`, but never record that source's
-revision in `last_verified_revision` of a page whose own `source` is a different one.
-`update_verified_revision` refuses any revision its own source is not at now, and names the one
-it is at; that check says whose revision it is, not that you re-read anything.
+revision on it. `update_verified_revision` refuses a revision the page's own source is not at
+(a delegated source is not checked); that proves whose revision it is, not that you re-read it.
 
 ### When you cannot read the source
 

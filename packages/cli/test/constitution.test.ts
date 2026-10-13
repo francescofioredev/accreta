@@ -90,7 +90,7 @@ describe("composeConstitution", () => {
         "leave `--expect-revision` out",
         "Paste it as returned: never write a revision into it.",
         "`cited_only`",
-        "of a page whose own `source` is a",
+        "the revision of the page's own `source`",
       ]) {
         expect({ preset, has: text.includes(phrase) }).toEqual({ preset, has: true });
       }

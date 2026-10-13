@@ -285,6 +285,23 @@ describe("every MCP tool has a CLI twin", () => {
     }
   });
 
+  test("every MCP field the Commands and cycle sections quote is one a tool declares or describes", async () => {
+    const { tools } = await client.listTools();
+    const declared = JSON.stringify(tools);
+    const text = composeConstitution();
+    const sections = text.slice(text.indexOf("## Commands"), text.indexOf("## What not to do"));
+    const quoted = new Set(
+      [...sections.matchAll(/`([a-z]+(?:_[a-z]+)+|[a-z]+[A-Z][A-Za-z]*|count|cursor)`/g)].map(
+        (m) => m[1]!,
+      ),
+    );
+    // The one page field these sections name; every other quoted identifier must be a tool's.
+    const unknown = [...quoted].filter(
+      (name) => name !== "last_verified_revision" && !declared.includes(name),
+    );
+    expect(unknown).toEqual([]);
+  });
+
   test("each twin with --json has a case comparing it", () => {
     const covered = new Set(CASES.map((c) => c.tool));
     const missing = Object.keys(CLI_TWIN).filter(
