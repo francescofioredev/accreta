@@ -66,6 +66,7 @@ extensions: [".md", ".txt"]
 id: billing-service
 type: git
 root: ../billing-service
+paths: ["src", "docs"]
 ```
 
 ```yaml
@@ -81,7 +82,12 @@ scope: |
 Choosing the adapter:
 
 - **`git`** when the corpus is a repository. Revisions are commit SHAs, so drift detection
-  can say exactly which files changed since a page was verified.
+  can say exactly which files changed since a page was verified. Set `paths`, relative to
+  `root`, to the part of the repository the pages are about: when `root` is the repository
+  top, without it every commit to anything — a README, a test — reports as drift for pages
+  whose documents never moved. A `root` in a subdirectory is already scoped to that subtree.
+  Once `paths` is set, `cite` refuses any file outside it, so with `["src", "docs"]` a
+  top-level `README.md` can no longer be cited.
 - **`fs`** for a directory of documents. Revisions are a hash of modification times.
 - **`delegated`** when only you can reach it — a wiki, a mailbox, a tracker behind a
   connector. accreta holds no credential and makes no call. It tracks which pages cite the
