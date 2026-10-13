@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createServer, type ToolContext } from "@accreta/mcp-server";
+import { MAX_PAGE_LIMIT } from "@accreta/core";
 import { COMMAND_ARGS } from "../src/commands/shared.ts";
 import { composeConstitution, isPreset, PRESETS } from "../src/constitution.ts";
 
@@ -8,46 +8,23 @@ const RENDERINGS = [undefined, ...PRESETS].map((preset) => ({
   text: composeConstitution({ preset }),
 }));
 
-/** Every tool the server registers, asked over JSON-RPC: the CLI's install has no MCP client. */
-async function mcpToolNames(): Promise<string[]> {
-  // Writes on so the write tool is listed; listing runs no handler, so the context is never read.
-  const server = createServer({ writesEnabled: true } as ToolContext);
-  let reply: ((message: unknown) => void) | undefined;
-  const transport = {
-    onmessage: undefined as ((message: unknown) => void) | undefined,
-    start: async () => {},
-    close: async () => {},
-    send: async (message: unknown) => reply?.(message),
-  };
-  await server.connect(transport);
-  const request = (id: number, method: string, params: object) =>
-    new Promise<unknown>((resolve) => {
-      reply = resolve;
-      transport.onmessage?.({ jsonrpc: "2.0", id, method, params });
-    });
-  await request(1, "initialize", {
-    protocolVersion: "2025-06-18",
-    capabilities: {},
-    clientInfo: { name: "constitution-probe", version: "0.0.0" },
-  });
-  const listed = (await request(2, "tools/list", {})) as { result: { tools: { name: string }[] } };
-  await server.close();
-  return listed.result.tools.map((tool) => tool.name);
-}
-
-/** The Commands table's rows, as the CLI command (or null) and the MCP tool on each. */
-function commandTable(text: string): { cli: string | null; mcp: string }[] {
+/** The commands each `--flag` in the text is quoted for, read from the Commands section. */
+function quotedFlags(text: string): Record<string, string[]> {
   const section = text.slice(text.indexOf("## Commands"), text.indexOf("## The cycle"));
-  return section
-    .split("\n")
-    .filter((line) => /^\| (`accreta |— \|)/.test(line))
-    .map((line) => {
-      const [cli, mcp] = line.split("|").slice(1, 3);
-      return {
-        cli: cli?.match(/`accreta ([a-z-]+)/)?.[1] ?? null,
-        mcp: mcp?.match(/`([a-z_]+)`/)?.[1] ?? "",
-      };
-    });
+  const twins = new Map<string, string>();
+  for (const [, cli, mcp] of section.matchAll(/^\| `accreta ([a-z-]+)[^|]*\| `([a-z_]+)`/gm)) {
+    twins.set(mcp!, cli!);
+  }
+  const paging = section.slice(section.indexOf("Long results"), section.lastIndexOf("---"));
+  const paged = [...paging.matchAll(/`([a-z_]+)`/g)]
+    .map((m) => twins.get(m[1]!))
+    .filter((cli) => cli !== undefined);
+  return {
+    "--json": [...twins.values()],
+    "--limit": paged,
+    "--cursor": paged,
+    "--expect-revision": ["cite"],
+  };
 }
 
 describe("composeConstitution", () => {
@@ -110,8 +87,10 @@ describe("composeConstitution", () => {
         "`citation-unpinned`",
         "`nextCursor`",
         "drift → re-verify → cite → lint",
+        "leave `--expect-revision` out",
+        "Paste it as returned: never write a revision into it.",
+        "`cited_only`",
         "of a page whose own `source` is a",
-        "`_provenance.page_derived_fields`",
       ]) {
         expect({ preset, has: text.includes(phrase) }).toEqual({ preset, has: true });
       }
@@ -132,13 +111,31 @@ describe("composeConstitution", () => {
     }
   });
 
-  test("the Commands table names every MCP tool the server has, and no other", async () => {
-    const tools = (await mcpToolNames()).toSorted();
-    expect(tools).toContain("cite");
+  test("every flag it quotes is one the command it is quoted with takes", () => {
     for (const { preset, text } of RENDERINGS) {
-      const rows = commandTable(text);
-      expect({ preset, tools: rows.map((row) => row.mcp).toSorted() }).toEqual({ preset, tools });
-      expect(rows.filter((row) => row.cli !== null).length).toBe(7);
+      const claims = quotedFlags(text);
+      const quoted = new Set(text.match(/(?<![\w-])--[a-z][a-z-]*/g));
+      expect({ preset, quoted: [...quoted].toSorted() }).toEqual({
+        preset,
+        quoted: Object.keys(claims).toSorted(),
+      });
+      for (const [flag, commands] of Object.entries(claims)) {
+        expect({ preset, flag, commands: commands.length > 0 }).toEqual({
+          preset,
+          flag,
+          commands: true,
+        });
+        for (const command of commands) {
+          const takes = COMMAND_ARGS[command]?.flags.includes(flag) ?? false;
+          expect({ preset, command, flag, takes }).toEqual({ preset, command, flag, takes: true });
+        }
+      }
+    }
+  });
+
+  test("the page size it states is the one the tools cap at", () => {
+    for (const { text } of RENDERINGS) {
+      expect(Number(text.match(/return at most (\d+) entries/)?.[1])).toBe(MAX_PAGE_LIMIT);
     }
   });
 

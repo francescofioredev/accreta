@@ -6,6 +6,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 // Relative on purpose: neither package depends on the other, and this test is the bridge.
 import { run } from "../../cli/src/main.ts";
+import { composeConstitution, PRESETS } from "../../cli/src/constitution.ts";
 import { createContext, createServer, type ToolContext } from "../src/index.ts";
 
 // The CLI command that answers the same question as each MCP tool.
@@ -269,6 +270,18 @@ describe("every MCP tool has a CLI twin", () => {
     for (const command of Object.values(CLI_TWIN)) {
       const { stderr } = await cli([command]);
       expect(stderr).not.toContain("Unknown command");
+    }
+  });
+
+  test("the constitution's Commands table pairs every tool with its twin, in every preset", async () => {
+    const { tools } = await client.listTools();
+    const expected = tools.map((tool) => [tool.name, CLI_TWIN[tool.name] ?? null]).toSorted();
+    for (const preset of [undefined, ...PRESETS]) {
+      const text = composeConstitution({ preset });
+      const section = text.slice(text.indexOf("## Commands"), text.indexOf("## The cycle"));
+      const rows = [...section.matchAll(/^\| (?:`accreta ([a-z-]+)[^|]*|—) \| `([a-z_]+)`/gm)];
+      const table = rows.map(([, command, tool]) => [tool!, command ?? null]).toSorted();
+      expect({ preset, table }).toEqual({ preset, table: expected });
     }
   });
 
