@@ -193,9 +193,10 @@ export function searchPagesTool(
   ctx: ToolContext,
   input: { query: string; types?: string[]; source?: string; limit?: number },
 ): SearchPagesOutput {
-  const hits = searchPages(ctx.db, input);
+  const db = ctx.db;
+  const hits = searchPages(db, input);
   const results = hits.map((hit) => {
-    const page = getPage(ctx.db, hit.path, ctx.config);
+    const page = getPage(db, hit.path, ctx.config);
     return hitOut(hit, page ? matchedAliasesOf(input.query, page.frontmatter) : []);
   });
   return { count: hits.length, results, _provenance: provenance(HIT_FIELDS) };
@@ -285,26 +286,33 @@ function isIoError(error: unknown): boolean {
   return typeof code === "number" && (code & 0xff) === 10;
 }
 
-// One index per call, so a report spanning awaits cannot mix two. Apple's system SQLite
-// fails a handle renamed over, so there a mid-call rebuild cannot finish: the caller retries.
+// One index per call, so a report spanning awaits cannot mix two. A rebuild mid-call reruns it
+// once: elsewhere the old index answers stale, and Apple's SQLite fails a handle renamed over.
 async function withPinnedIndex<T>(
   ctx: ToolContext,
   tool: string,
   run: (db: Database) => Promise<T>,
 ): Promise<T> {
-  const pin = ctx.pin?.() ?? { db: ctx.db, release() {}, replaced: () => false };
-  try {
-    return await run(pin.db);
-  } catch (error) {
-    if (pin.replaced() && isIoError(error)) {
-      throw new Error(
-        `The index was rebuilt while ${tool} ran, and this SQLite build cannot read the index the call started on. Run ${tool} again.`,
-        { cause: error },
-      );
+  for (let attempt = 1; ; attempt++) {
+    const pin = ctx.pin?.() ?? { db: ctx.db, release() {}, replaced: () => false };
+    let outcome: { ok: true; value: T } | { ok: false; error: unknown };
+    try {
+      outcome = { ok: true, value: await run(pin.db) };
+    } catch (error) {
+      outcome = { ok: false, error };
+    } finally {
+      pin.release();
     }
-    throw error;
-  } finally {
-    pin.release();
+    const stale = pin.replaced() && (outcome.ok || isIoError(outcome.error));
+    if (!stale) {
+      if (outcome.ok) return outcome.value;
+      throw outcome.error;
+    }
+    if (attempt === 2) {
+      throw new Error(`The index was rebuilt twice while ${tool} ran. Run ${tool} again.`, {
+        cause: outcome.ok ? undefined : outcome.error,
+      });
+    }
   }
 }
 

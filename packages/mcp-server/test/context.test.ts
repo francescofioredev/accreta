@@ -5,7 +5,6 @@ import { join } from "node:path";
 import {
   buildIndex,
   DEFAULT_CONFIG,
-  openIndex,
   type AccretaConfig,
   type Database,
   type LocationVerdict,
@@ -18,6 +17,7 @@ import {
   listRecentChangesTool,
   searchPagesTool,
   type PinnedIndex,
+  type ToolContext,
 } from "../src/tools.ts";
 
 let root = "";
@@ -168,20 +168,6 @@ function adapter(
   };
 }
 
-// Probed rather than assumed: whether a handle survives a rebuild depends on the SQLite build.
-function staleHandlesFail(): boolean {
-  const probe = openIndex(indexPath(), { readonly: true });
-  reindex();
-  try {
-    probe.prepare("SELECT count(*) FROM pages").get();
-    return false;
-  } catch {
-    return true;
-  } finally {
-    probe.close();
-  }
-}
-
 function isOpen(db: Database): boolean {
   try {
     db.prepare("SELECT 1").get();
@@ -191,12 +177,24 @@ function isOpen(db: Database): boolean {
   }
 }
 
-test("check_drift finishes on the index it started on when a rebuild lands mid-call", async () => {
+// Every handle a call pins, in order, so a test can check each one was released.
+function recordPins(ctx: ToolContext): Database[] {
+  const pin = ctx.pin!.bind(ctx);
+  const pinned: Database[] = [];
+  ctx.pin = () => {
+    const held = pin();
+    pinned.push(held.db);
+    return held;
+  };
+  return pinned;
+}
+
+test("check_drift reruns on the rebuilt index when a rebuild lands mid-call", async () => {
   writePage("a.md", "---\ntype: note\n---\n\n# A\n\nalpha\n");
   reindex();
-  const failsStale = staleHandlesFail();
 
   const ctx = createContext(root);
+  const pinned = recordPins(ctx);
   const entered = gate();
   const blocked = gate();
   const held = async () => {
@@ -216,27 +214,45 @@ test("check_drift finishes on the index it started on when a rebuild lands mid-c
   reindex();
   // A new reader gets the rebuilt index at once: only the old handle's close waits.
   expect(searchPagesTool(ctx, { query: "beta" }).count).toBe(1);
+  expect(isOpen(pinned[0]!)).toBe(true);
   blocked.open();
 
-  if (failsStale) {
-    await expect(call).rejects.toThrow("The index was rebuilt while check_drift ran");
-  } else {
-    // b.md is stale in the rebuilt index, so a report that knew of it drew on both.
-    const drift = await call;
-    expect(drift.reports.map((r) => [r.source_id, r.stale])).toEqual([
-      ["held", []],
-      ["docs", []],
-    ]);
-  }
-  const after = await checkDriftTool(ctx, { source: "docs" });
-  expect(after.reports[0]?.stale.map((s) => s.pages)).toEqual([["knowledge/b.md"]]);
+  // b.md exists only in the rebuilt index, so finding it stale proves the report came from there.
+  const drift = await call;
+  expect(drift.reports.map((r) => [r.source_id, r.stale.map((s) => s.pages)])).toEqual([
+    ["held", []],
+    ["docs", [["knowledge/b.md"]]],
+  ]);
+  expect(pinned).toHaveLength(2);
+  expect(isOpen(pinned[0]!)).toBe(false);
 });
 
-test("lint finishes on the index it started on when a rebuild lands mid-call", async () => {
+test("check_drift gives up when the index is rebuilt during its rerun too", async () => {
+  writePage("a.md", "---\ntype: note\n---\n\n# A\n\nalpha\n");
+  reindex();
+
+  const ctx = createContext(root);
+  const pinned = recordPins(ctx);
+  const rebuilding = async () => {
+    reindex();
+    expect(searchPagesTool(ctx, { query: "alpha" }).count).toBe(1);
+    return "r1";
+  };
+  ctx.sources.set("held", adapter("held", { revision: rebuilding }));
+
+  await expect(checkDriftTool(ctx, {})).rejects.toThrow(
+    "The index was rebuilt twice while check_drift ran. Run check_drift again.",
+  );
+  expect(pinned).toHaveLength(2);
+  expect(pinned.filter(isOpen)).toEqual([]);
+});
+
+test("lint holds its index while a source blocks, then reruns on the rebuilt one", async () => {
   writePage("a.md", '---\ntype: note\ncanonical_source: "held:x.md"\n---\n\n# A\n');
   reindex();
 
   const ctx = createContext(root);
+  const pinned = recordPins(ctx);
   const entered = gate();
   const blocked = gate();
   const locate = async (): Promise<LocationVerdict> => {
@@ -251,10 +267,11 @@ test("lint finishes on the index it started on when a rebuild lands mid-call", a
   writePage("b.md", "---\ntype: note\n---\n\n# B\n\nbeta\n");
   reindex();
   expect(searchPagesTool(ctx, { query: "beta" }).count).toBe(1);
+  expect(isOpen(pinned[0]!)).toBe(true);
   blocked.open();
 
-  expect((await call).pages_checked).toBe(1);
-  expect((await lintTool(ctx)).pages_checked).toBe(2);
+  expect((await call).pages_checked).toBe(2);
+  expect(isOpen(pinned[0]!)).toBe(false);
 });
 
 test("a rebuild closes every old handle that no call still holds", () => {

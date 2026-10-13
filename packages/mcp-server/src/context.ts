@@ -106,7 +106,10 @@ export function createContext(cwd: string = process.cwd()): ToolContext {
           pinned.pins--;
           if (pinned.pins === 0 && pinned !== handle) pinned.db.close();
         },
-        replaced: () => inodeOf(indexPath) !== pinned.inode,
+        replaced: () => {
+          const now = inodeOf(indexPath);
+          return now !== null && now !== pinned.inode;
+        },
       };
     },
     config,
