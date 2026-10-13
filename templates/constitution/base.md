@@ -220,7 +220,8 @@ Repeat until drift names no page in doubt.
 
 A page can appear under a source it only cites (`cited_only`; "cited at" in `accreta drift`):
 re-check the cited lines and re-pin those footnotes with `cite`, then skip step 5: record no
-revision on it. `update_verified_revision` refuses one the page's own source is not at.
+revision on it. `update_verified_revision` refuses one the page's own source is not at, unless
+that source is delegated.
 
 ### When you cannot read the source
 
