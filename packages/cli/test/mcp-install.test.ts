@@ -88,7 +88,7 @@ describe("accreta mcp install writes each client's file", () => {
 
   test("codex, project: .codex/config.toml, and a word about trust", async () => {
     const code = await cli("mcp", "install", "--client", "codex");
-    expect(stderr()).toBe("");
+    expect(stderr()).not.toContain("does not parse");
     expect(code).toBe(0);
     expect(toml(join(root, ".codex", "config.toml"))).toEqual({
       mcp_servers: { accreta: { command: "accreta", args: ["mcp"] } },
@@ -209,6 +209,15 @@ describe("accreta mcp install merges, and refuses what it cannot merge", () => {
   test("an accreta entry TOML defines inline is left for a human, even with --force", async () => {
     const path = join(root, ".codex", "config.toml");
     const text = `mcp_servers = { accreta = { command = "node" } }\n`;
+    write(path, text);
+    expect(await cli("mcp", "install", "--client", "codex", "--force")).toBe(1);
+    expect(stderr()).toContain("is an inline table");
+    expect(readFileSync(path, "utf-8")).toBe(text);
+  });
+
+  test("an accreta entry inside a [mcp_servers] table is left for a human too", async () => {
+    const path = join(root, ".codex", "config.toml");
+    const text = `[mcp_servers]\naccreta = { command = "node" }\n`;
     write(path, text);
     expect(await cli("mcp", "install", "--client", "codex", "--force")).toBe(1);
     expect(stderr()).toContain("cannot edit safely");

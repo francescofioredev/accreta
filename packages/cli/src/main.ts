@@ -48,7 +48,7 @@ Usage: accreta <command> [arguments]
                            Add that server to the client's config (--force replaces
                            an accreta entry that differs)
 
-  --json                  On lint, search, show, consumers, canonical and cite: print
+  --json                   On lint, search, show, consumers, canonical and cite: print
                            the JSON the matching MCP tool returns
   --limit <n>, --cursor <c>
                            On lint, consumers and canonical: print one page of at most

@@ -39,7 +39,7 @@
     "@accreta/adapters": "0.1.4",
     "@accreta/core": "0.1.4",
     "@accreta/mcp-server": "0.1.4",
-    "smol-toml": "^1.8.0"
+    "smol-toml": "^1.9.0"
   },
   "scripts": {
     "build": "bun ../../scripts/build-package.ts",

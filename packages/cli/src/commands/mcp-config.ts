@@ -1,6 +1,19 @@
-import { accessSync, constants, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  accessSync,
+  chmodSync,
+  constants,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
-import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 import type { CommandContext } from "./shared.ts";
@@ -30,8 +43,8 @@ export interface Target {
   format: "json" | "jsonc" | "toml";
   container: "mcpServers" | "servers" | "mcp_servers";
   entry: Entry;
-  /** The client's own command, printed instead of writing a file it manages itself. */
-  command?: string;
+  /** The client's own command and its JSON argument, printed instead of writing a file it manages. */
+  command?: { prefix: string; json: string };
 }
 
 // Bun caches homedir() at startup; tests and Node read HOME as it is now.
@@ -48,8 +61,26 @@ function vscodeUserDir(h: string): string {
   return join(process.env.XDG_CONFIG_HOME || join(h, ".config"), "Code", "User");
 }
 
+function claudeConfigPath(h: string): string {
+  return join(process.env.CLAUDE_CONFIG_DIR || h, ".claude.json");
+}
+
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
+/** A value read from a config file, safe to print: C0, DEL and C1 cannot paint a fake line. */
+export function esc(value: string): string {
+  let out = "";
+  for (const c of value) {
+    const code = c.charCodeAt(0);
+    out += isControl(code) ? `\\u${code.toString(16).padStart(4, "0")}` : c;
+  }
+  return out;
+}
+
+export function isControl(code: number): boolean {
+  return code < 0x20 || (code >= 0x7f && code <= 0x9f);
 }
 
 const RUN = { command: "accreta", args: ["mcp"] };
@@ -81,11 +112,14 @@ export function targetFor(client: Client, scope: Scope, root: string): Target {
       return {
         client,
         scope,
-        ...at(join(process.env.CLAUDE_CONFIG_DIR || h, ".claude.json")),
+        ...at(claudeConfigPath(h)),
         format: "json",
         container: "mcpServers",
         entry,
-        command: `claude mcp add-json --scope user ${SERVER} ${shellQuote(JSON.stringify(entry))}`,
+        command: {
+          prefix: `claude mcp add-json --scope user ${SERVER}`,
+          json: JSON.stringify(entry),
+        },
       };
     }
     case "cursor":
@@ -94,7 +128,8 @@ export function targetFor(client: Client, scope: Scope, root: string): Target {
         client,
         scope,
         ...at(join(scope === "project" ? root : h, ".cursor", "mcp.json")),
-        format: "json",
+        // Cursor's docs show comments in it.
+        format: "jsonc",
         container: "mcpServers",
         entry: {
           type: "stdio",
@@ -134,7 +169,7 @@ export function targetFor(client: Client, scope: Scope, root: string): Target {
         format: "jsonc",
         container: "servers",
         entry,
-        command: `code --add-mcp ${shellQuote(JSON.stringify({ name: SERVER, ...entry }))}`,
+        command: { prefix: "code --add-mcp", json: JSON.stringify({ name: SERVER, ...entry }) },
       };
     }
   }
@@ -144,7 +179,7 @@ function tilde(path: string, h: string): string {
   return path === h || path.startsWith(h + sep) ? `~${path.slice(h.length)}` : path;
 }
 
-/** Comments and trailing commas out, strings untouched: VS Code reads its mcp.json as JSONC. */
+/** Comments and trailing commas out, strings untouched: VS Code and Cursor read JSONC. */
 export function stripJsonc(text: string): string {
   let out = "";
   for (let i = 0; i < text.length; i++) {
@@ -175,7 +210,14 @@ function isTable(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function readTarget(target: Target, { strict = false } = {}): Read {
+type Readable = Pick<Target, "path" | "format" | "container">;
+
+// smol-toml 1.9 builds tables with a null prototype, which isDeepStrictEqual tells apart.
+function readToml(text: string): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(parseToml(text))) as Record<string, unknown>;
+}
+
+function readTarget(target: Readable, { strict = false } = {}): Read {
   if (!existsSync(target.path)) return { kind: "missing" };
   let text: string;
   try {
@@ -185,7 +227,7 @@ function readTarget(target: Target, { strict = false } = {}): Read {
   }
   let data: unknown;
   try {
-    if (target.format === "toml") data = parseToml(text);
+    if (target.format === "toml") data = readToml(text);
     else if (target.format === "json" || strict) data = JSON.parse(text);
     else data = JSON.parse(stripJsonc(text));
   } catch (error) {
@@ -221,10 +263,11 @@ export interface InstallOptions {
 export function install(ctx: CommandContext, root: string, options: InstallOptions): number {
   const target = targetFor(options.client, options.scope, root);
   const name = NAMES[target.client];
+  if (refuseOutside(ctx, root, target)) return 1;
   const read = readTarget(target, { strict: target.command === undefined });
 
   if (read.kind === "broken") {
-    ctx.err(`${target.shown} does not parse: ${read.reason}`);
+    ctx.err(`${target.shown} does not parse: ${esc(read.reason)}`);
     ctx.err("accreta does not rewrite a file it cannot read. Fix it, or add this by hand:\n");
     ctx.err(snippet(target));
     return 1;
@@ -232,12 +275,13 @@ export function install(ctx: CommandContext, root: string, options: InstallOptio
   const current = read.kind === "ok" ? read.servers[SERVER] : undefined;
   if (current !== undefined && isDeepStrictEqual(current, target.entry)) {
     ctx.out(`${target.shown} already starts accreta's server for ${name}. Nothing to do.`);
+    warnPath(ctx, root, name);
     return 0;
   }
   if (current !== undefined && !options.force) {
     ctx.err(`${target.shown} already has an \`${SERVER}\` server that differs:`);
-    ctx.err(`  current: ${JSON.stringify(current)}`);
-    ctx.err(`  install: ${JSON.stringify(target.entry)}`);
+    ctx.err(`  current: ${esc(JSON.stringify(current))}`);
+    ctx.err(`  install: ${esc(JSON.stringify(target.entry))}`);
     ctx.err("Re-run with --force to replace it.");
     return 1;
   }
@@ -251,49 +295,132 @@ export function install(ctx: CommandContext, root: string, options: InstallOptio
           : "MCP: Open User Configuration, and delete the accreta entry";
       ctx.out(`First remove the current entry: ${remove}`);
     }
-    ctx.out(`${name} adds user-scope servers itself. Run:\n\n  ${target.command}\n`);
+    const { prefix, json } = target.command;
+    if (process.platform === "win32") {
+      ctx.out(`${name} adds user-scope servers itself. Run \`${prefix}\` with this JSON as its`);
+      ctx.out(`last argument, quoted for your shell:\n\n  ${json}\n`);
+    } else {
+      ctx.out(`${name} adds user-scope servers itself. Run:\n\n  ${prefix} ${shellQuote(json)}\n`);
+    }
     ctx.out(`Then restart ${name}, or reload its MCP servers.`);
+    warnPath(ctx, root, name);
     return 0;
   }
 
   let text: string;
   if (target.format === "toml") {
     const merged = mergeToml(read.kind === "ok" ? read.text : "", target, current !== undefined);
-    if (merged === null) {
-      ctx.err(
-        `${target.shown} defines \`${target.container}.${SERVER}\` in a form accreta cannot edit safely.`,
-      );
-      ctx.err("Replace it by hand with:\n");
+    if ("reason" in merged) {
+      ctx.err(`${target.shown}: ${merged.reason}. Add this by hand:\n`);
       ctx.err(snippet(target));
       return 1;
     }
-    text = merged;
+    text = merged.text;
   } else {
     const data = read.kind === "ok" ? read.data : {};
     const servers = read.kind === "ok" ? read.servers : {};
     data[target.container] = { ...servers, [SERVER]: target.entry };
-    text = `${JSON.stringify(data, null, 2)}\n`;
+    text = `${JSON.stringify(data, null, read.kind === "ok" ? indentOf(read.text) : 2)}\n`;
   }
   mkdirSync(dirname(target.path), { recursive: true });
-  writeFileSync(target.path, text, "utf-8");
+  // A symlink could have appeared while the directories were made.
+  if (refuseOutside(ctx, root, target)) return 1;
+  writeAtomic(target.path, text);
 
   ctx.out(`${current === undefined ? "Added" : "Replaced"} accreta's server in ${target.shown}.`);
   if (target.client === "codex" && target.scope === "project") {
     ctx.out("Codex reads a project's .codex/config.toml only once you trust the project.");
   }
   ctx.out(`Restart ${name}, or reload its MCP servers, to connect.`);
+  warnPath(ctx, root, name);
   return 0;
+}
+
+function warnPath(ctx: CommandContext, root: string, name: string): void {
+  if (resolves("accreta", root)) return;
+  ctx.err(`Warning: \`accreta\` is not on this shell's PATH, so ${name} may not find it either.`);
+  ctx.err(
+    "Install it globally (`npm install -g accreta`), or change the entry to run `npx -y accreta mcp`.",
+  );
+}
+
+/** A committed project file is attacker-shaped input: a symlink there could aim the write at ~. */
+function refuseOutside(ctx: CommandContext, root: string, target: Target): boolean {
+  if (target.scope !== "project") return false;
+  const problem = escapesRoot(root, target.path);
+  if (!problem) return false;
+  ctx.err(`Refusing to write ${target.shown}: ${esc(problem)}.`);
+  ctx.err(
+    "A project file must stay inside the knowledge base, so install follows no symlink there.",
+  );
+  return true;
+}
+
+function escapesRoot(root: string, path: string): string | null {
+  let at = root;
+  for (const part of relative(root, path).split(sep)) {
+    at = join(at, part);
+    let link: boolean;
+    try {
+      link = lstatSync(at).isSymbolicLink();
+    } catch {
+      break;
+    }
+    if (link) return `${relative(root, at)} is a symlink`;
+  }
+  let dir = dirname(path);
+  while (!existsSync(dir) && dir !== dirname(dir)) dir = dirname(dir);
+  const real = realpathSync(dir);
+  const top = realpathSync(root);
+  return real === top || real.startsWith(top + sep)
+    ? null
+    : `${relative(root, dir)} resolves outside it`;
+}
+
+/** The indent the file already uses, so a rewrite changes no more lines than it must. */
+function indentOf(text: string): string | number {
+  return /\n([ \t]+)\S/.exec(text)?.[1] ?? 2;
+}
+
+/**
+ * A temp file beside the real file, then a rename, so a crash never leaves half a config. Writing
+ * beside a symlink's target keeps the symlink, and copying the mode keeps a 600 file at 600.
+ */
+function writeAtomic(path: string, text: string): void {
+  const real = existsSync(path) ? realpathSync(path) : path;
+  const mode = existsSync(real) ? statSync(real).mode & 0o777 : undefined;
+  const temp = join(dirname(real), `.${basename(real)}.${process.pid}.${Date.now()}.tmp`);
+  try {
+    writeFileSync(temp, text, { encoding: "utf-8", flag: "wx", mode: mode ?? 0o666 });
+    if (mode !== undefined) chmodSync(temp, mode);
+    renameSync(temp, real);
+  } catch (error) {
+    if (existsSync(temp)) unlinkSync(temp);
+    throw error;
+  }
 }
 
 const TABLE_HEADER =
   /^\s*\[\s*mcp_servers\s*\.\s*(?:accreta|"accreta"|'accreta')\s*(\.[^\]]*)?\]\s*(#.*)?$/;
 const ANY_HEADER = /^\s*\[/;
+const BLANK_OR_COMMENT = /^\s*(#.*)?$/;
+const INLINE_CONTAINER = /^\s*mcp_servers\s*=/m;
 
 /**
  * Append the table, or replace an existing `[mcp_servers.accreta]` in place, leaving every other
- * byte as it was. Null when the result would not read back as exactly that change.
+ * byte as it was. A reason instead when the result would not read back as exactly that change.
  */
-function mergeToml(text: string, target: Target, replace: boolean): string | null {
+function mergeToml(
+  text: string,
+  target: Target,
+  replace: boolean,
+): { text: string } | { reason: string } {
+  if (INLINE_CONTAINER.test(text)) {
+    return { reason: "`mcp_servers` is an inline table, which accreta cannot add to" };
+  }
+  const unsafe = {
+    reason: `it defines \`${target.container}.${SERVER}\` in a form accreta cannot edit safely`,
+  };
   const block = stringifyToml({ [target.container]: { [SERVER]: target.entry } });
   let merged: string;
   if (!replace) {
@@ -302,30 +429,32 @@ function mergeToml(text: string, target: Target, replace: boolean): string | nul
   } else {
     const lines = text.split("\n");
     const start = lines.findIndex((line) => TABLE_HEADER.test(line));
-    if (start === -1) return null;
+    if (start === -1) return unsafe;
     let end = start + 1;
     while (end < lines.length) {
       const line = lines[end]!;
       if (ANY_HEADER.test(line) && !TABLE_HEADER.test(line)) break;
       end++;
     }
+    // Comments and blank lines just above the next table belong to it, not to accreta's.
+    while (end - 1 > start && BLANK_OR_COMMENT.test(lines[end - 1]!)) end--;
     const prefix = lines.slice(0, start).join("\n");
-    const rest = lines.slice(end).join("\n");
-    merged = `${prefix === "" ? "" : `${prefix}\n`}${block}${rest === "" ? "" : `\n${rest}`}`;
+    // `block` ends in the newline that joined the last replaced line to what follows.
+    merged = `${prefix === "" ? "" : `${prefix}\n`}${block}${lines.slice(end).join("\n")}`;
   }
   let before: Record<string, unknown>;
   let after: Record<string, unknown>;
   try {
-    before = parseToml(text) as Record<string, unknown>;
-    after = parseToml(merged) as Record<string, unknown>;
+    before = readToml(text);
+    after = readToml(merged);
   } catch {
-    return null;
+    return unsafe;
   }
   const servers = after[target.container];
-  if (!isTable(servers) || !isDeepStrictEqual(servers[SERVER], target.entry)) return null;
+  if (!isTable(servers) || !isDeepStrictEqual(servers[SERVER], target.entry)) return unsafe;
   return isDeepStrictEqual(withoutAccreta(before, target), withoutAccreta(after, target))
-    ? merged
-    : null;
+    ? { text: merged }
+    : unsafe;
 }
 
 function withoutAccreta(data: Record<string, unknown>, target: Target): Record<string, unknown> {
@@ -338,7 +467,6 @@ function withoutAccreta(data: Record<string, unknown>, target: Target): Record<s
 }
 
 const STALE_SERVER = "node_modules/@accreta/mcp-server/src/main.ts";
-const RUNNERS = new Set(["npx", "bunx", "pnpx"]);
 
 function executable(path: string): boolean {
   try {
@@ -347,6 +475,17 @@ function executable(path: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** A directory `npx` or `bun run` put on PATH for this process only; the client will not have it. */
+function runnerAdded(dir: string): boolean {
+  const parts = dir.split(/[\\/]/);
+  return parts.some(
+    (part, i) =>
+      part === "_npx" ||
+      part.startsWith("bun-node-") ||
+      (part === ".bin" && parts[i - 1] === "node_modules"),
+  );
 }
 
 /** Whether `command` names an executable the way the client would look it up. */
@@ -360,25 +499,35 @@ function resolves(command: string, base: string): boolean {
       : [""];
   return (process.env.PATH ?? "")
     .split(delimiter)
-    .filter(Boolean)
+    .filter((dir) => dir !== "" && !runnerAdded(dir))
     .some((dir) => exts.some((ext) => executable(join(dir, command + ext))));
 }
 
-/** `accreta mcp`, the server's own bin, or either through a package runner. */
-function knownGood(command: string, args: readonly string[]): boolean {
-  const bare = command
-    .split(/[\\/]/)
-    .at(-1)!
-    .replace(/\.(cmd|exe)$/i, "");
+// A version or dist-tag only: `accreta@npm:x` or `accreta@github:x/y` installs something else.
+const PACKAGE = /^accreta(?:@[\w.^~<>=*+-]+)?$/;
+
+/** Split leading flags from the rest, for runners whose flags we allow by name. */
+function runnerForm(args: readonly string[], allowed: readonly string[], required: boolean) {
+  const at = args.findIndex((arg) => !arg.startsWith("-"));
+  const flags = at === -1 ? args : args.slice(0, at);
+  const rest = at === -1 ? [] : args.slice(at);
+  if (!flags.every((flag) => allowed.includes(flag))) return false;
+  if (required && flags.length === 0) return false;
+  return rest.length === 2 && PACKAGE.test(rest[0]!) && rest[1] === "mcp";
+}
+
+/** Forms that can only start accreta's own server. */
+function knownGood(command: string, args: readonly string[], root: string): boolean {
+  const bare = process.platform === "win32" ? command.replace(/\.(cmd|exe)$/i, "") : command;
   if (bare === "accreta") return isDeepStrictEqual(args, ["mcp"]);
   if (bare === "accreta-mcp") return args.length === 0;
-  if (!RUNNERS.has(bare)) return false;
-  const [pkg, ...rest] = args.filter((arg) => !arg.startsWith("-"));
-  const name = pkg?.replace(/(.)@.*$/, "$1");
-  return (
-    (name === "accreta" && isDeepStrictEqual(rest, ["mcp"])) ||
-    (name === "@accreta/mcp-server" && rest.length === 0)
-  );
+  if (bare === "npx") return runnerForm(args, ["-y", "--yes"], true);
+  if (bare === "bunx") return runnerForm(args, ["--bun"], false);
+  if (!isAbsolute(command) || basename(bare) !== "accreta") return false;
+  // A binary inside the knowledge base is whatever its last commit put there.
+  const real = existsSync(command) ? realpathSync(command) : command;
+  const top = realpathSync(root);
+  return !real.startsWith(top + sep) && isDeepStrictEqual(args, ["mcp"]);
 }
 
 function mentionsAccreta(name: string, entry: unknown): boolean {
@@ -389,15 +538,29 @@ function mentionsAccreta(name: string, entry: unknown): boolean {
   );
 }
 
+type DoctorScope = Scope | "local";
+
 /**
- * Every location `mcp install` writes, read-only. True when one is broken: a file that does not
- * parse, a command that is not there, or a server path that no longer ships.
+ * Every location `mcp install` writes, and Claude Code's local scope, read-only. True when one is
+ * broken: a file that does not parse, a command that is not there, or a path that no longer ships.
  */
 export function reportMcp(ctx: CommandContext, root: string): boolean {
   ctx.out("\nmcp");
   let broken = false;
   let found = 0;
   const seen = new Set<string>();
+  const check = (
+    label: string,
+    servers: Record<string, unknown>,
+    client: Client,
+    scope: DoctorScope,
+  ) => {
+    for (const [name, entry] of Object.entries(servers)) {
+      if (!mentionsAccreta(name, entry)) continue;
+      found++;
+      if (checkEntry(ctx, { label, name, entry, client, scope, root })) broken = true;
+    }
+  };
   for (const client of CLIENTS) {
     for (const scope of SCOPES) {
       const target = targetFor(client, scope, root);
@@ -406,21 +569,27 @@ export function reportMcp(ctx: CommandContext, root: string): boolean {
       seen.add(target.path);
       const read = readTarget(target);
       if (read.kind === "missing") continue;
-      const label = `${target.shown} (${NAMES[client]}, ${scope})`;
+      const label = `${esc(target.shown)} (${NAMES[client]}, ${scope})`;
       if (read.kind === "broken") {
-        ctx.out(`  broken: ${label} does not parse — ${read.reason}`);
-        ctx.out(
-          `    → fix it, then re-run \`accreta mcp install --client ${client}${scope === "user" ? " --scope user" : ""}\``,
-        );
+        ctx.out(`  broken: ${label} does not parse — ${esc(read.reason)}`);
+        ctx.out(`    → fix it, then re-run \`${installCommand(client, scope)}\``);
         broken = true;
         found++;
         continue;
       }
-      for (const [name, entry] of Object.entries(read.servers)) {
-        if (!mentionsAccreta(name, entry)) continue;
-        found++;
-        if (checkEntry(ctx, `${label} \`${name}\``, entry, client, scope, root)) broken = true;
-      }
+      check(label, read.servers, client, scope);
+    }
+  }
+  // Where `claude mcp add` puts a server by default: keyed by project in the user file.
+  const user = targetFor("claude", "user", root);
+  const read = readTarget(user);
+  if (read.kind === "ok" && isTable(read.data.projects)) {
+    const projects = read.data.projects;
+    const keys = new Set([resolve(root), realpathSync(root)]);
+    for (const key of keys) {
+      const project = projects[key];
+      if (!isTable(project) || !isTable(project.mcpServers)) continue;
+      check(`${esc(user.shown)} (Claude Code, local)`, project.mcpServers, "claude", "local");
     }
   }
   if (found === 0) {
@@ -432,15 +601,26 @@ export function reportMcp(ctx: CommandContext, root: string): boolean {
   return broken;
 }
 
-function checkEntry(
-  ctx: CommandContext,
-  label: string,
-  entry: unknown,
-  client: Client,
-  scope: Scope,
-  root: string,
-): boolean {
-  const reinstall = `re-run \`accreta mcp install --client ${client}${scope === "user" ? " --scope user" : ""} --force\``;
+function installCommand(client: Client, scope: Scope): string {
+  return `accreta mcp install --client ${client}${scope === "user" ? " --scope user" : ""}`;
+}
+
+interface Found {
+  label: string;
+  name: string;
+  entry: unknown;
+  client: Client;
+  scope: DoctorScope;
+  root: string;
+}
+
+function checkEntry(ctx: CommandContext, found: Found): boolean {
+  const { entry, client, scope, root } = found;
+  const label = `${found.label} \`${esc(found.name)}\``;
+  const reinstall =
+    scope === "local"
+      ? `run \`claude mcp remove --scope local ${esc(found.name)}\`, then \`${installCommand(client, "project")}\``
+      : `re-run \`${installCommand(client, scope)} --force\``;
   const command = isTable(entry) && typeof entry.command === "string" ? entry.command : undefined;
   const args =
     isTable(entry) && Array.isArray(entry.args)
@@ -450,27 +630,27 @@ function checkEntry(
     ctx.out(`  unknown: ${label} has no \`command\` — not a stdio server doctor can check`);
     return false;
   }
-  const shown = [command, ...args].join(" ");
+  const shown = esc([command, ...args].join(" "));
   if (args.some((arg) => arg.replaceAll("\\", "/").includes(STALE_SERVER))) {
     ctx.out(`  stale: ${label} runs \`${shown}\`, a path that no longer ships`);
     ctx.out(`    → ${reinstall}`);
     return true;
   }
   if (!resolves(command, root)) {
-    ctx.out(`  broken: ${label} runs \`${command}\`, which is not on this shell's PATH`);
+    ctx.out(`  broken: ${label} runs \`${esc(command)}\`, which is not on this shell's PATH`);
     ctx.out(
-      "    → install accreta where the client can find it (`npm install -g accreta`), or name its full path",
+      "    → install accreta where the client can find it (`npm install -g accreta`), or run `npx -y accreta mcp`",
     );
     return true;
   }
-  if (!knownGood(command, args)) {
+  if (!knownGood(command, args, root)) {
     ctx.out(`  unknown: ${label} runs \`${shown}\`, not a form doctor knows`);
     ctx.out(`    → ${reinstall}`);
     return false;
   }
   const elsewhere = servesElsewhere(entry, root);
   if (elsewhere) {
-    ctx.out(`  ok: ${label} runs \`${shown}\`, for the knowledge base at ${elsewhere}`);
+    ctx.out(`  ok: ${label} runs \`${shown}\`, for the knowledge base at ${esc(elsewhere)}`);
     return false;
   }
   ctx.out(`  ok: ${label} runs \`${shown}\``);
