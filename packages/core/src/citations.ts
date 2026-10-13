@@ -1,3 +1,5 @@
+import { nameKey } from "./name-key.ts";
+
 // Footnotes are prose rendered from `provenance.format`, which each knowledge base shapes
 // its own way (ADR-0011), so they are read by inverting that template, not by imposing one.
 
@@ -142,8 +144,13 @@ export interface FootnoteOrphan {
 
 const DEFINITION_RE = /^\[\^([^\]\s]+)\]:\s*(.*?)\s*$/;
 const FENCE_RE = /^\s*(```|~~~)/;
-const REFERENCE_RE = /\[\^([^\]\s]+)\](?!:)/g;
+const REFERENCE_RE = /(?<!\\)\[\^([^\]\s]+)\](?!:)/g;
 const INLINE_CODE_RE = /(`+).*?\1/g;
+// Stands in for the `[` of a marker inside inline code, so the code survives into the claim.
+const MASKED = "\0";
+
+/** How footnote ids are paired: GFM folds labels, so `[^A]` cites `[^a]`. */
+export const footnoteKey = nameKey;
 
 /**
  * Every footnote definition in a page body, with the claim that cites it. A claim is the
@@ -161,15 +168,17 @@ export function readFootnotes(body: string): { footnotes: Footnote[]; orphans: F
   if (!body.includes("[^")) return { footnotes: [], orphans: [] };
   const lines = body.split("\n");
   const definitions: Omit<Footnote, "claim">[] = [];
-  const references: { id: string; line: number; within: string | null }[] = [];
+  const references: { id: string; line: number; within: string | null; raw: string }[] = [];
   const prose: string[] = [];
   let fenced = false;
   let within: string | null = null;
+  let afterBlank = false;
 
   lines.forEach((line, index) => {
     if (FENCE_RE.test(line)) {
       fenced = !fenced;
       within = null;
+      afterBlank = false;
       prose.push("");
       return;
     }
@@ -177,18 +186,20 @@ export function readFootnotes(body: string): { footnotes: Footnote[]; orphans: F
       prose.push("");
       return;
     }
+    const masked = line.replace(INLINE_CODE_RE, (code) => code.replaceAll("[^", `${MASKED}^`));
     const definition = line.match(DEFINITION_RE);
     if (definition) {
-      within = definition[1]!;
-      definitions.push({ id: within, line: index + 1, text: definition[2]! });
+      within = footnoteKey(definition[1]!);
+      definitions.push({ id: definition[1]!, line: index + 1, text: definition[2]! });
       prose.push("");
     } else {
-      // Indented lines continue the definition above them, as a multi-paragraph footnote does.
-      if (/^\S/.test(line)) within = null;
-      prose.push(line);
+      // A definition runs on, lazily or indented, until a blank line and an unindented one, as on GitHub.
+      if (afterBlank && /^\S/.test(line)) within = null;
+      prose.push(within === null ? masked : "");
     }
-    for (const match of line.replace(INLINE_CODE_RE, "").matchAll(REFERENCE_RE)) {
-      references.push({ id: match[1]!, line: index + 1, within });
+    afterBlank = line.trim() === "";
+    for (const match of masked.matchAll(REFERENCE_RE)) {
+      references.push({ id: footnoteKey(match[1]!), line: index + 1, within, raw: match[1]! });
     }
   });
 
@@ -196,9 +207,9 @@ export function readFootnotes(body: string): { footnotes: Footnote[]; orphans: F
   for (const paragraph of prose.join("\n").split(/\n\s*\n/)) {
     if (!paragraph.includes("[^")) continue;
     for (const sentence of sentences(paragraph.replace(/\s+/g, " ").trim())) {
-      const ids = [...sentence.matchAll(REFERENCE_RE)].map((m) => m[1]!);
+      const ids = [...sentence.matchAll(REFERENCE_RE)].map((m) => footnoteKey(m[1]!));
       if (ids.length === 0) continue;
-      const text = sentence.replace(REFERENCE_RE, "").trim();
+      const text = sentence.replace(REFERENCE_RE, "").trim().replaceAll(MASKED, "[");
       for (const id of new Set(ids)) {
         const list = claims.get(id);
         if (list) list.push(text);
@@ -220,18 +231,21 @@ export function readFootnotes(body: string): { footnotes: Footnote[]; orphans: F
     reached.add(id);
     queue.push(...(cites.get(id) ?? []));
   }
-  const defined = new Set(definitions.map((d) => d.id));
+  const defined = new Set(definitions.map((d) => footnoteKey(d.id)));
   const orphans: FootnoteOrphan[] = [
     ...references
       .filter((r) => !defined.has(r.id))
-      .map((r) => ({ id: r.id, line: r.line, role: "reference" as const })),
+      .map((r) => ({ id: r.raw, line: r.line, role: "reference" as const })),
     ...definitions
-      .filter((d) => !reached.has(d.id))
+      .filter((d) => !reached.has(footnoteKey(d.id)))
       .map((d) => ({ id: d.id, line: d.line, role: "definition" as const })),
   ];
 
   return {
-    footnotes: definitions.map((d) => ({ ...d, claim: (claims.get(d.id) ?? []).join("\n") })),
+    footnotes: definitions.map((d) => ({
+      ...d,
+      claim: (claims.get(footnoteKey(d.id)) ?? []).join("\n"),
+    })),
     orphans,
   };
 }

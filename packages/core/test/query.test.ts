@@ -622,6 +622,15 @@ describe("lint on footnote pairing", () => {
     expect(pairing()).toEqual([]);
   });
 
+  test("ids differing only in case pair up, and count as defined twice", async () => {
+    writePage("a.md", cited("Claim.[^A]\n\n[^a]: s @ r1 · a.md#L1\n[^A]: s @ r1 · a.md#L2"));
+    reindex();
+    expect(pairing()).toEqual([]);
+    const { findings } = await lintCitations(db, new Map());
+    expect(findings.map((f) => f.kind)).toEqual(["duplicate-footnote"]);
+    expect(findings[0]?.detail).toContain("[^A] is defined again at line 12");
+  });
+
   test("definitions that reference only each other are both unused", () => {
     writePage(
       "a.md",

@@ -1,5 +1,5 @@
 import type { Database } from "../index-db/db.ts";
-import { compileCitationTemplate } from "../citations.ts";
+import { compileCitationTemplate, footnoteKey } from "../citations.ts";
 import type { AccretaConfig } from "../config.ts";
 import {
   formatCanonicalSource,
@@ -282,7 +282,7 @@ function orphanFootnoteFindings(db: Database): LintFinding[] {
       });
       continue;
     }
-    const key = `${row.page_path}\0${row.footnote}`;
+    const key = `${row.page_path}\0${footnoteKey(row.footnote)}`;
     const group = undefinedRefs.get(key);
     if (group) group.lines.push(row.line);
     else undefinedRefs.set(key, { path: row.page_path, id: row.footnote, lines: [row.line] });
@@ -437,7 +437,7 @@ export async function lintCitations(
   const firstLine = new Map<string, number>();
   for (const row of footnotes) {
     checkedPages.add(row.page_path);
-    const id = `${row.page_path}\0${row.footnote}`;
+    const id = `${row.page_path}\0${footnoteKey(row.footnote)}`;
     const first = firstLine.get(id);
     if (first !== undefined) {
       findings.push({
