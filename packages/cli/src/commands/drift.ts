@@ -180,25 +180,34 @@ export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport)
   ctx.out(`${report.sourceId} @ ${report.currentRevision}`);
 
   if (report.stale.length > 0) {
-    // null: the source can only say which files changed, so the page is in doubt, as in --json.
     const rows = report.stale
       .flatMap((entry) => {
         const doubt = pageChanges(entry);
         return entry.pages.map((page) => ({ entry, page, doubt: doubt ? doubt.get(page)! : null }));
       })
-      .toSorted((a, b) => DOUBT_ORDER.indexOf(a.doubt!) - DOUBT_ORDER.indexOf(b.doubt!));
-    const inDoubt = rows.filter((row) => row.doubt === null || row.doubt === "changed");
-    if (inDoubt.length === 0) ctx.out("  no page in doubt");
+      .toSorted((a, b) => rank(a.doubt) - rank(b.doubt));
+    // A page pinned at several revisions goes under its worst one, so each page counts once.
+    const worst = new Map<string, number>();
+    for (const row of rows) {
+      worst.set(row.page, Math.min(worst.get(row.page) ?? Infinity, rank(row.doubt)));
+    }
+    const group = (...ranks: number[]) =>
+      rows.filter((row) => ranks.includes(worst.get(row.page)!));
+    const inDoubt = group(rank("changed"));
+    const rest = group(rank("moved"), rank("untouched"), rank("uncited"));
+    if (inDoubt.length === 0) {
+      // Drift still fails on these, so the line must not read as all clear.
+      const count = distinct(rest.map((row) => row.page));
+      ctx.out(
+        count > 0 ? `  no page in doubt; ${count} to re-pin or re-verify` : "  no page in doubt",
+      );
+    }
     printStale(ctx, "page(s) in doubt", inDoubt);
+    printStale(ctx, "page(s) to re-pin, cited lines moved", group(rank("moved")));
     printStale(
       ctx,
-      "page(s) to re-pin, cited lines moved",
-      rows.filter((row) => row.doubt === "moved"),
-    );
-    printStale(
-      ctx,
-      "page(s) on an older revision, no cited line changed",
-      rows.filter((row) => row.doubt === "untouched" || row.doubt === "uncited"),
+      "page(s) behind the source, no cited line changed",
+      group(rank("untouched"), rank("uncited")),
     );
   }
   // Reported separately because "I cannot tell" is not "out of date", and
@@ -216,6 +225,10 @@ export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport)
 }
 
 const DOUBT_ORDER: PageChange[] = ["changed", "moved", "untouched", "uncited"];
+
+// null: the source can only say which files changed, so the page is in doubt, as in --json.
+const rank = (doubt: PageChange | null) =>
+  doubt === null ? DOUBT_ORDER.indexOf("changed") : DOUBT_ORDER.indexOf(doubt);
 
 interface StaleRow {
   entry: StaleRevision;
@@ -240,7 +253,11 @@ function explainDoubt(doubt: PageChange, entry: StaleRevision, page: string): st
     case "changed":
       return `${count("touched") + count("unknown")} cited range(s) changed`;
     case "moved":
-      return `re-pin ${count("moved")} locator(s)`;
+      return `re-pin ${mine
+        .flatMap((c) =>
+          c.change.status === "moved" ? [`${c.path}#${c.locator} → ${c.change.locator}`] : [],
+        )
+        .join(", ")}`;
     case "untouched":
       return "cited lines unchanged";
     case "uncited":

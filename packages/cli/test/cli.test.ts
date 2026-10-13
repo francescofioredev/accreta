@@ -542,7 +542,9 @@ describe("accreta drift", () => {
 
     expect(await cli("drift")).toBe(1);
     // Three pages, one revision: the count must be the pages.
-    expect(stdout()).toContain("3 page(s) on an older revision, no cited line changed");
+    // Drift still exits 1 here, so the first line must not read as all clear.
+    expect(stdout()).toContain("  no page in doubt; 3 to re-pin or re-verify\n");
+    expect(stdout()).toContain("3 page(s) behind the source, no cited line changed");
     for (const name of ["one", "two", "three"]) {
       expect(stdout()).toContain(`knowledge/${name}.md`);
     }
@@ -657,7 +659,8 @@ describe("accreta drift at line granularity", () => {
     const out = stdout();
     expect(out).toContain(`  ${json.pages_in_doubt} page(s) in doubt:`);
     expect(out).toContain("  1 page(s) to re-pin, cited lines moved:");
-    expect(out).toContain("  2 page(s) on an older revision, no cited line changed:");
+    expect(out).toContain("re-pin a.md#L12-L14 → L13-L15");
+    expect(out).toContain("  2 page(s) behind the source, no cited line changed:");
     expect(out).not.toContain("may have drifted");
 
     output = [];
