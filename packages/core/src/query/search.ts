@@ -1,7 +1,7 @@
 import type { Database } from "../index-db/db.ts";
 
 export interface SearchOptions {
-  /** Words that must all match; a double-quoted run is a phrase. Under `syntax: "fts5"`, an FTS5 query. */
+  /** Words that must all match; a double-quoted run is a phrase, a trailing `*` a prefix. Under `syntax: "fts5"`, an FTS5 query. */
   query: string;
   /** `plain` (default) searches NOT, OR and AND as words; `fts5` applies operators and throws on bad syntax. */
   syntax?: "plain" | "fts5";
@@ -67,8 +67,16 @@ export function searchPages(db: Database, options: SearchOptions): SearchHit[] {
 
 // Bare, `NULLS NOT DISTINCT` is `nulls AND NOT distinct`: the inverse, silently. Quoted, it has no operators.
 function plainMatch(query: string): string {
-  const strings = [...query.matchAll(/"([^"]*)"|[^\s"]+|"/g)]
-    .map(([whole, phrase]) => phrase ?? whole)
-    .filter((text) => text !== '"');
-  return strings.map((text) => `"${text}"`).join(" ");
+  // FTS5 ends a string at NUL and then throws "unterminated string".
+  const terms = [...query.replaceAll("\0", " ").matchAll(/"([^"]*)"|[^\s"]+|"/g)].flatMap(
+    ([whole, phrase]) => {
+      if (phrase !== undefined) return [`"${phrase}"`];
+      if (whole === '"') return [];
+      // `"word"*` keeps prefix search without letting any operator through.
+      const stem = whole.replace(/\*+$/, "");
+      if (stem === whole) return [`"${whole}"`];
+      return stem === "" ? [] : [`"${stem}"*`];
+    },
+  );
+  return terms.join(" ");
 }

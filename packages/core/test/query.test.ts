@@ -164,9 +164,16 @@ describe("searchPages on a plain query", () => {
       '"',
       '""',
       'glaze"',
-      '"unbalanced glaze',
+      '"takes glaze',
       "*",
+      "**",
       "glaze*",
+      "glaze**",
+      '"rim"*',
+      "-*",
+      "glaze\0",
+      "a\0b",
+      '"a\0b"',
       "-",
       "-porous",
       ":",
@@ -185,8 +192,17 @@ describe("searchPages on a plain query", () => {
     }
     expect(paths("-porous")).toEqual(["fired.md"]);
     expect(paths("(slip")).toEqual(["finish.md"]);
-    expect(paths('"unbalanced glaze')).toEqual([]);
+    expect(paths('"takes glaze')).toEqual(["rim.md"]);
+    expect(paths("glaze\0")).toEqual(["finish.md", "rim.md"]);
     expect(paths("   ")).toEqual([]);
+  });
+
+  test("a trailing * is still a prefix search, and a bare * matches nothing", () => {
+    expect(paths("glaz*")).toEqual(["finish.md", "rim.md"]);
+    expect(paths("tak* glaz**")).toEqual(["rim.md"]);
+    expect(paths("NO*")).toEqual(["fired.md"]);
+    expect(paths("*")).toEqual([]);
+    expect(paths("**")).toEqual([]);
   });
 
   test("operators are still there for a caller that opts in", () => {
