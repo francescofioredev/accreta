@@ -215,9 +215,12 @@ function audit(payload: unknown, declared?: string[]): { declared: string[]; lea
   return { declared: fields, leaks };
 }
 
-/** Audit a whole CallToolResult: JSON text items against their own `_provenance`, everything else unmarked. */
+/** Audit a whole CallToolResult: JSON text items and structuredContent against their own `_provenance`, the rest unmarked. */
 function auditResult(result: unknown) {
-  const { content, ...rest } = result as { content?: unknown[] };
+  const { content, structuredContent, ...rest } = result as {
+    content?: unknown[];
+    structuredContent?: unknown;
+  };
   const payloads: unknown[] = [];
   const residue = (content ?? []).map((item) => {
     const text = (item as { type?: string; text?: unknown }).text;
@@ -234,6 +237,8 @@ function auditResult(result: unknown) {
     }
     return item;
   });
+  // Its own label, so a field only the structured copy carries cannot borrow the text block's.
+  if (structuredContent !== undefined) payloads.push(structuredContent);
   const declared: string[] = [];
   const leaks: Leak[] = [];
   for (const payload of payloads) {
@@ -434,7 +439,7 @@ describe("the audit itself", () => {
     expect(audit(payload).leaks.filter((leak) => !leak.field)).toHaveLength(1);
   });
 
-  test("structuredContent and non-text items are audited as unmarked", () => {
+  test("non-text items are audited as unmarked", () => {
     const result = {
       content: [
         {
@@ -446,14 +451,40 @@ describe("the audit itself", () => {
         },
         { type: "resource", resource: { uri: "x", text: "CANARY-BODY" } },
       ],
-      structuredContent: { excerpt: "CANARY-BODY" },
     };
     const unmarked = auditResult(result)
       .leaks.filter((leak) => !leak.field)
       .map((leak) => leak.path);
-    expect(unmarked.toSorted()).toEqual([
-      "result.content[].resource.text",
-      "result.structuredContent.excerpt",
+    expect(unmarked).toEqual(["result.content[].resource.text"]);
+  });
+
+  test("structuredContent is audited against its own _provenance, not the text block's", () => {
+    const label = { page_derived_fields: ["title"] };
+    const result = {
+      content: [
+        { type: "text", text: JSON.stringify({ title: "CANARY-TITLE", _provenance: label }) },
+      ],
+      structuredContent: { title: "CANARY-TITLE", excerpt: "CANARY-BODY", _provenance: label },
+    };
+    const { leaks } = auditResult(result);
+    expect(leaks.filter((leak) => !leak.field)).toEqual([
+      { path: "excerpt", channel: "BODY", field: undefined },
+    ]);
+    expect(leaks.filter((leak) => leak.field === "title")).toHaveLength(2);
+  });
+
+  test("structuredContent with no _provenance of its own marks nothing", () => {
+    const result = {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({ title: "x", _provenance: { page_derived_fields: ["title"] } }),
+        },
+      ],
+      structuredContent: { title: "CANARY-TITLE" },
+    };
+    expect(auditResult(result).leaks).toEqual([
+      { path: "title", channel: "TITLE", field: undefined },
     ]);
   });
 });
