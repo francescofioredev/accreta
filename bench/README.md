@@ -86,6 +86,37 @@ without alias rows. The differences are what those two structures add to a rebui
 The machine these ran on had a load average of 7 to 10. Treat the ratios between commits as the
 result; absolute times will differ on a quieter machine.
 
+# Drift per source
+
+`drift-bench.ts` times `detectDrift` per source over 10 sources, at 1,000 and 10,000 pages. Each
+page cites its own source and two others in footnotes, and one page in twenty names another
+source in `canonical_source`. It also times the two queries `citationsInto` runs, prints their
+`EXPLAIN QUERY PLAN`, the rebuild and the index size. Each figure is the median of 7 runs over
+every source.
+
+```bash
+bun run bench:drift                                       # Bun, from source
+bun run --cwd packages/core build && node --experimental-strip-types bench/drift-bench.ts
+```
+
+Node reads the built `dist/`, so rebuild it after changing core. The canonical query is copied
+from `drift.ts`; keep the two in step. On an index without `canonical_cites` it runs the `instr()`
+scan drift ran before #239, so the same file measures either side.
+
+**Before and after #239.** Extract the commit before it with
+`git archive <commit> | tar -x -C <dir>`, run `bun install` there, copy this file into its
+`bench/`, and run both directories with the same command. Median of 5 runs, Apple M3, 16 GB:
+
+| | Bun 1.4.2 before → after | Node 22.16.0 before → after |
+| --- | --- | --- |
+| drift per source, 1k pages | 0.60 → 0.24 ms | 1.17 → 0.42 ms |
+| drift per source, 10k pages | 17.41 → 1.84 ms | 15.48 → 3.55 ms |
+| canonical query, 10k | 8.22 → 0.01 ms | 5.89 → 0.01 ms |
+| footnote query, 10k | 5.89 → 0.66 ms | 5.41 → 1.17 ms |
+| index file, 1k | 5,632,000 → 5,836,800 B (+3.6%) | 5,623,808 → 5,824,512 B (+3.6%) |
+| index file, 10k | 55,762,944 → 57,798,656 B (+3.7%) | 55,812,096 → 57,774,080 B (+3.5%) |
+| rebuild | no measurable change | no measurable change |
+
 # MCP response budget
 
 The consumer of the MCP server is a language model with a finite context window, so every

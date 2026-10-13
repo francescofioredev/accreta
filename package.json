@@ -20,6 +20,7 @@
     "bench:scale": "bun --conditions=@accreta/source run bench/scale-bench.ts",
     "bench:mcp": "bun --conditions=@accreta/source run bench/mcp-budget.ts",
     "bench:canonical": "bun --conditions=@accreta/source run bench/canonical-bench.ts",
+    "bench:drift": "bun --conditions=@accreta/source run bench/drift-bench.ts",
     "adoption": "bun run scripts/adoption.ts"
   },
   "devDependencies": {

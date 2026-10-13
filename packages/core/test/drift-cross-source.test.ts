@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { detectDrift, pageChanges } from "../src/source/drift.ts";
@@ -7,11 +7,14 @@ import {
   DelegatedSourceError,
   UNPINNED_REVISION,
   UnknownRevisionError,
+  parseCitation,
   type LocationVerdict,
   type LocatorChange,
   type SourceAdapter,
 } from "../src/source/adapter.ts";
 import { openIndex, type Database } from "../src/index-db/db.ts";
+import { buildIndex } from "../src/index-db/build.ts";
+import { DEFAULT_CONFIG } from "../src/config.ts";
 
 class ScriptedSource implements SourceAdapter {
   readonly asked: string[] = [];
@@ -88,6 +91,12 @@ function addPage(path: string, source: string, verifiedAt: string | null, canoni
     `INSERT INTO pages (path, type, title, source, canonical_source, last_verified_revision, frontmatter_json, body, mtime)
      VALUES (?, 'note', ?, ?, ?, ?, '{}', '', 0)`,
   ).run(path, path, source, canonical ?? null, verifiedAt);
+  const named = canonical ? parseCitation(canonical)?.sourceId : undefined;
+  if (canonical && named && named !== source) {
+    db.prepare(
+      `INSERT INTO canonical_cites (source, page_path, canonical_source) VALUES (?, ?, ?)`,
+    ).run(named, path, canonical);
+  }
 }
 
 let line = 0;
@@ -214,6 +223,32 @@ describe("a footnote into a source other than the page's own", () => {
     expect(report.stale).toEqual([]);
     expect(report.unverifiable).toEqual(["knowledge/contradiction.md"]);
     expect(report.unpinned).toEqual([{ page: "knowledge/contradiction.md", footnote: null }]);
+  });
+
+  test("a built page with no source of its own is checked through its canonical_source", async () => {
+    mkdirSync(join(root, "knowledge"));
+    writeFileSync(
+      join(root, "knowledge", "loose.md"),
+      "---\ntype: note\ncanonical_source: noaa:note.md#L5\n---\n\n# Loose\n",
+    );
+    const indexPath = join(root, "built.sqlite");
+    buildIndex({ root, config: { ...DEFAULT_CONFIG, knowledgeBase: "knowledge" }, indexPath });
+    const built = openIndex(indexPath, { readonly: true });
+    try {
+      const report = await detectDrift(built, new ScriptedSource("noaa", "rev2", {}, {}));
+      expect(report.unpinned).toEqual([{ page: "knowledge/loose.md", footnote: null }]);
+    } finally {
+      built.close();
+    }
+  });
+
+  test("an index without the canonical_cites table says to reindex", async () => {
+    addPage("knowledge/finding.md", "noaa", "rev1");
+    db.exec("DROP TABLE canonical_cites");
+    const noaa = new ScriptedSource("noaa", "rev1", {}, {});
+    await expect(detectDrift(db, noaa)).rejects.toThrow(
+      "This index predates the canonical_cites table; run `accreta reindex`.",
+    );
   });
 
   test("a canonical_source takes the pin of a footnote citing the same lines", async () => {

@@ -6,6 +6,7 @@ import { compileCitationTemplate, extractFootnotes } from "../citations.ts";
 import { extractLinks, tryResolveWikilink } from "../links.ts";
 import { nameKey } from "../name-key.ts";
 import { parsePage } from "../page.ts";
+import { parseCitation } from "../source/adapter.ts";
 import { openIndex, sealForReading, type Database } from "./db.ts";
 
 export interface BuildResult {
@@ -173,6 +174,10 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
   const insertAlias = db.prepare(
     `INSERT OR IGNORE INTO aliases (alias, path) VALUES ($alias, $path)`,
   );
+  const insertCanonical = db.prepare(
+    `INSERT INTO canonical_cites (source, page_path, canonical_source)
+     VALUES ($source, $page, $canonical)`,
+  );
   const insertLink = db.prepare(
     `INSERT OR IGNORE INTO links (src_path, dst_path, kind) VALUES ($src, $dst, $kind)`,
   );
@@ -207,6 +212,7 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
     db.exec("DELETE FROM pages");
     db.exec("DELETE FROM pages_fts");
     db.exec("DELETE FROM aliases");
+    db.exec("DELETE FROM canonical_cites");
     db.exec("DELETE FROM links");
     db.exec("DELETE FROM broken_links");
     db.exec("DELETE FROM citations");
@@ -249,6 +255,12 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
         $type: type,
         $source: source ?? "",
       });
+
+      const canonical = asString(frontmatter.canonical_source);
+      const canonicalId = canonical ? parseCitation(canonical)?.sourceId : undefined;
+      if (canonical && canonicalId && canonicalId !== source) {
+        insertCanonical.run({ $source: canonicalId, $page: path, $canonical: canonical });
+      }
 
       for (const alias of canonicalAliases(frontmatter)) {
         insertAlias.run({ $alias: alias, $path: path });
