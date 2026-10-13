@@ -155,8 +155,8 @@ With a shell, use the CLI. Without one, the MCP tool beside it does the same.
 | — | `update_verified_revision` | records a verified revision; only with `ACCRETA_ALLOW_WRITES=1` |
 
 - **`--json`** prints the MCP tool's reply. Use it when you parse the output rather than read it.
-  `drift --json` has a shape of its own and names only the pages whose cited lines changed:
-  drive re-verification from `accreta drift` or `check_drift`.
+  `drift --json` has a shape of its own and only counts stale pages whose cited lines are
+  unchanged: drive re-verification from `accreta drift` or `check_drift`.
 - **Long results come in pages.** `find_consumers`, `find_canonical` and `lint_knowledge_base`
   return at most 50 entries: `count` is the total, and passing `nextCursor` back as `cursor`
   gets the rest. The CLI prints everything unless you pass `--limit` or `--cursor`.
@@ -219,9 +219,8 @@ parts, then follow Ingesting 4–6 with `--expect-revision` set to drift's revis
 Repeat until drift names no page in doubt.
 
 A page can appear under a source it only cites (`cited_only`; "cited at" in `accreta drift`):
-re-check the cited lines and re-pin those footnotes with `cite`, but never record that source's
-revision on it. `update_verified_revision` refuses a revision the page's own source is not at
-(a delegated source is not checked); that proves whose revision it is, not that you re-read it.
+re-check the cited lines and re-pin those footnotes with `cite`, then skip step 5: record no
+revision on it. `update_verified_revision` refuses one the page's own source is not at.
 
 ### When you cannot read the source
 
