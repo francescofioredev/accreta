@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { constants } from "node:os";
-import { relative, resolve, sep } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import {
   countLines,
   formatCitation,
@@ -152,6 +152,28 @@ function submoduleAbove(root: string, scope: string): string | undefined {
 }
 
 /**
+ * Why `paths` cannot bound a source at `root`, or undefined when it can. An empty entry fails
+ * every git call, and one outside the root matches no citation, so locate calls everything missing.
+ */
+export function scopeProblem(root: string, paths: unknown): string | undefined {
+  if (paths === undefined || paths === null) return undefined;
+  if (!Array.isArray(paths)) return `declares \`paths\` as ${JSON.stringify(paths)}, not a list`;
+  const base = resolve(root);
+  for (const entry of paths as unknown[]) {
+    const shown = JSON.stringify(entry) ?? String(entry);
+    if (typeof entry !== "string") return `declares paths entry ${shown}, which is not a string`;
+    if (entry === "") return `declares paths entry "", which is empty; use "." for the whole root`;
+    // Pathspec magic is git's to interpret, and locate already reads it through ls-files.
+    if (entry.startsWith(":")) continue;
+    const inside = relative(base, resolve(base, entry));
+    if (inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute(inside)) {
+      return `declares paths entry ${shown}, which resolves outside the source root`;
+    }
+  }
+  return undefined;
+}
+
+/**
  * A git repository as a source.
  *
  * The natural implementation: a revision is a commit SHA, and what changed
@@ -166,6 +188,9 @@ export class GitSource implements SourceAdapter {
   private readonly paths: readonly string[];
 
   constructor(options: GitSourceOptions) {
+    // `loadSources` turns this throw into an unloaded source naming the entry.
+    const problem = scopeProblem(options.root, options.paths);
+    if (problem) throw new Error(`Source "${options.id}" ${problem}`);
     this.id = options.id;
     this.root = options.root;
     this.citationFormat = options.citationFormat;

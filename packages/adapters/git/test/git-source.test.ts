@@ -901,6 +901,15 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
     expect(await sub(["../sub/other"]).locate("docs/a.md")).toMatchObject({ verdict: "missing" });
   });
 
+  test("a scope path is refused only when it ends up outside the root", async () => {
+    expect(await sub(["../sub/docs"]).revision()).toBe(await head());
+    expect(await sub([".", "./"]).revision()).toBe(await head());
+    expect(() => sub(["../other.md"])).toThrow('"../other.md"');
+    expect(() => sub(["docs/../../other.md"])).toThrow('"docs/../../other.md"');
+    expect(() => sub([""])).toThrow('""');
+    expect(() => sub([join(root, "other.md")])).toThrow("outside the source root");
+  });
+
   test("paths are relative to the root, and so is what changedSince names", async () => {
     const scoped = sub(["docs"]);
     const from = await scoped.revision();

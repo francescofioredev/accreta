@@ -2,7 +2,7 @@ import { existsSync, realpathSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { SourceAdapter, SourceDeclaration } from "@accreta/core";
 import { FsSource, SNAPSHOT_BUDGET_BYTES, snapshotHealth } from "@accreta/adapter-fs";
-import { GitSource, isWorkingTree, unmatchedPaths } from "@accreta/adapter-git";
+import { GitSource, isWorkingTree, scopeProblem, unmatchedPaths } from "@accreta/adapter-git";
 import { DelegatedSource } from "@accreta/adapter-delegated";
 
 export interface SourceContext {
@@ -156,10 +156,19 @@ paths: []
       id: d.id,
       root: rootOf(d, ctx),
       citationFormat: ctx.citationFormat,
-      paths: stringsOr(d.options.paths),
+      // Unchecked, so the adapter refuses a malformed list rather than widening the scope.
+      paths: d.options.paths as readonly string[] | undefined,
     }),
   preflight: async (d, ctx) => {
     const root = rootOf(d, ctx);
+    const problem = scopeProblem(root, d.options.paths);
+    if (problem) {
+      return {
+        reachable: "no",
+        detail: problem,
+        remedy: "Name directories or files inside `root`, relative to it.",
+      };
+    }
     const bad = checkDirectory(root);
     if (bad) return bad;
     if (!(await isWorkingTree(root))) {
