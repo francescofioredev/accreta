@@ -65,7 +65,7 @@ const PROBES: Record<string, Probe[]> = {
 const PROMPT_PROBES: Record<string, Record<string, string>> = {
   ingest_source: { target: "docs:ch01.md" },
   reverify_stale_pages: { source: "lines" },
-  answer_with_citations: { question: "radiative forcing" },
+  answer_with_citations: { question: "filename probe" },
 };
 
 // Declared fields that name a whole author-written object rather than one text value.

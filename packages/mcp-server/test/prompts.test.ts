@@ -43,6 +43,7 @@ const SOURCES = [
     touchedSince: async (_revision, _path, locators) =>
       new Map(locators.map((l) => [l, { status: "touched" as const }])),
   }),
+  adapter("plain", { revision: async () => "p2", changedSince: async () => ["p.md"] }),
   adapter("other", {}),
   adapter("agent", {
     revision: async () => {
@@ -61,6 +62,10 @@ const PAGES: Record<string, string> = {
   "lost.md": "source: docs\nlast_verified_revision: gone\n---\n\nD.",
   "fresh.md": "source: docs\n---\n\nE.",
   "relayed.md": "source: agent\nlast_verified_revision: a1\n---\n\nF.",
+  "plain.md":
+    "source: plain\nlast_verified_revision: p1\n---\n\nH.[^h]\n\n[^h]: plain @ p1 · p.md#L1",
+  "leans.md":
+    "source: other\nlast_verified_revision: r1\n---\n\nI.[^i]\n\n[^i]: plain @ p1 · p.md#L1",
   "lends.md":
     "source: other\nlast_verified_revision: r1\n---\n\nG.[^g]\n\n[^g]: agent @ a1 · x.md#L1",
 };
@@ -151,6 +156,7 @@ describe("MCP prompts", () => {
       const fields = keys(JSON.parse(reply.content[0]!.text));
       for (const field of [
         "cited_only",
+        "cited_paths",
         "unpinned",
         "pages_by_change",
         "unresolvable",
@@ -209,9 +215,7 @@ describe("MCP prompts", () => {
     const text = await reverify();
     expect(text).toContain("`expect_revision` set to the report's `current_revision`");
     expect(text).toContain("`accreta reindex`, then call `check_drift` again");
-    expect(text).toContain(
-      "every page left in `unverifiable` or `delegated.pending` is one you handled or reported",
-    );
+    expect(text).toContain("every page it still lists is one you handled");
     expect(text).toContain("If you cannot reach a source, say so, record nothing");
   });
 
@@ -233,6 +237,14 @@ describe("MCP prompts", () => {
   ])("%p refuses arguments that are missing or could start a new line: %j", async (name, args) => {
     await withClient(false, async (client) => {
       await expect(client.getPrompt({ name, arguments: args })).rejects.toThrow();
+    });
+  });
+
+  test("a source id the registry accepts renders", async () => {
+    await withClient(false, async (client) => {
+      expect(await render(client, "reverify_stale_pages", { source: "ietf/rfc" })).toContain(
+        '"ietf/rfc"',
+      );
     });
   });
 

@@ -20,7 +20,7 @@ export function ingestSourceText(target: string): string {
     "2. Decide whether it deserves a page. A concept needs two real points of contact with the sources; one passing mention belongs in an existing page. Call `search_pages` and `find_canonical` first, so you extend a page rather than duplicate it.",
     "3. Write the page: frontmatter with its own `source`, a citation for every non-trivial claim, and links to pages that already exist. Where sources disagree, record the disagreement.",
     "4. For each claim, call `cite` with the exact place as `target` and the revision from step 1 as `expect_revision`, and paste the `footnote` it returns. Never compose one. If it says the source is at another revision, the source moved: re-read and cite again. `location.verdict: missing` means the target is wrong.",
-    "5. On a new page, record that revision of its own `source` in `last_verified_revision`. On a page you extended, leave its revision alone unless you re-verified the whole page against this one.",
+    "5. On a new page, record that revision of its own `source` in `last_verified_revision` (for a delegated source, the revision you read through the connector). On a page you extended, leave its revision alone unless you re-verified the whole page against this one.",
     "6. Ask for `accreta reindex`, then call `lint_knowledge_base` and fix what it reports.",
     "",
     UNREACHABLE,
@@ -38,17 +38,17 @@ export function reverifyStalePagesText(source: string | undefined, writesEnabled
     "Record a revision only on a page whose own `source` is the report's `source_id`, and only after re-reading what it relies on. Never record one because a page was listed.",
     "",
     `1. Call \`check_drift\`${source === undefined ? "" : ` with \`source: ${JSON.stringify(source)}\``}. For each report, work through its reply:`,
-    "- `stale`, `unresolvable` and `delegated.pending` group pages by revision. A page in a group's `cited_only` only cites this source at that revision: re-check its cited lines, re-pin those footnotes with `cite`, and record no revision on it.",
-    "- `stale`, every other page: re-read what changed for it (its `citations`; for a page in `pages_by_change.untouched` or `pages_by_change.uncited`, the `changed_paths`), correct the page, re-cite each claim with `cite` and `expect_revision` set to the report's `current_revision`, then " +
+    "- `stale`, `unresolvable` and `delegated.pending` group pages by revision. A page in a group's `cited_only` only cites this source at that revision: re-check its cited lines, re-pin those footnotes with `cite` (a delegated source's cannot be pinned: leave them), and record no revision on it.",
+    "- `stale`, every other page: re-read what changed for it (its `citations`, else the `changed_paths`; also for a page in `pages_by_change.untouched` or `pages_by_change.uncited`), correct the page, re-cite each claim with `cite` and `expect_revision` set to the report's `current_revision`, then " +
       record +
       ". If `cite` says the source is at a newer revision, start again from step 1.",
     "- `unresolvable`, every other page: its recorded revision cannot be found. Re-verify the whole page against `current_revision`, then " +
       record +
       ".",
-    "- `unverifiable`: a page named in `unpinned` belongs to another source; re-pin those citations with `cite` and record nothing. Any other page records no revision: check its claims, then record `current_revision`.",
+    "- `unverifiable`: a page named in `unpinned` belongs to another source; re-pin those citations with `cite` and record nothing. Any other page records no revision: check its claims, then record `current_revision` (for a delegated source, the revision you read through the connector).",
     "- `delegated.pending`, every other page: read it through the connector `delegated.via` names, within `delegated.scope`, and record the revision you read there. accreta cannot check that revision. These pages stay listed after you verify them, so work through them once.",
     `2. ${UNREACHABLE}`,
-    "3. Ask for `accreta reindex`, then call `check_drift` again. You are done when `stale` and `unresolvable` are empty and every page left in `unverifiable` or `delegated.pending` is one you handled or reported. Then call `lint_knowledge_base`.",
+    "3. Ask for `accreta reindex`, then call `check_drift` again. You are done when every page it still lists is one you handled (delegated pages stay listed) or reported as unreachable. Then call `lint_knowledge_base`.",
     "",
     DATA,
   ].join("\n");
@@ -69,7 +69,7 @@ export function answerWithCitationsText(question: string): string {
 
 // The same grammar as canonical_source, with no whitespace or control character to start a new line in the message.
 const TARGET = /^[^\s:\p{Cc}]+:[^\s\p{Cc}]+$/u;
-const SOURCE_ID = /^[A-Za-z0-9._-]+$/;
+const SOURCE_ID = /^[^\s:\p{Cc}]+$/u;
 
 export function registerPrompts(server: McpServer, writesEnabled: boolean): void {
   server.registerPrompt(
