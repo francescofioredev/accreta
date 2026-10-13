@@ -345,9 +345,31 @@ describe("GitSource scoped to paths", () => {
     });
   });
 
-  test("locate cannot tell for a scope written as a pattern", async () => {
-    // Git expands the pattern for revision(); answering `missing` here would report a citation as broken.
-    expect(await scoped(["docs/*.md"]).locate("docs/a.md")).toMatchObject({ verdict: "unknown" });
+  test("locate matches a pattern in the scope the way revision() does", async () => {
+    write("other/b.md", "b1\nb2\n");
+    write("third/c.md", "c1\n");
+    await commit("more");
+    const mixed = scoped(["docs", "other/*.md"]);
+
+    expect(await mixed.locate("docs/a.md")).toEqual({ verdict: "found" });
+    expect(await mixed.locate("other/b.md", "L2")).toEqual({ verdict: "found" });
+    for (const [path, locator, part] of [
+      ["docs/nope.md", undefined, "path"],
+      ["third/c.md", undefined, "path"],
+      ["docs/a.md", "L99", "locator"],
+    ] as const) {
+      expect(await mixed.locate(path, locator)).toMatchObject({ verdict: "missing", part });
+    }
+  });
+
+  test("a path with a NUL is refused alone, not with every locate batched beside it", async () => {
+    const whole = new GitSource({ id: "repo", root, citationFormat: "x" });
+    const [good, bad] = await Promise.all([
+      whole.locate("docs/a.md", "L1"),
+      whole.locate("other/b\0x.md", "L1"),
+    ]);
+    expect(good).toEqual({ verdict: "found" });
+    expect(bad).toMatchObject({ verdict: "missing", part: "path" });
   });
 
   test("paths that have no commits yet resolve to HEAD rather than failing", async () => {
@@ -741,6 +763,11 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
     expect((await drift(from)).rank).toBe("changed");
   });
 
+  test("a scope path that climbs back into the root still scopes locate", async () => {
+    expect(await sub(["../sub/docs"]).locate("docs/a.md")).toEqual({ verdict: "found" });
+    expect(await sub(["../sub/other"]).locate("docs/a.md")).toMatchObject({ verdict: "missing" });
+  });
+
   test("paths are relative to the root, and so is what changedSince names", async () => {
     const scoped = sub(["docs"]);
     const from = await scoped.revision();
@@ -748,6 +775,11 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
     write("other.md", lines(3, { 1: "changed" }));
     await commit("touch both");
     expect(await scoped.changedSince(from)).toEqual(["docs/a.md"]);
+  });
+
+  test("a pattern in paths is matched from the root, as revision() matches it", async () => {
+    expect(await sub(["docs/*.md"]).locate("docs/a.md", "L12")).toEqual({ verdict: "found" });
+    expect(await sub(["*.txt"]).locate("docs/a.md")).toMatchObject({ verdict: "missing" });
   });
 
   test("at the top level the revision is still HEAD, even when HEAD changed nothing", async () => {

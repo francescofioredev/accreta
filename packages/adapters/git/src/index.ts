@@ -1,12 +1,12 @@
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { constants } from "node:os";
-import { posix, relative, resolve, sep } from "node:path";
+import { relative, resolve, sep } from "node:path";
 import {
   countLines,
   formatCitation,
   parseLineLocator,
-  resolveInside,
+  resolveCitedFile,
   UNPINNED_REVISION,
   UnknownRevisionError,
   type LocationVerdict,
@@ -223,43 +223,30 @@ export class GitSource implements SourceAdapter {
    *
    * A path that climbs out of the root is refused rather than reported as an
    * error: it names nothing this source can offer, and reading it to find out
-   * is exactly what `resolveInside` exists to prevent.
+   * is exactly what `resolveCitedFile` exists to prevent.
    */
   async locate(path: string, locator?: string): Promise<LocationVerdict> {
-    let full: string;
-    try {
-      full = resolveInside(this.root, path);
-    } catch {
-      return {
-        verdict: "missing",
-        part: "path",
-        detail: `${path} resolves outside source "${this.id}"`,
-      };
-    }
+    const full = resolveCitedFile(this.root, path, this.id);
+    if (typeof full !== "string") return full;
 
-    const scoped = relative(resolve(this.root), full).split(sep).join("/");
     // `revision()` and `changedSince()` see only `paths`, so a citation outside them could never drift.
-    if (this.paths.length > 0) {
-      const scope = this.paths.map((p) => posix.normalize(p).replace(/\/+$/, ""));
-      const pattern = scope.find((p) => /[*?[\\]/.test(p) || p.startsWith(":"));
-      if (pattern !== undefined) {
-        return {
-          verdict: "unknown",
-          detail: `scope path "${pattern}" is a pattern, and locate matches declared paths literally`,
-        };
-      }
-      if (!scope.some((p) => p === "." || scoped === p || scoped.startsWith(`${p}/`))) {
-        return {
-          verdict: "missing",
-          part: "path",
-          detail: `${path} is outside the declared paths (${this.paths.join(", ")}) of source "${this.id}"`,
-        };
-      }
+    const outside: LocationVerdict = {
+      verdict: "missing",
+      part: "path",
+      detail: `${path} is outside the declared paths (${this.paths.join(", ")}) of source "${this.id}"`,
+    };
+    const patterned = this.paths.some((p) => /[*?[\\]/.test(p) || p.startsWith(":"));
+    if (this.paths.length > 0 && !patterned) {
+      const base = resolve(this.root);
+      const scope = this.paths.map((p) => relative(base, resolve(base, p)).split(sep).join("/"));
+      if (!scope.some((p) => p === "" || path === p || path.startsWith(`${p}/`))) return outside;
     }
 
     // Joined before the first await, so every locate issued together shares one `git status`.
-    const state = this.workingState(scoped);
+    const state = this.workingState(path);
     state.catch(() => {});
+    const declared = patterned ? this.declared() : undefined;
+    declared?.catch(() => {});
 
     let text: string;
     try {
@@ -275,8 +262,11 @@ export class GitSource implements SourceAdapter {
     // `revision()` names a commit, so a place checked on a dirty tree would be vouched for by one
     // that never held it.
     let working: WorkingState;
+    let inScope = true;
     try {
       working = await state;
+      // Only a tracked file is listed, so this is asked once the file is known to be one.
+      if (working === "committed" && declared) inScope = (await declared).has(path);
     } catch (error) {
       const detail =
         error instanceof GitCommandError
@@ -298,6 +288,7 @@ export class GitSource implements SourceAdapter {
           "not tracked here (untracked, ignored, in a submodule, or spelled differently from the index): no commit of this repository holds it",
       };
     }
+    if (!inScope) return outside;
 
     if (locator === undefined) return { verdict: "found" };
 
@@ -323,6 +314,17 @@ export class GitSource implements SourceAdapter {
 
   private batch: { paths: Set<string>; states: Promise<Map<string, WorkingState>> } | undefined;
   private prefix: Promise<string> | undefined;
+  private listing: Promise<Set<string>> | undefined;
+
+  /** Tracked files under `paths`, matched as `revision()` matches them; one listing per batch. */
+  private declared(): Promise<Set<string>> {
+    this.listing ??= Promise.resolve().then(async () => {
+      this.listing = undefined;
+      const out = await git(this.root, ["ls-files", "-z", "--", ...this.paths]);
+      return new Set(out.split("\0").filter(Boolean));
+    });
+    return this.listing;
+  }
 
   /** The batch closes when it runs, so each caller's status is taken after it asked. */
   private workingState(path: string): Promise<WorkingState> {

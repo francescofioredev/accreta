@@ -1,4 +1,5 @@
-import { resolve, sep } from "node:path";
+import { realpathSync, statSync } from "node:fs";
+import { join, relative, resolve, sep } from "node:path";
 
 /**
  * A source is anything that can answer three questions: what revision are you
@@ -214,7 +215,53 @@ export function parseLineLocator(locator: string): readonly [start: number, end:
   return [start, end];
 }
 
-/** Lines a line locator can address: a final newline ends the last line, as git counts them. */
+/**
+ * The regular file a citation names under `root`, or why it names none. Shared so every
+ * file-backed source vouches only for the bytes at the path exactly as written.
+ */
+export function resolveCitedFile(
+  root: string,
+  path: string,
+  sourceId: string,
+): string | Extract<LocationVerdict, { verdict: "missing" }> {
+  const missing = (why: string) =>
+    ({ verdict: "missing", part: "path", detail: `${path} ${why}` }) as const;
+  if (path.includes("\0")) return missing(`is not a path in source "${sourceId}"`);
+
+  let full: string;
+  try {
+    full = resolveInside(root, path);
+  } catch {
+    return missing(`resolves outside source "${sourceId}"`);
+  }
+  // Drift compares the path as written, so any other spelling of it would never drift.
+  const spelled = relative(resolve(root), full).split(sep).join("/");
+  if (spelled !== path) return missing(`is not how source "${sourceId}" names it: "${spelled}"`);
+
+  let real: string;
+  let base: string;
+  try {
+    real = realpathSync.native(full);
+    base = realpathSync.native(root);
+  } catch {
+    return missing(`does not exist in source "${sourceId}"`);
+  }
+  // A symlink on the way, or a case the disk does not use, names bytes no revision holds.
+  if (real !== join(base, spelled)) {
+    return missing(`is a symlink or a different spelling in source "${sourceId}"`);
+  }
+  try {
+    if (!statSync(real).isFile()) return missing(`is not a regular file in source "${sourceId}"`);
+  } catch {
+    return missing(`does not exist in source "${sourceId}"`);
+  }
+  return full;
+}
+
+/**
+ * Lines a line locator can address: a final newline ends the last line, as git counts them.
+ * Only LF ends a line, so CRLF counts once and a lone CR ends nothing.
+ */
 export function countLines(text: string): number {
   if (text === "") return 0;
   const lines = text.split("\n").length;

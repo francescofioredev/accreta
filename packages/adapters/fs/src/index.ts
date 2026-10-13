@@ -16,12 +16,12 @@ import {
   writeFileSync,
 } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, sep } from "node:path";
 import {
   countLines,
   formatCitation,
   parseLineLocator,
-  resolveInside,
+  resolveCitedFile,
   UNPINNED_REVISION,
   UnknownRevisionError,
   type LocationVerdict,
@@ -416,23 +416,14 @@ export class FsSource implements SourceAdapter {
    *
    * A path that climbs out of the root is refused rather than reported as an
    * error: it names nothing this source can offer, and reading it to find out
-   * is exactly what `resolveInside` exists to prevent.
+   * is exactly what `resolveCitedFile` exists to prevent.
    */
   async locate(path: string, locator?: string): Promise<LocationVerdict> {
-    let full: string;
-    try {
-      full = resolveInside(this.root, path);
-    } catch {
-      return {
-        verdict: "missing",
-        part: "path",
-        detail: `${path} resolves outside source "${this.id}"`,
-      };
-    }
+    const full = resolveCitedFile(this.root, path, this.id);
+    if (typeof full !== "string") return full;
 
     // `revision()` never sees what `scan()` skips, so a citation there could never drift.
-    const scoped = relative(resolve(this.root), full).split(sep).join("/");
-    const outside = outOfScope(scoped, this.extensions);
+    const outside = outOfScope(path, this.extensions);
     if (outside) {
       return {
         verdict: "missing",

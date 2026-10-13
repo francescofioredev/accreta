@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -85,6 +85,8 @@ interface Fixture {
 interface QuestionableFixture extends Fixture {
   /** Write files into the source, committed where the source needs that to vouch for them. */
   add: (files: Record<string, string>) => Promise<void>;
+  /** A symlink at `name` to `target`, as the source would hold one. */
+  link: (name: string, target: string) => Promise<void>;
   /** The source declared narrower than its root, with a file on disk on each side of the line. */
   narrowed: () => Promise<{ adapter: SourceAdapter; inside: string; outside: string }>;
 }
@@ -102,8 +104,9 @@ async function fsFixture(): Promise<QuestionableFixture> {
       extensions,
     });
   const adapter = open();
+  let clock = 3000;
   const add = async (files: Record<string, string>) => {
-    for (const [name, contents] of Object.entries(files)) write(dir, name, contents);
+    for (const [name, contents] of Object.entries(files)) write(dir, name, contents, clock++);
   };
   return {
     adapter,
@@ -111,6 +114,7 @@ async function fsFixture(): Promise<QuestionableFixture> {
     verifiedRevision: () => adapter.revision(),
     reopen: open,
     add,
+    link: async (name, target) => symlinkSync(target, join(dir, name)),
     narrowed: async () => {
       await add({ "notes.txt": "outside\n" });
       return { adapter: open([".md"]), inside: "chapter-07.md", outside: "notes.txt" };
@@ -147,6 +151,11 @@ async function gitFixture(): Promise<QuestionableFixture> {
     verifiedRevision: () => adapter.revision(),
     reopen: open,
     add,
+    link: async (name, target) => {
+      symlinkSync(target, join(dir, name));
+      await git(dir, ["add", "-A"]);
+      await git(dir, ["commit", "-q", "-m", "link"]);
+    },
     narrowed: async () => {
       await add({ "docs/a.md": "inside\n", "other/b.md": "outside\n" });
       return { adapter: open(["docs"]), inside: "docs/a.md", outside: "other/b.md" };
@@ -345,7 +354,7 @@ for (const [name, makeFixture] of QUESTIONABLE) {
 
     // A citation outside what `revision()` covers could never drift, so it must not be vouched for.
     test("locate refuses a path on disk that the source does not declare", async () => {
-      const { narrowed } = await makeFixture();
+      const { narrowed, add } = await makeFixture();
       const { adapter, inside, outside } = await narrowed();
 
       expect(await adapter.locate(inside, "L1")).toEqual({ verdict: "found" });
@@ -354,6 +363,43 @@ for (const [name, makeFixture] of QUESTIONABLE) {
           verdict: "missing",
           part: "path",
         });
+      }
+
+      // The declaration must really bound the revision, or the case above proves nothing.
+      const before = await adapter.revision();
+      await add({ [outside]: "edited\n" });
+      expect(await adapter.revision()).toBe(before);
+      await add({ [inside]: "edited\n" });
+      expect(await adapter.revision()).not.toBe(before);
+    });
+
+    test("locate refuses a symlink, whose target the revision does not hold", async () => {
+      const { adapter, link } = await makeFixture();
+      writeFileSync(join(root, "outside.md"), "one\ntwo\nthree\n", "utf-8");
+      await link("alias.md", "chapter-07.md");
+      await link("up", "..");
+
+      for (const path of ["alias.md", "up/outside.md"]) {
+        expect(await adapter.locate(path, "L1")).toMatchObject({
+          verdict: "missing",
+          part: "path",
+        });
+      }
+      expect(await adapter.locate("chapter-07.md", "L1")).toEqual({ verdict: "found" });
+    });
+
+    // Drift compares the path as written, so a citation spelled any other way would never drift.
+    test("locate refuses a path not written the way the source names it", async () => {
+      const { adapter } = await makeFixture();
+      for (const path of [
+        "./chapter-07.md",
+        "chapter-07.md/",
+        ".//chapter-07.md",
+        "x/../chapter-07.md",
+        "CHAPTER-07.md",
+        "chapter-07.md\0x",
+      ]) {
+        expect(await adapter.locate(path)).toMatchObject({ verdict: "missing", part: "path" });
       }
     });
 

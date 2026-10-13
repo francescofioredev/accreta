@@ -48,6 +48,7 @@ export {
   formatCitation,
   parseCitation,
   parseLineLocator,
+  resolveCitedFile,
   resolveInside,
 } from "./source/adapter.ts";
 export type { Citation } from "./source/cite.ts";
