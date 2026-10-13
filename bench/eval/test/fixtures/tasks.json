@@ -1,0 +1,17 @@
+[
+  {
+    "id": "t1",
+    "prompt": "Which page documents the router? Answer with its path.",
+    "expect": ["knowledge/routing\\.md"]
+  },
+  {
+    "id": "t2",
+    "prompt": "Which pages are in doubt after the last source change?",
+    "expect": ["etag", "cache"]
+  },
+  {
+    "id": "t3",
+    "prompt": "What does the knowledge base cite for cors? Give one citation.",
+    "expect": ["cors\\.ts#L\\d+"]
+  }
+]

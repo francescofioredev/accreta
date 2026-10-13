@@ -1,0 +1,21 @@
+[
+  {
+    "id": "q1",
+    "question": "In what order does the router try routes?",
+    "reference": "In registration order; the first match wins.",
+    "evidence": ["app:src/router.ts#L10-L24"],
+    "category": "behaviour"
+  },
+  {
+    "id": "q2",
+    "question": "Which header does the etag middleware compare?",
+    "reference": "If-None-Match.",
+    "evidence": ["app:src/middleware/etag.ts#L30-L41"]
+  },
+  {
+    "id": "q3",
+    "question": "What status does a weak etag match return?",
+    "reference": "304 Not Modified.",
+    "evidence": ["app:src/middleware/etag.ts#L44-L52"]
+  }
+]

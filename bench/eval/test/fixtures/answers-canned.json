@@ -1,0 +1,19 @@
+{
+  "with-kb": {
+    "q1": {
+      "result": "Registration order, first match wins.\nSources:\napp:src/router.ts#L10-L24"
+    },
+    "q2": { "result": "If-None-Match.\nSources: app:src/middleware/etag.ts#L30-L41" },
+    "q3": { "result": "304.\nSources:\n- app:src/middleware/etag.ts#L44-L52" }
+  },
+  "closed-book": {
+    "q1": { "result": "Longest match first.\nSources: none" },
+    "q2": { "result": "If-None-Match.\nSources: none" },
+    "q3": { "result": "412 Precondition Failed.\nSources: none" }
+  },
+  "repo-tools": {
+    "q1": { "result": "Registration order.\nSources:\napp:src/router.ts#L12-L20" },
+    "q2": { "result": "If-None-Match.\nSources:\napp:src/middleware/etag.ts#L30-L41" },
+    "q3": { "is_error": true, "result": "budget exceeded" }
+  }
+}
