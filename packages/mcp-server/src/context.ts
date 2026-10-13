@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { openIndex, parseConfig } from "@accreta/core";
+import { openIndex, parseConfig, type Database } from "@accreta/core";
 import { loadSources, stateDirFor } from "@accreta/adapters";
 import type { ToolContext } from "./tools.ts";
 
@@ -58,38 +58,59 @@ export function createContext(cwd: string = process.cwd()): ToolContext {
     throw new Error(`No index at ${indexPath}. Run \`accreta reindex\` first.`);
   }
 
-  let db = openIndex(indexPath, { readonly: true });
-  let openedInode = inodeOf(indexPath);
+  interface Handle {
+    db: Database;
+    inode: string | null;
+    pins: number;
+  }
+  let handle: Handle = {
+    db: openIndex(indexPath, { readonly: true }),
+    inode: inodeOf(indexPath),
+    pins: 0,
+  };
   const loaded = loadSources({
     root,
     citationFormat: config.provenanceFormat,
     stateDir: stateDirFor(root, indexPath),
   });
 
+  // A reindex replaces this file by rename(2). Apple's system SQLite then fails the old
+  // connection with SQLITE_IOERR; Linux and Node's bundled SQLite silently serve pre-rebuild
+  // rows off the unlinked inode, the worse half. So a long-lived reader reopens (ADR-0010),
+  // and asks the filesystem, since a failing or stale connection cannot say it is stale.
+  const refresh = (): Handle => {
+    const inode = inodeOf(indexPath);
+    if (inode !== null && inode !== handle.inode) {
+      // Open before closing, so a failed reopen leaves a working context rather than a dead one.
+      const reopened = openIndex(indexPath, { readonly: true });
+      // A call that pinned the old handle closes it on release; closing it now throws under it.
+      if (handle.pins === 0) handle.db.close();
+      handle = { db: reopened, inode, pins: 0 };
+    }
+    return handle;
+  };
+
   return {
     get db() {
-      const current = inodeOf(indexPath);
-      // A reindex replaces this file by rename(2), and a connection held across
-      // that swap is undefined by SQLite build: Apple's system SQLite fails it
-      // with SQLITE_IOERR for the rest of the process, while Linux and Node's
-      // bundled SQLite keep serving the old rows off
-      // the unlinked inode — silently answering with pre-rebuild data, which is
-      // the worse half. build.ts says a long-lived reader must reopen; this is
-      // that reader.
-      //
-      // Identity is checked out of band, by asking the filesystem rather than
-      // the connection: a connection that is already failing cannot be asked
-      // anything, and a stale one on Linux would answer with the old value. A
-      // build id in `meta` would be blind in both of exactly those cases.
-      if (current !== null && current !== openedInode) {
-        // Open before closing, so a failed reopen leaves a working context
-        // rather than a permanently dead one.
-        const reopened = openIndex(indexPath, { readonly: true });
-        db.close();
-        db = reopened;
-        openedInode = current;
-      }
-      return db;
+      return refresh().db;
+    },
+    pin() {
+      const pinned = refresh();
+      pinned.pins++;
+      let released = false;
+      return {
+        db: pinned.db,
+        release() {
+          if (released) return;
+          released = true;
+          pinned.pins--;
+          if (pinned.pins === 0 && pinned !== handle) pinned.db.close();
+        },
+        replaced: () => {
+          const now = inodeOf(indexPath);
+          return now !== null && now !== pinned.inode;
+        },
+      };
     },
     config,
     root,
