@@ -14,6 +14,8 @@ both ends of the supported range:
 | `ubuntu-latest`  | 24      | latest | yes          |
 | `macos-latest`   | 22.16.0 | 1.4.0  | yes          |
 | `macos-latest`   | 24      | latest | yes          |
+| `ubuntu-latest`  | 26      | latest | yes          |
+| `macos-latest`   | 26      | latest | yes          |
 | `windows-latest` | 22.16.0 | 1.4.0  | no           |
 | `windows-latest` | 24      | latest | no           |
 
@@ -27,12 +29,13 @@ Each cell runs:
 
 The `runtime matrix` check passes only when every Linux and macOS cell passed.
 
-The two ends of the range are paired, oldest with oldest and current with current. The test
-suite always runs under Bun, so the Node version only reaches the probes and the installed bins.
+The two ends of the range are paired, oldest with oldest and current with current. Node 24 is
+the current LTS line, and Node 26 the newest line that `>=24` admits. The test suite always runs
+under Bun, so the Node version only reaches the probes and the installed bins.
 
 ## Linux and macOS
 
-All four cells pass. One difference shows in the SQLite probe. On macOS, Bun loads Apple's
+All six cells pass. One difference shows in the SQLite probe. On macOS, Bun loads Apple's
 SQLite (3.51.0), and a reader held across the index swap fails with `disk I/O error`. On Linux,
 Bun bundles SQLite 3.53.2, and the held reader serves the old rows, as it does under Node on both
 systems. [ADR-0010](adr/0010-readers-revalidate-by-inode.md)'s inode check reopens the reader in
@@ -52,16 +55,25 @@ Windows runs with `continue-on-error`, so its result does not block a merge. Mea
 Of the 357 failures in the Node 24 cell:
 
 - **318: `EBUSY` or `EPERM` on an open file.** Windows does not delete a file while a handle is
-  open on it. Most of these come from test cleanup. Some come from `removeIndexFiles` in
-  `packages/core/src/index-db/build.ts`, which is the index rebuild itself. ADR-0016 expected
-  this: renaming over an open index may fail on Windows, and ADR-0010's swap depends on it.
+  open on it.
+  - In 223 of them the index build itself fails, so `accreta reindex` fails on Windows. The
+    cleanup in `buildIndex` throws `EBUSY` on the staging file and hides whatever failed first.
+    ADR-0016 expected trouble here: renaming over an open index may fail on Windows, and
+    ADR-0010's swap depends on that rename
+    ([#287](https://github.com/francescofioredev/accreta/issues/287)).
+  - The rest come from test cleanup, which removes a temp dir while a connection is still open
+    ([#288](https://github.com/francescofioredev/accreta/issues/288)).
 - **9: the packaging test runs `node_modules/.bin/accreta` as a script.** On Windows that path is
-  a shim, not the script, so Node reports `Cannot find module`.
+  a shim, not the script, so Node reports `Cannot find module` (#288).
 - **6: Git on Windows warns that LF will become CRLF.** A test helper treats that warning as
-  a failed `git add`. A fixture named `nul.md` cannot exist, because `NUL` is a reserved name.
-- **3: frontmatter in a CRLF checkout.** `check-version` reads no `metadata.requires` from
-  `skills/accreta-setup/SKILL.md` when Git checks it out with CRLF line endings.
-- **21 others**, mostly `accreta doctor`'s skill checks. These have not been looked into yet.
+  a failed `git add`. A fixture named `nul.md` cannot exist, because `NUL` is a reserved name
+  (#288).
+- **3: frontmatter in a CRLF checkout.** `scripts/check-version.ts` reads no `metadata.requires`
+  from `skills/accreta-setup/SKILL.md` when Git checks it out with CRLF line endings. The page
+  parser accepts CRLF, so only the release script is affected
+  ([#286](https://github.com/francescofioredev/accreta/issues/286)).
+- **21 others**, mostly `accreta doctor`'s skill checks. These have not been looked into yet
+  (#288).
 
 ### Git from the current directory
 
