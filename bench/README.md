@@ -86,6 +86,22 @@ without alias rows. The differences are what those two structures add to a rebui
 The machine these ran on had a load average of 7 to 10. Treat the ratios between commits as the
 result; absolute times will differ on a quieter machine.
 
+# Drift per source
+
+`drift-bench.ts` times `detectDrift` per source over 10 sources, at 1,000 and 10,000 pages. Each
+page cites its own source and two others in footnotes, and one page in twenty names another
+source in `canonical_source`. It also times the two queries `citationsInto` runs, prints their
+`EXPLAIN QUERY PLAN`, the rebuild and the index size. Each figure is the median of 7 runs over
+every source.
+
+```bash
+bun run bench:drift                                       # Bun, from source
+bun run --cwd packages/core build && node --experimental-strip-types bench/drift-bench.ts
+```
+
+Node reads the built `dist/`, so rebuild it after changing core. The canonical query is copied
+from `drift.ts`; keep the two in step. #239's PR has the numbers before and after its indexes.
+
 # MCP response budget
 
 The consumer of the MCP server is a language model with a finite context window, so every
