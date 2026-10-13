@@ -1165,7 +1165,7 @@ describe("accreta cite", () => {
     output = [];
 
     expect(await cli("cite", "docs:a.md#L9")).toBe(1);
-    expect(output[0]).toBe("location: missing locator: cites L9-L9 but a.md has 3 line(s)");
+    expect(output[0]).toBe("location: missing locator: cites L9-L9 but a.md has 2 line(s)");
     expect(stdout()).not.toContain(footnote);
   });
 });

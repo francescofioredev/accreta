@@ -43,10 +43,12 @@ export {
   UNPINNED_REVISION,
   DelegatedSourceError,
   UnknownRevisionError,
+  countLines,
   formatCanonicalSource,
   formatCitation,
   parseCitation,
   parseLineLocator,
+  resolveCitedFile,
   resolveInside,
 } from "./source/adapter.ts";
 export type { Citation } from "./source/cite.ts";
