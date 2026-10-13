@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
@@ -734,7 +735,24 @@ describe("lint over GitSource asks a symlink citation to name its target", () =>
     const [finding] = await lintCiting("docs/away.md");
     expect(finding).toMatchObject({ kind: "citation-path-missing", path: "knowledge/page.md" });
     expect(finding?.detail).toContain("symlink to nothing");
-    expect(finding?.detail).not.toContain(kb);
+    expect(finding?.detail).not.toContain("outside.md");
+  });
+
+  test("a symlink to a directory is not told to cite the directory", async () => {
+    const [finding] = await lintCiting("alias");
+    expect(finding).toMatchObject({ kind: "citation-path-missing", path: "knowledge/page.md" });
+    expect(finding?.detail).toContain("symlink to a directory");
+    expect(finding?.detail).not.toContain('cite "docs"');
+  });
+
+  test("a name in another Unicode normalisation says so", async () => {
+    const [nfc, nfd] = ["docs/café.md".normalize("NFC"), "docs/café.md".normalize("NFD")];
+    write(nfc, lines(12));
+    await commit("add an accented name");
+    // Only a normalisation-insensitive disk (APFS) resolves the other form at all.
+    if (!existsSync(join(root, nfd))) return;
+    const [finding] = await lintCiting(nfd);
+    expect(finding?.detail).toContain("Unicode normalisation");
   });
 
   test("the target itself is found", async () => {
