@@ -7,6 +7,8 @@ export type Preset = (typeof PRESETS)[number];
 
 export interface ComposeOptions {
   preset?: Preset;
+  /** Several presets, each section once, in this order; `preset` is the one-preset shorthand. */
+  presets?: readonly Preset[];
   /** Where the composed file will live, named in its header for orientation. */
   filename?: string;
 }
@@ -30,19 +32,14 @@ const GENERATED_HEADER = `<!--
 export function composeConstitution(options: ComposeOptions = {}): string {
   const base = readTemplate("base.md");
   const parts = [GENERATED_HEADER, "", base];
+  const presets = [...new Set(options.presets ?? (options.preset ? [options.preset] : []))];
 
-  if (options.preset) {
-    const preset = readTemplate(join("presets", `${options.preset}.md`));
-    parts.push("", "---", "", preset);
+  for (const preset of presets) {
+    parts.push("", "---", "", readTemplate(join("presets", `${preset}.md`)));
   }
 
-  parts.push(
-    "",
-    "---",
-    "",
-    `<!-- composed from: base.md${options.preset ? ` + presets/${options.preset}.md` : ""} -->`,
-    "",
-  );
+  const sources = ["base.md", ...presets.map((preset) => `presets/${preset}.md`)];
+  parts.push("", "---", "", `<!-- composed from: ${sources.join(" + ")} -->`, "");
 
   return parts.join("\n");
 }
