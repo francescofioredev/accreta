@@ -223,6 +223,8 @@ The loop is **drift → re-verify → cite → lint**:
 A page can appear under a source it only cites (`cited_only`; "cited at" in `accreta drift`):
 re-check the cited lines and re-pin those footnotes with `cite`, but never record that source's
 revision in `last_verified_revision` of a page whose own `source` is a different one.
+`update_verified_revision` refuses any revision its own source is not at now, and names the one
+it is at; that check says whose revision it is, not that you re-read anything.
 
 ### When you cannot read the source
 
