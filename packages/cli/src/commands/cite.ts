@@ -126,8 +126,13 @@ export async function cite(
   }
   if (format === "footnote") {
     // Empty stdout when missing, so `$(accreta cite --format footnote …)` never captures an error.
-    if (missing) ctx.err(locationLine(citation));
-    else ctx.out(citation.footnote);
+    const { location } = citation;
+    // Names the target: stderr has no canonical_source line beside it.
+    if (location.verdict === "missing") {
+      ctx.err(`${citation.canonicalSource}: missing ${location.part}: ${location.detail}`);
+    } else {
+      ctx.out(citation.footnote);
+    }
     return code;
   }
 

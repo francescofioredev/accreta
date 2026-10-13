@@ -1337,7 +1337,7 @@ describe("accreta cite", () => {
   test("--format footnote on a missing place prints nothing, says why on stderr, exits 1", async () => {
     expect(await cli("cite", "docs:a.md#L9", "--format", "footnote")).toBe(1);
     expect(output).toEqual([]);
-    expect(stderr()).toBe("location: missing locator: cites L9-L9 but a.md has 2 line(s)");
+    expect(stderr()).toBe("docs:a.md#L9: missing locator: cites L9-L9 but a.md has 2 line(s)");
   });
 
   test("--format refuses a value it does not know, or one --json contradicts", async () => {
