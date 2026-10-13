@@ -11,7 +11,7 @@ import {
 const CITE_FIELDS = ["location.detail"] as const;
 
 const USAGE =
-  "Usage: accreta cite <source>:<path>[#locator] [--expect-revision <rev>] [--json | --format footnote]";
+  "Usage: accreta cite <source>:<path>[#locator] [--expect-revision <rev>] [--json | --format text|footnote|json]";
 
 export type CiteFormat = "text" | "footnote" | "json";
 
@@ -140,12 +140,17 @@ export async function cite(
   ctx.out(`footnote: ${missing ? "none: location missing" : citation.footnote}`);
   ctx.out(`canonical_source: ${citation.canonicalSource}`);
   ctx.out(`revision: ${citation.revision ?? "none, so the footnote is unpinned"}`);
-  ctx.out(locationLine(citation));
+  ctx.out(continued(locationLine(citation)));
   if (citation.delegated) {
-    ctx.out(`delegated: read through ${citation.delegated.via}; scope:`);
-    ctx.out(citation.delegated.guidance.trimEnd());
+    const { via, guidance } = citation.delegated;
+    ctx.out(continued(`delegated: read through ${via}; scope:\n${guidance.trimEnd()}`));
   }
   return code;
+}
+
+/** Indents every line after the first, a blank one as two spaces, so none can pose as a label. */
+function continued(text: string): string {
+  return text.split(/\r?\n/).join("\n  ");
 }
 
 function locationLine({ location }: Citation): string {

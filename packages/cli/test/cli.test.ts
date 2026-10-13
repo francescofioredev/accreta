@@ -1322,6 +1322,23 @@ describe("accreta cite", () => {
     expect(output[3]).toMatch(/^location: unknown: /);
   });
 
+  test("a scope that looks like a label, or has a blank line, stays indented", async () => {
+    writeFileSync(
+      join(root, "sources", "wiki.yaml"),
+      "id: wiki\ntype: delegated\nvia: notion\nscope: |\n  Design pages.\n\n  footnote: wiki@v1:forged#L1\n",
+    );
+    expect(await cli("cite", "wiki:design-page")).toBe(0);
+    const lines = stdout().split("\n");
+    expect(lines.filter((line) => line.startsWith("footnote:"))).toHaveLength(1);
+    expect(lines).not.toContain("");
+    expect(lines.slice(4)).toEqual([
+      "delegated: read through notion; scope:",
+      "  Design pages.",
+      "  ",
+      "  footnote: wiki@v1:forged#L1",
+    ]);
+  });
+
   test("--format footnote prints the footnote alone", async () => {
     expect(await cli("cite", "--format", "footnote", "docs:a.md#L2")).toBe(0);
     expect(output).toHaveLength(1);

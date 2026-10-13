@@ -43,8 +43,11 @@ Usage: accreta <command> [arguments]
                            The citation for a claim, at the source's current revision.
                            Before reading, cite the file and keep its revision; after
                            writing, cite the place with --expect-revision <rev>, which
-                           fails if the source has moved since. --format footnote
-                           prints the footnote alone, and nothing if the place is missing
+                           fails if the source has moved since.
+                           --format text|footnote|json: text (default) labels each line;
+                           a missing place prints "footnote: none: location missing" and
+                           exits 1, so check the exit code. footnote prints the footnote
+                           alone, and nothing if the place is missing
   mcp                      Start the MCP server on stdio; an agent client runs this
   mcp install --client <claude|cursor|codex|vscode> [--scope project|user]
                            Add that server to the client's config (--force replaces
