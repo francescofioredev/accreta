@@ -10,7 +10,12 @@ import {
   type StaleRevision,
   type UnresolvableRevision,
 } from "@accreta/core";
-import { countUnchecked, uncheckedPages, type UncheckedSource } from "@accreta/adapters";
+import {
+  countUnchecked,
+  noSourceNamed,
+  uncheckedPages,
+  type UncheckedSource,
+} from "@accreta/adapters";
 import { findWorkspace } from "../workspace.ts";
 import { loadSources, type CommandContext } from "./shared.ts";
 
@@ -53,6 +58,7 @@ export function driftOptions(args: readonly string[]): DriftOptions {
     } else if (name === "--source") {
       const id = value();
       if (!id || id.startsWith("--")) throw new Error("--source takes the id of a source.");
+      if (options.source !== undefined) throw new Error("drift takes one --source.");
       options.source = id;
     } else {
       throw new Error(`drift does not take "${arg}".`);
@@ -74,7 +80,7 @@ export async function drift(
   let base: BaseKeys | undefined;
   try {
     options = driftOptions(args);
-    base = options.base ? readBase(resolve(ctx.cwd, options.base)) : undefined;
+    base = options.base ? readBase(resolve(ctx.cwd, options.base), options.source) : undefined;
   } catch (error) {
     // 2, as for any refused argument: 1 already means drift found something.
     ctx.err(error instanceof Error ? error.message : String(error));
@@ -94,7 +100,7 @@ export async function drift(
       const known = loaded.sources.map((adapter) => adapter.id);
       loaded.sources = loaded.sources.filter((adapter) => adapter.id === id);
       if (loaded.sources.length === 0) {
-        ctx.err(`No source named "${id}". Known: ${known.join(", ") || "none"}.`);
+        ctx.err(noSourceNamed(id, known, loaded.unloaded));
         return 2;
       }
     }
@@ -112,7 +118,8 @@ export async function drift(
   }
 
   if (options.format === "json") {
-    ctx.out(JSON.stringify(toJson(reports, base, unloaded), null, 2));
+    const json = toJson(reports, base, unloaded);
+    ctx.out(JSON.stringify(options.source ? { ...json, source: options.source } : json, null, 2));
   } else if (options.format === "github") {
     ctx.out(toGithub(reports, base, GITHUB_BODY_LIMIT, unloaded));
   } else {
@@ -349,12 +356,25 @@ interface SourceVerdict {
   repin: RepinPage[];
   /** Pages on a stale revision whose cited lines are untouched: lower in doubt, not verified. */
   other_stale_pages: number;
-  unresolvable: UnresolvableRevision[];
+  unresolvable: UnplacedJson[];
   unverifiable: string[];
   /** Of `unverifiable`, pages of other sources whose citations here name no revision. */
   unpinned: Unpinned;
-  delegated: { via: string; pending: UnresolvableRevision[] } | null;
+  delegated: { via: string; pending: UnplacedJson[] } | null;
 }
+
+/** An `UnresolvableRevision` in check_drift's snake case. */
+interface UnplacedJson {
+  revision: string;
+  pages: string[];
+  cited_only?: string[];
+}
+
+const unplacedJson = (group: UnresolvableRevision): UnplacedJson => ({
+  revision: group.revision,
+  pages: group.pages,
+  cited_only: group.citedOnly,
+});
 
 interface DriftJson {
   pages_in_doubt: number;
@@ -368,6 +388,8 @@ interface DriftJson {
   unloaded_sources: UnloadedEntry[];
   /** Of those, the ones the base report did not have; all of them without one. */
   sources_newly_unloaded: number;
+  /** With `--source`: the one source this report checked. */
+  source?: string;
 }
 
 /** With `--base`, `on_base` says the base branch already failed to load the same declaration. */
@@ -386,7 +408,7 @@ const fileKey = (source: string, page: string) => JSON.stringify(["file", source
 const unplacedKey = (source: string, page: string, revision: string) =>
   JSON.stringify(["unplaced", source, page, revision]);
 
-export function readBase(path: string): BaseKeys {
+export function readBase(path: string, only?: string): BaseKeys {
   let json: DriftJson;
   try {
     json = JSON.parse(readFileSync(path, "utf-8")) as DriftJson;
@@ -397,6 +419,12 @@ export function readBase(path: string): BaseKeys {
   }
   if (!Array.isArray(json.sources)) {
     throw new Error(`--base ${path} is not a \`drift --json\` report: it has no sources.`);
+  }
+  // Every other source would read as newly in doubt.
+  if (json.source !== undefined && json.source !== only) {
+    throw new Error(
+      `--base ${path} checked only source "${json.source}"; add --source ${json.source}.`,
+    );
   }
   const unloaded: NonNullable<BaseKeys["unloaded"]> = new Map();
   const keys: BaseKeys = Object.assign(new Set<string>(), { unloaded });
@@ -516,10 +544,13 @@ function verdict(report: DriftReport, base?: BaseKeys): SourceVerdict {
     in_doubt: inDoubt.toSorted((a, b) => compare(a.page, b.page)),
     repin: repin.toSorted((a, b) => compare(a.page, b.page)),
     other_stale_pages: other,
-    unresolvable: report.unresolvable,
+    unresolvable: report.unresolvable.map(unplacedJson),
     unverifiable: report.unverifiable,
     unpinned: report.unpinned ?? [],
-    delegated: report.delegated && { via: report.delegated.via, pending: report.delegated.pending },
+    delegated: report.delegated && {
+      via: report.delegated.via,
+      pending: report.delegated.pending.map(unplacedJson),
+    },
   };
 }
 
@@ -673,7 +704,11 @@ export function toGithub(
         "A shallow clone does this: check out with `fetch-depth: 0`.",
       );
       const unplaced = source.unresolvable.flatMap((e) =>
-        e.pages.map((page) => ({ page, revision: e.revision, at: atLabel(e, page) })),
+        e.pages.map((page) => ({
+          page,
+          revision: e.revision,
+          at: atLabel({ citedOnly: e.cited_only }, page),
+        })),
       );
       table(
         [""],

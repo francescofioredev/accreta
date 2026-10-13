@@ -16,6 +16,7 @@ import {
   clashingIds,
   kindFor,
   loadSources,
+  noSourceNamed,
   readDeclarationFiles,
   readDeclarations,
   stateDirFor,
@@ -182,6 +183,17 @@ describe("loadSources", () => {
 
     const [unknown] = unloadedFindings([{ ...unloaded!, id: undefined, pages: null }]);
     expect(unknown?.detail).toContain("an unknown number of pages");
+  });
+
+  test("an unknown id names the declarations that did not load, as one may be it", () => {
+    const broken = [
+      { file: "sources/wiki.yaml", reason: "not YAML" },
+      { file: "sources/typo.yaml", id: "typo", reason: "unknown type" },
+    ];
+    expect(noSourceNamed("nope", ["docs"], broken)).toBe(
+      'No source named "nope". Known: docs. Did not load: sources/wiki.yaml (no id), sources/typo.yaml.',
+    );
+    expect(noSourceNamed("nope", [], [])).toBe('No source named "nope". Known: none.');
   });
 
   test("the per-file reader returns a declaration or an error for each file", () => {

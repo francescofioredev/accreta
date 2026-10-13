@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -131,6 +131,7 @@ const REFUSED: { argv: string[]; says: string }[] = [
   { argv: ["search", "flux", "--bogus"], says: "search does not take --bogus" },
   { argv: ["lint", "--json=yes"], says: "--json takes no value" },
   { argv: ["drift", "--source", "--json"], says: "--source needs a value" },
+  { argv: ["drift", "--source", "docs", "--source", "repo"], says: "drift takes one --source" },
   { argv: ["lint", "--limit", "51"], says: "--limit" },
   { argv: ["lint", "--cursor"], says: "--cursor needs a value" },
   { argv: ["consumers", "concepts/forcing", "--limit", "0"], says: "--limit" },
@@ -208,16 +209,27 @@ beforeAll(async () => {
   write("sources/repo.yaml", "id: repo\ntype: git\nroot: src-repo\n");
   write("src-repo/a.md", "alpha\n");
   write("src-repo/dirty.md", "committed\n");
+  write("src-repo/b.md", "bee\n");
   const repo = join(root, "src-repo");
-  for (const args of [
-    ["init", "-q"],
-    ["add", "."],
-    ["commit", "-qm", "first"],
-  ]) {
-    const identity = ["-c", "user.name=T", "-c", "user.email=t@example.invalid"];
-    expect(Bun.spawnSync(["git", ...identity, ...args], { cwd: repo }).exitCode).toBe(0);
-  }
-  head = Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: repo }).stdout.toString().trim();
+  const commit = (...args: string[][]) => {
+    for (const a of args) {
+      const identity = ["-c", "user.name=T", "-c", "user.email=t@example.invalid"];
+      expect(Bun.spawnSync(["git", ...identity, ...a], { cwd: repo }).exitCode).toBe(0);
+    }
+    return Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: repo }).stdout.toString().trim();
+  };
+  const first = commit(["init", "-q"], ["add", "."], ["commit", "-qm", "first"]);
+  write("src-repo/b.md", "bee, rewritten\n");
+  head = commit(["commit", "-qam", "second"]);
+  write(
+    "knowledge/notes/stale.md",
+    `---\ntype: note\nsource: repo\nlast_verified_revision: ${first}\n---\n\n# Stale\n\n` +
+      `A claim.[^c]\n\n[^c]: repo @ ${first.slice(0, 7)} · b.md#L1\n`,
+  );
+  write(
+    "knowledge/notes/unplaced.md",
+    "---\ntype: note\n---\n\n# Unplaced\n\nA claim.[^c]\n\n[^c]: repo @ 0000000 · a.md#L1\n",
+  );
   write("src-repo/dirty.md", "edited, not committed\n");
   write(
     "sources/wiki.yaml",
@@ -352,21 +364,31 @@ const driftScope = (json: { sources: Record<string, unknown>[]; unloaded_sources
   sources: json.sources.map((s) => ({
     source_id: s.source_id,
     current_revision: s.current_revision,
+    in_doubt: (s.in_doubt as { page: string }[]).map((p) => p.page).toSorted(),
     unresolvable: s.unresolvable,
     unverifiable: s.unverifiable,
     delegated: s.delegated,
   })),
   unloaded_sources: json.unloaded_sources,
 });
+
+interface StaleOut {
+  pages: string[];
+  pages_by_change?: { changed: string[] };
+}
+
 const checkDriftScope = (json: {
   reports: Record<string, unknown>[];
   unloaded_sources: unknown;
 }) => ({
   sources: json.reports.map((r) => {
     const delegated = r.delegated as { via: string; pending: unknown } | null;
+    // In doubt: a changed cited range, or any change where the source cannot tell lines.
+    const doubted = (r.stale as StaleOut[]).flatMap((e) => e.pages_by_change?.changed ?? e.pages);
     return {
       source_id: r.source_id,
       current_revision: r.current_revision,
+      in_doubt: [...new Set(doubted)].toSorted(),
       unresolvable: r.unresolvable,
       unverifiable: r.unverifiable,
       delegated: delegated && { via: delegated.via, pending: delegated.pending },
@@ -393,13 +415,45 @@ describe("drift --source checks what check_drift {source} checks", () => {
     });
   }
 
+  // Fixture guard: the comparison above must have a page in doubt and a cross-source page to differ on.
+  test("repo has a page in doubt and one it cannot place, cited only", async () => {
+    const json = JSON.parse((await cli(["drift", "--source", "repo", "--json"])).stdout);
+    expect(json.source).toBe("repo");
+    const [repo] = json.sources;
+    expect(repo.in_doubt.map((p: { page: string }) => p.page)).toEqual([
+      "knowledge/notes/stale.md",
+    ]);
+    expect(repo.unresolvable).toEqual([
+      {
+        revision: "0000000",
+        pages: ["knowledge/notes/unplaced.md"],
+        cited_only: ["knowledge/notes/unplaced.md"],
+      },
+    ]);
+  });
+
+  test("without a broken declaration, the exit code is the named source's alone", async () => {
+    const typo = join(root, "sources/typo.yaml");
+    renameSync(typo, `${typo}.off`);
+    try {
+      expect((await cli(["drift"])).code).toBe(1);
+      expect((await cli(["drift", "--source", "wiki"])).code).toBe(0);
+      expect((await cli(["drift", "--source", "repo"])).code).toBe(1);
+      expect((await cli(["drift", "--source", "docs"])).code).toBe(1);
+    } finally {
+      renameSync(`${typo}.off`, typo);
+    }
+  });
+
   test("an unknown id fails in check_drift's words, exit 2", async () => {
     const cliOut = await cli(["drift", "--source", "nope", "--json"]);
     const mcpOut = JSON.parse((await mcp("check_drift", { source: "nope" })).text);
     expect(cliOut.code).toBe(2);
     expect(cliOut.stdout).toBe("");
     expect(cliOut.stderr).toBe(mcpOut.message);
-    expect(cliOut.stderr).toBe('No source named "nope". Known: docs, repo, wiki.');
+    expect(cliOut.stderr).toBe(
+      'No source named "nope". Known: docs, repo, wiki. Did not load: sources/typo.yaml.',
+    );
   });
 
   test("a full report works as --base for one source", async () => {
@@ -409,6 +463,20 @@ describe("drift --source checks what check_drift {source} checks", () => {
     const json = JSON.parse(one.stdout);
     expect(json.pages_unplaceable).toBeGreaterThan(0);
     expect(json.pages_newly_unplaceable).toBe(0);
+  });
+
+  test("a report of one source is refused as --base for a wider run", async () => {
+    const scoped = join(root, "drift-docs.json");
+    writeFileSync(scoped, (await cli(["drift", "--source", "docs", "--json"])).stdout, "utf-8");
+    for (const argv of [
+      ["drift", "--base", scoped],
+      ["drift", "--source", "repo", "--base", scoped],
+    ]) {
+      const out = await cli(argv);
+      expect(out.code).toBe(2);
+      expect(out.stderr).toContain('checked only source "docs"; add --source docs');
+    }
+    expect((await cli(["drift", "--source", "docs", "--base", scoped])).code).toBe(1);
   });
 });
 
