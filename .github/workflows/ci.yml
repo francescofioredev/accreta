@@ -17,6 +17,7 @@ jobs:
   check:
     name: test · typecheck · lint
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
@@ -57,6 +58,7 @@ jobs:
   demo:
     name: demo knowledge base
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       # The demo's citations name a commit, and its pages claim to be verified
       # against it. Left unchecked that decays silently — which is precisely the
@@ -149,7 +151,9 @@ jobs:
             curl -fsSL -o "SHASUMS256-$version.txt" "https://nodejs.org/dist/v$version/SHASUMS256.txt"
             echo "${pin#*=}  SHASUMS256-$version.txt" | sha256 -c -
             curl -fsSL -o "$name.$ext" "https://nodejs.org/dist/v$version/$name.$ext"
-            grep "  $name.$ext\$" "SHASUMS256-$version.txt" | sha256 -c -
+            line=$(awk -v f="$name.$ext" '$2 == f' "SHASUMS256-$version.txt")
+            test -n "$line"
+            echo "$line" | sha256 -c -
             if [ "$ext" = zip ]; then unzip -q "$name.$ext"; else tar -xzf "$name.$ext"; fi
             path="$RUNNER_TEMP/$name/$bin"
             if [ "$RUNNER_OS" = Windows ]; then path=$(cygpath -w "$path"); fi
@@ -199,4 +203,6 @@ jobs:
     steps:
       # A skipped or cancelled matrix would otherwise count as passing.
       - name: Every supported cell passed
-        run: test "${{ needs.runtimes.result }}" = success
+        env:
+          RESULT: ${{ needs.runtimes.result }}
+        run: test "$RESULT" = success
