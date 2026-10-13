@@ -416,9 +416,12 @@ export interface DriftMode {
   revisions: number;
   /** Citations into changed paths per page. */
   citesPerPage: 1 | 2;
-  /** Odd pages belong to another source and only cite this one; half of them also by canonical_source. */
+  /** Odd pages below MIXED_PAGES, and all from it on, only cite this source; half by canonical_source too. */
   citedOnly?: boolean;
 }
+
+// Pages past this are all cited-only, so the gate's extra pages measure cited-only pages alone.
+export const MIXED_PAGES = 100;
 
 export interface DriftRow {
   bytes: number;
@@ -433,9 +436,10 @@ export interface DriftRow {
 /** The changed paths a cited-only page cites, as `cited_paths` should name them. */
 type CitedPaths = Record<string, string[]>;
 
-const normalized = (paths: CitedPaths) =>
+// Entries, not one merged object, so a page listed in two groups counts twice.
+const normalized = (entries: [string, string[]][]) =>
   JSON.stringify(
-    Object.entries(paths)
+    entries
       .map(([page, cited]) => [page, cited.toSorted()] as const)
       .toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
   );
@@ -453,14 +457,17 @@ export async function measureDrift(
     const wantCitedPaths: CitedPaths = {};
     let wantCitations = 0;
     for (let i = 0; i < pages; i++) {
-      const revision = `rev-old-${i % mode.revisions}`;
+      const mixed = mode.citedOnly === true && i < MIXED_PAGES;
+      // Ranked within its kind of page, so both kinds spread over every revision.
+      const rank = mixed ? Math.floor(i / 2) : i;
+      const revision = `rev-old-${rank % mode.revisions}`;
       const cite = `${changedPath(i % CITED_PATHS)}#${locatorOf(i)}`;
       const footnote =
         mode.citesPerPage === 2
           ? `\nA claim.[^a]\n\n[^a]: synthetic @ ${revision} · ${changedPath((i + 1) % CITED_PATHS)}#${locatorOf(i + 1)}\n`
           : "";
       const path = join(root, "knowledge", `${pageId(i)}.md`);
-      if (!mode.citedOnly || i % 2 === 0) {
+      if (!mode.citedOnly || (mixed && i % 2 === 0)) {
         wantCitations += mode.citesPerPage;
         writeFileSync(
           path,
@@ -469,7 +476,8 @@ export async function measureDrift(
         continue;
       }
       // canonical_source names no revision, so it borrows the pin of the footnote citing the same lines.
-      const canonical = i % 4 === 3 ? `canonical_source: "synthetic:${cite}"\n` : "";
+      const canonical =
+        Math.floor(rank / 2) % 2 === 1 ? `canonical_source: "synthetic:${cite}"\n` : "";
       wantCitations += mode.citesPerPage + (canonical ? 1 : 0);
       wantCitedPaths[`knowledge/${pageId(i)}.md`] = [
         ...new Set([
@@ -526,8 +534,8 @@ export async function measureDrift(
         `${citedOnly.length} cited-only pages, want ${wantCitedOnly.length}`,
       );
       // Checked against the generator, so a path repeated inside cited_paths cannot set its own budget.
-      const citedPaths: CitedPaths = Object.assign({}, ...stale.map((s) => s.cited_paths ?? {}));
-      const wantPaths = mode.diffing ? {} : wantCitedPaths;
+      const citedPaths = stale.flatMap((s) => Object.entries(s.cited_paths ?? {}));
+      const wantPaths = mode.diffing ? [] : Object.entries(wantCitedPaths);
       expectProbe(
         "check_drift",
         normalized(citedPaths) === normalized(wantPaths),
@@ -538,7 +546,7 @@ export async function measureDrift(
         listedCitations.set(c.path, (listedCitations.get(c.path) ?? 0) + 1);
       }
       const citedPathCounts = new Map<string, number>();
-      for (const path of Object.values(citedPaths).flat()) {
+      for (const path of citedPaths.flatMap(([, cited]) => cited)) {
         citedPathCounts.set(path, (citedPathCounts.get(path) ?? 0) + 1);
       }
       return {

@@ -3,6 +3,7 @@ import {
   changedPath,
   measure,
   measureDrift,
+  MIXED_PAGES,
   type DriftMode,
   type DriftRow,
   type ListTool,
@@ -99,33 +100,33 @@ const DRIFT: { name: string; mode: DriftMode; base: number; perPage: number; per
     perPage: 396.68,
     perPath: 76,
   },
-  // Half the pages belong to another source and only cite this one, so perPage averages both kinds.
+  // Mixed base, extra pages all cited-only: perPage is what one cited-only page costs.
   {
-    name: "without diffs, half the pages cited-only",
+    name: "without diffs, cited-only pages",
     mode: { diffing: false, revisions: 1, citesPerPage: 1, citedOnly: true },
     base: 14_193,
-    perPage: 108,
+    perPage: 176,
     perPath: 38,
   },
   {
-    name: "without diffs, half cited-only, 2 revisions",
+    name: "without diffs, cited-only pages, 2 revisions",
     mode: { diffing: false, revisions: 2, citesPerPage: 2, citedOnly: true },
-    base: 18_222,
-    perPage: 128,
+    base: 18_299,
+    perPage: 216,
     perPath: 76,
   },
   {
-    name: "with diffs, half the pages cited-only",
+    name: "with diffs, cited-only pages",
     mode: { diffing: true, revisions: 1, citesPerPage: 1, citedOnly: true },
-    base: 33_663,
-    perPage: 301.01,
+    base: 33_439,
+    perPage: 360.83,
     perPath: 38,
   },
   {
-    name: "with diffs, half cited-only, 2 revisions and 2 citations per page",
+    name: "with diffs, cited-only pages, 2 revisions and 2 citations per page",
     mode: { diffing: true, revisions: 2, citesPerPage: 2, citedOnly: true },
-    base: 51_754,
-    perPage: 456.77,
+    base: 51_568,
+    perPage: 516.59,
     perPath: 76,
   },
 ];
@@ -144,9 +145,9 @@ function expectPathsOnce(drift: DriftRow, changed: number): void {
 
 test.each(DRIFT)("check_drift $name stays within its budgets", async (c) => {
   const [base, morePages, morePaths] = await Promise.all([
-    measureDrift(100, 50, c.mode),
-    measureDrift(200, 50, c.mode),
-    measureDrift(100, 100, c.mode),
+    measureDrift(MIXED_PAGES, 50, c.mode),
+    measureDrift(MIXED_PAGES + 100, 50, c.mode),
+    measureDrift(MIXED_PAGES, 100, c.mode),
   ]);
   expectPathsOnce(base, 50);
   expectPathsOnce(morePages, 50);
