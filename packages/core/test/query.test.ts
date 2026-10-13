@@ -696,8 +696,36 @@ describe("lintCitations on footnotes", () => {
     );
     expect(unpinned).toHaveLength(1);
     expect(unpinned[0]?.path).toBe("accreta.config.yaml");
-    // Adding {rev} alone stops footnotes written without one from indexing as citations (#249).
+    // Adding {rev} alone pins no footnote already written; each has to be re-cited.
     expect(unpinned[0]?.detail).toContain("accreta cite");
+    expect(unpinned[0]?.detail).toContain("can read as prose");
+  });
+
+  test("footnotes written before a format change stay findings (#249)", async () => {
+    for (const name of ["a", "b", "c"]) {
+      writePage(`${name}.md`, page(["[^a]: s · doc.md#L1", "[^b]: s · doc.md#L2"]));
+    }
+    reindex();
+    const report = await lintCitations(db, sources(withHistory(["r1"])));
+    expect(report.findings.map((f) => f.kind)).toEqual(Array(6).fill("unparseable-citation"));
+    expect(report.findings[0]?.path).toBe("knowledge/a.md");
+    expect(report.findings[0]?.detail).toContain("[^a]");
+    expect(report.findings[0]?.detail).toContain("accreta cite");
+  });
+
+  test("prose footnotes stay prose after a format change", async () => {
+    writePage(
+      "a.md",
+      page([
+        "[^a]: See the appendix.",
+        "[^b]: Background at https://example.com/guide#setup.",
+        "[^c]: Compare [[forcing#history]].",
+      ]),
+    );
+    reindex();
+    const report = await lintCitations(db, sources(withHistory(["r1"])));
+    expect(report.findings).toEqual([]);
+    expect(report.pagesChecked).toBe(0);
   });
 
   test("the default format names a revision", () => {

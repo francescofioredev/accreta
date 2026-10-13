@@ -12,7 +12,10 @@ export interface CitationParts {
 export interface CitationTemplate {
   /** The parts of a footnote written in this format, or null if it is not. */
   read(text: string): CitationParts | null;
-  /** Whether a footnote carries the format's literals: prose footnotes are not broken citations. */
+  /**
+   * Whether a footnote is meant as a citation: it carries the format's literals, or names a path
+   * with a locator (`path#locator`), as one in an earlier format does. Prose is not a broken citation.
+   */
   attempts(text: string): boolean;
 }
 
@@ -28,6 +31,10 @@ const CAPTURE: Record<string, string> = {
   path: "[^\\s#]+?",
   locator: "\\S+?",
 };
+
+// A whitespace-delimited `path#locator`; `scheme:`, `[` and `(` keep URLs and links out, and a
+// numeric locator is an issue reference. A separator needs a word after it, so dots scan linearly.
+const POINTER_RE = /(?:^|\s)[\w./@+~-]+#(?!\d+\b)\w+(?:[.:-]+\w+)*[.,;:!?)]*(?=\s|$)/;
 
 function escapeLiteral(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
@@ -109,7 +116,7 @@ export function compileCitationTemplate(format: string): TemplateResult {
         };
         return groups.locator ? { ...parts, locator: groups.locator } : parts;
       },
-      attempts: (text) => markers.every((marker) => text.includes(marker)),
+      attempts: (text) => markers.every((marker) => text.includes(marker)) || POINTER_RE.test(text),
     },
   };
 }

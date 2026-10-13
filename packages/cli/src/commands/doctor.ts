@@ -41,7 +41,7 @@ export async function doctor(ctx: CommandContext, version: string): Promise<numb
     ctx.out("  unpinned: provenance.format has no {rev}, so no footnote names its revision");
     ctx.out(`    → add {rev} (default: "${DEFAULT_CONFIG.provenanceFormat}")`);
     ctx.out(
-      "    → then re-cite existing footnotes with `accreta cite`: until then they may not read as citations",
+      "    → then re-cite every existing footnote with `accreta cite`: lint lists each one with a #locator as unparseable-citation, but one without can read as prose and drop out of lint and drift",
     );
   }
 

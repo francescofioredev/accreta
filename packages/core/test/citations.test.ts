@@ -79,6 +79,35 @@ describe("compileCitationTemplate", () => {
     expect(template.attempts("See the discussion in the design notes.")).toBe(false);
     expect(template.attempts("got @ b1d61c1 · ")).toBe(true);
   });
+
+  test("a footnote written in an earlier format is still an attempt", () => {
+    const template = reader(DEFAULT_CONFIG.provenanceFormat);
+    expect(template.attempts("s · doc.md#L1")).toBe(true);
+    expect(template.attempts("s: docs/a b.md#L2-L9.")).toBe(true);
+  });
+
+  test("a prose footnote with a link in it is still not an attempt", () => {
+    const template = reader(DEFAULT_CONFIG.provenanceFormat);
+    for (const prose of [
+      "See the appendix.",
+      "Background at https://example.com/guide#setup.",
+      "Compare [[forcing#history]].",
+      "See [the guide](guide.md#setup).",
+      "Written in C# and F#.",
+      "Fixed in acme/api#412.",
+      "Needs C#10 or later.",
+      "Reverted pre-#125.",
+    ]) {
+      expect(template.attempts(prose)).toBe(false);
+    }
+  });
+
+  test("a long run of punctuation is checked in linear time", () => {
+    const template = reader(DEFAULT_CONFIG.provenanceFormat);
+    const started = performance.now();
+    expect(template.attempts(`x a#b${".".repeat(1_000_000)}]`)).toBe(false);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
 });
 
 describe("extractFootnotes", () => {
