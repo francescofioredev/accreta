@@ -1,19 +1,20 @@
 # ADR-0010: A long-lived reader revalidates the index by inode
 
-Status: accepted
+Status: accepted, amended 2026-10-13 (the split is by SQLite build, not platform; ADR-0016)
 Date: 2026-08-17
 
 ## Context
 
 A rebuild stages the new index beside the live one and moves it into place with `rename(2)`.
 That is atomic, so no reader ever opens a half-rebuilt database. It says nothing about a
-connection that outlives the swap, and there the two platforms disagree:
+connection that outlives the swap, and there SQLite builds disagree
+([ADR-0016](0016-run-on-node-and-bun.md)):
 
-- **macOS** revalidates the file and fails the connection with `SQLITE_IOERR`. Measured: every
-  read throws `disk I/O error`, permanently and per-connection — three swaps and a 200ms
-  settle did not recover it.
-- **Linux** keeps the unlinked inode alive behind the open descriptor, so the stale handle
-  goes on serving pre-rebuild rows and every call *succeeds*.
+- **Apple's system SQLite**, which Bun loads on macOS, revalidates the file and fails the
+  connection with `SQLITE_IOERR`. Measured: every read throws `disk I/O error`, permanently and
+  per-connection — three swaps and a 200ms settle did not recover it.
+- **Linux**, and the SQLite Node bundles, keep the unlinked inode alive behind the open
+  descriptor, so the stale handle goes on serving pre-rebuild rows and every call *succeeds*.
 
 The MCP server opened the index once and never reopened it. So an agent that verified a page,
 reindexed, and asked for it again was either told `disk I/O error` for the rest of the session,
@@ -34,8 +35,8 @@ changes.** `rename(2)` always gives the new file a different inode, so this is t
 both platforms.
 
 **Identity is checked out of band** — by asking the filesystem, not the connection. A connection
-that is already failing cannot be asked anything, and a stale one on Linux would answer with the
-old value.
+that is already failing cannot be asked anything, and a stale one that keeps the old inode would
+answer with the old value.
 
 **The new connection is opened before the old one is closed**, so a failed reopen leaves a
 working context instead of a permanently dead one.
@@ -50,14 +51,15 @@ and never asks for another — so the reopen happens behind a `db` accessor.
 ## Alternatives rejected
 
 **A build id in `meta`, compared per call.** The obvious platform-independent answer, and blind
-in both cases it exists for: on macOS the connection is already throwing, so it cannot be
-queried at all; on Linux a stale connection returns the *old* id off the unlinked inode. It
+in both cases it exists for: under Apple's SQLite the connection is already throwing, so it
+cannot be queried at all; elsewhere a stale connection returns the *old* id off the unlinked inode. It
 would cost a write per rebuild and a query per call to detect nothing `stat` misses.
 
 **Reopening on every call.** A `stat` is cheap; opening a database is not, and every read tool
 would pay it.
 
-**Catching `SQLITE_IOERR` and retrying.** Fixes only macOS. Linux's stale reader never errors —
+**Catching `SQLITE_IOERR` and retrying.** Fixes only Apple's SQLite. The other builds' stale
+reader never errors —
 it returns wrong answers — so the worse half of the bug would survive untouched.
 
 **Holding no connection and opening per call.** Correct, and it discards the reason the server
