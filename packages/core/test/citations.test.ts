@@ -203,14 +203,30 @@ describe("readFootnotes", () => {
     expect(readFootnotes(body).footnotes[0]?.claim).toBe("Later prose.");
   });
 
-  test("ids pair case-insensitively, as GFM folds labels", () => {
+  test("ids pair as GFM renderers fold labels", () => {
     for (const [ref, def] of [
       ["A", "a"],
-      ["\u00c9", "e\u0301"],
+      ["\u00c9", "\u00e9"],
+      ["STRASSE", "stra\u00dfe"],
+      ["\u03a3", "\u03c2"],
+      ["\ufb01x", "fix"],
     ]) {
       const body = `Claim.[^${ref}]\n\n[^${def}]: s @ r · p.md#L1`;
-      expect(readFootnotes(body).orphans).toEqual([]);
+      expect({ ref, orphans: readFootnotes(body).orphans }).toEqual({ ref, orphans: [] });
       expect(readFootnotes(body).footnotes[0]?.claim).toBe("Claim.");
+    }
+  });
+
+  test("a decomposed and a precomposed letter are different ids, as on GitHub", () => {
+    const body = "Claim.[^\u00e9]\n\n[^e\u0301]: s @ r · p.md#L1";
+    expect(readFootnotes(body).orphans.map((o) => o.role)).toEqual(["reference", "definition"]);
+  });
+
+  test("a heading or list item directly under a definition ends it", () => {
+    for (const start of ["## Next", "- item", "1. item", "> quote", "---\nBody"]) {
+      const body = `A claim.[^a]\n\n[^a]: s @ r · p.md#L1\n${start} cites.[^b]\n\n[^b]: s @ r · p.md#L2`;
+      const claim = readFootnotes(body).footnotes[1]?.claim ?? "";
+      expect({ start, claim: claim.endsWith("cites.") }).toEqual({ start, claim: true });
     }
   });
 

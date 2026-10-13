@@ -1,5 +1,3 @@
-import { nameKey } from "./name-key.ts";
-
 // Footnotes are prose rendered from `provenance.format`, which each knowledge base shapes
 // its own way (ADR-0011), so they are read by inverting that template, not by imposing one.
 
@@ -149,8 +147,13 @@ const INLINE_CODE_RE = /(`+).*?\1/g;
 // Stands in for the `[` of a marker inside inline code, so the code survives into the claim.
 const MASKED = "\0";
 
-/** How footnote ids are paired: GFM folds labels, so `[^A]` cites `[^a]`. */
-export const footnoteKey = nameKey;
+// Lazy continuation is paragraph text only: a heading, list item, quote or rule starts a new block.
+const BLOCK_START_RE = /^ {0,3}(#{1,6}(\s|$)|[-*+]\s|\d+[.)]\s|>|([-*_])(\s*\3){2,}\s*$)/;
+
+/** How footnote ids are paired: as micromark and cmark-gfm fold labels, with no NFC. */
+export function footnoteKey(id: string): string {
+  return id.toLowerCase().toUpperCase();
+}
 
 /**
  * Every footnote definition in a page body, with the claim that cites it. A claim is the
@@ -194,7 +197,7 @@ export function readFootnotes(body: string): { footnotes: Footnote[]; orphans: F
       prose.push("");
     } else {
       // A definition runs on, lazily or indented, until a blank line and an unindented one, as on GitHub.
-      if (afterBlank && /^\S/.test(line)) within = null;
+      if ((afterBlank && /^\S/.test(line)) || BLOCK_START_RE.test(line)) within = null;
       prose.push(within === null ? masked : "");
     }
     afterBlank = line.trim() === "";
