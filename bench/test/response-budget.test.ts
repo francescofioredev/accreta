@@ -24,6 +24,8 @@ const BUDGET = {
   findCanonical: 10_300,
   lint: 9_600,
   getPageEnvelope: 1_100,
+  // The text gate cannot see structuredContent, which carries the body a second time.
+  getPageWireEnvelope: 2_100,
 } satisfies Partial<Record<keyof Row, number>>;
 
 const LIST_TOOLS: ListTool[] = [

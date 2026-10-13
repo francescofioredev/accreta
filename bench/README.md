@@ -99,7 +99,9 @@ Whether that matters is not a matter of opinion. `mcp-budget.ts` connects a clie
 server over an in-memory MCP transport, calls each tool by name, and measures the text block
 the server returns, whitespace included. It reports bytes, estimated tokens, and the share of
 a 200k-token context window one call consumes. The JSON-RPC message that carries the text
-escapes it again and adds its own framing, so the bytes on the wire are somewhat more.
+escapes it again and adds its own framing, so the bytes on the wire are more. `search_pages`
+and `get_page` also return the same JSON as `structuredContent`, so they carry their results or
+body twice on the wire.
 
 The failure it exists to quantify is circular: an agent calls `lint_knowledge_base` to find
 out what is wrong with the knowledge base *in order to fix it*, and the answer does not fit in
@@ -149,10 +151,12 @@ figure is within 1.1% of its value at 60. The test takes under a second. It fail
 | `find_canonical`                            | 9,443       | 10,300 | 17 B per match     |
 | `lint_knowledge_base`                       | 8,727       | 9,600  | 17 B per finding   |
 | `get_page`, minus its body                  | 1,069       | 1,100  | 31 B in all        |
+| `get_page` on the wire, minus both bodies   | 1,876       | 2,100  | 224 B in all       |
 
-Bytes of the text block the server returns, darwin arm64, Bun 1.3.13. Each budget is the
-size measured when the gate was added plus 10%, rounded up to the next 100 bytes; the
-`_provenance` labels added since cost the difference. The margin is a tolerance, not room
+Bytes of the text block the server returns, darwin arm64, Bun 1.3.13. The wire row counts the
+whole JSON-RPC response, serialized as the stdio transport sends it, without its newline. Each
+budget is the size measured when the gate was added plus 10%, rounded up to the next 100 bytes;
+the `_provenance` labels added since cost the difference. The margin is a tolerance, not room
 for noise: the output at 60 pages is deterministic, so the same code always measures the same
 bytes. `search_pages` returns 20 entries rather than 50, so 10% would leave each hit 40 B; its
 budgets allow 18 B per hit instead, in line with the other tools. A field added to every entry
@@ -163,8 +167,10 @@ Two probes exist only for the gate. The aliased search matches every page, which
 checks against the index, so every hit carries `matched_aliases`. The second `find_consumers`
 probe has 30 inbound relations and 29 outbound, so its default page holds both and the limit
 cuts the outbound ones. `get_page` is gated without its body, because the body is the caller's
-page, not accreta's overhead. `search_pages` still returns 20 results by default; aligning it
-to 50 (#183) has to raise its budget in the same change.
+page, not accreta's overhead. Its text block cannot show the body's second copy, in
+`structuredContent`, so it is gated on the wire too, minus both copies. `search_pages` still
+returns 20 results by default; aligning it to 50 (#183) has to raise its budget in the same
+change.
 
 `check_drift` is not paged. It is gated on its size at 100 pages and 50 changed paths, and on
 what 100 more pages or 50 more changed paths add, each plus 10%. Pages cite into the changed
