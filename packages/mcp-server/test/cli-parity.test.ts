@@ -130,7 +130,7 @@ const REFUSED: { argv: string[]; says: string }[] = [
   { argv: ["search", "flux", "--limit", "51"], says: "--limit" },
   { argv: ["search", "flux", "--bogus"], says: "search does not take --bogus" },
   { argv: ["lint", "--json=yes"], says: "--json takes no value" },
-  { argv: ["drift", "--source", "nope"], says: "drift does not take --source" },
+  { argv: ["drift", "--source", "--json"], says: "--source needs a value" },
   { argv: ["lint", "--limit", "51"], says: "--limit" },
   { argv: ["lint", "--cursor"], says: "--cursor needs a value" },
   { argv: ["consumers", "concepts/forcing", "--limit", "0"], says: "--limit" },
@@ -344,6 +344,71 @@ describe("--json matches the MCP tool field for field", () => {
     expect(lint.count).toBeGreaterThan(0);
     expect(lint.citations_checked).toBeGreaterThan(0);
     expect(lint.findings.map((f: { kind: string }) => f.kind)).toContain("unloaded-source");
+  });
+});
+
+// drift --json reports what a change put in doubt, so only the fields both shapes carry are compared.
+const driftScope = (json: { sources: Record<string, unknown>[]; unloaded_sources: unknown }) => ({
+  sources: json.sources.map((s) => ({
+    source_id: s.source_id,
+    current_revision: s.current_revision,
+    unresolvable: s.unresolvable,
+    unverifiable: s.unverifiable,
+    delegated: s.delegated,
+  })),
+  unloaded_sources: json.unloaded_sources,
+});
+const checkDriftScope = (json: {
+  reports: Record<string, unknown>[];
+  unloaded_sources: unknown;
+}) => ({
+  sources: json.reports.map((r) => {
+    const delegated = r.delegated as { via: string; pending: unknown } | null;
+    return {
+      source_id: r.source_id,
+      current_revision: r.current_revision,
+      unresolvable: r.unresolvable,
+      unverifiable: r.unverifiable,
+      delegated: delegated && { via: delegated.via, pending: delegated.pending },
+    };
+  }),
+  unloaded_sources: json.unloaded_sources,
+});
+
+describe("drift --source checks what check_drift {source} checks", () => {
+  for (const source of [undefined, "docs", "repo", "wiki", "typo"]) {
+    const argv =
+      source === undefined ? ["drift", "--json"] : ["drift", "--source", source, "--json"];
+    test(`${argv.join(" ")} = check_drift ${JSON.stringify({ source })}`, async () => {
+      const cliOut = await cli(argv);
+      const mcpOut = await mcp("check_drift", source === undefined ? {} : { source });
+      expect(mcpOut.isError).toBe(false);
+      // sources/typo.yaml did not load, and that fails every run, as check_drift reports it on each.
+      expect(cliOut.code).toBe(1);
+      const scoped = driftScope(JSON.parse(cliOut.stdout));
+      expect(scoped).toStrictEqual(checkDriftScope(JSON.parse(mcpOut.text)));
+      if (source !== undefined && source !== "typo") {
+        expect(scoped.sources.map((s) => s.source_id)).toEqual([source]);
+      }
+    });
+  }
+
+  test("an unknown id fails in check_drift's words, exit 2", async () => {
+    const cliOut = await cli(["drift", "--source", "nope", "--json"]);
+    const mcpOut = JSON.parse((await mcp("check_drift", { source: "nope" })).text);
+    expect(cliOut.code).toBe(2);
+    expect(cliOut.stdout).toBe("");
+    expect(cliOut.stderr).toBe(mcpOut.message);
+    expect(cliOut.stderr).toBe('No source named "nope". Known: docs, repo, wiki.');
+  });
+
+  test("a full report works as --base for one source", async () => {
+    const full = join(root, "drift-full.json");
+    writeFileSync(full, (await cli(["drift", "--json"])).stdout, "utf-8");
+    const one = await cli(["drift", "--source", "docs", "--base", full, "--json"]);
+    const json = JSON.parse(one.stdout);
+    expect(json.pages_unplaceable).toBeGreaterThan(0);
+    expect(json.pages_newly_unplaceable).toBe(0);
   });
 });
 

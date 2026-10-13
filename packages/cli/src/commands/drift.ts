@@ -20,6 +20,8 @@ export interface DriftOptions {
   format: DriftFormat;
   /** A `drift --json` report from the base branch, to tell what this change put in doubt. */
   base?: string;
+  /** Check this source alone, as `check_drift {source}` does. */
+  source?: string;
 }
 
 /**
@@ -48,6 +50,10 @@ export function driftOptions(args: readonly string[]): DriftOptions {
         throw new Error("--base takes the path of a `drift --json` report.");
       }
       options.base = path;
+    } else if (name === "--source") {
+      const id = value();
+      if (!id || id.startsWith("--")) throw new Error("--source takes the id of a source.");
+      options.source = id;
     } else {
       throw new Error(`drift does not take "${arg}".`);
     }
@@ -76,6 +82,23 @@ export async function drift(
   }
 
   const loaded = loadSources(workspace);
+  if (options.source !== undefined) {
+    const id = options.source;
+    const broken = loaded.unloaded.filter((u) => u.id === id);
+    // As check_drift: a named source that did not load is reported alone; otherwise every
+    // broken declaration still is, so the run cannot pass over one.
+    if (broken.length > 0) {
+      loaded.sources = [];
+      loaded.unloaded = broken;
+    } else {
+      const known = loaded.sources.map((adapter) => adapter.id);
+      loaded.sources = loaded.sources.filter((adapter) => adapter.id === id);
+      if (loaded.sources.length === 0) {
+        ctx.err(`No source named "${id}". Known: ${known.join(", ") || "none"}.`);
+        return 2;
+      }
+    }
+  }
   const reports: DriftReport[] = [];
   let unloaded: UnloadedEntry[] = [];
   if (loaded.sources.length > 0 || loaded.unloaded.length > 0) {
