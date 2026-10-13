@@ -156,16 +156,25 @@ jobs:
           if [ "$RUNNER_OS" = Windows ]; then IFS=';'; else IFS=':'; fi
           echo "ACCRETA_UNSUPPORTED_RUNTIMES=${runtimes[*]}" >> "$GITHUB_ENV"
 
+      # Every probe and the suite run even after a failure, so one pass shows all of a cell's state.
       - name: SQLite probes
         run: |
-          node docs/adr/0016-sqlite-probe.mjs
-          bun docs/adr/0016-sqlite-probe.mjs
-          node docs/adr/0016-runtime-probe.mjs
-          bun docs/adr/0016-runtime-probe.mjs
+          status=0
+          for runtime in node bun; do
+            for probe in sqlite runtime; do
+              "$runtime" "docs/adr/0016-$probe-probe.mjs" || status=1
+            done
+          done
+          exit $status
 
       # The whole suite, packaging test included, so each OS and runtime pair runs every test.
       - name: Test
+        if: ${{ !cancelled() }}
         run: bun run test
+
+      - name: TEMPORARY fail one supported cell to prove the aggregate fails
+        if: ${{ matrix.os == 'macos-latest' && matrix.runtime.bun == '1.4.0' }}
+        run: exit 1
 
   # One stable name to require on main, however the matrix changes.
   runtime-matrix:
