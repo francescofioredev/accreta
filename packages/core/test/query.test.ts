@@ -426,6 +426,28 @@ describe("lint", () => {
     expect(dangling[0]?.detail).toContain("knowledge/missing.md");
   });
 
+  test("a missing target linked from a field and the body is one finding naming both (#274)", () => {
+    writePage("a.md", "---\ntype: note\nrelated: [[missing]]\n---\n\n# A\n\nSee [[missing]].\n");
+    reindex();
+    const dangling = lint(db, config).findings.filter((f) => f.kind === "dangling-link");
+    expect(dangling.map((f) => f.detail)).toEqual([
+      "knowledge/missing.md (related, wikilink) is linked but no such page exists",
+    ]);
+  });
+
+  test("an unresolvable target linked from a field and the body is one finding naming both", () => {
+    writePage(
+      "a.md",
+      "---\ntype: note\nrelated: [[../../x]]\n---\n\n# A\n\nSee [[../../x]] and [[../../y]].\n",
+    );
+    reindex();
+    const broken = lint(db, config).findings.filter((f) => f.kind === "broken-link");
+    expect(broken.map((f) => f.detail)).toEqual([
+      "[[../../x]] (related, wikilink) does not resolve: escapes-knowledge-base",
+      "[[../../y]] (wikilink) does not resolve: escapes-knowledge-base",
+    ]);
+  });
+
   test("a page type outside the configured vocabulary is reported", () => {
     writePage("a.md", "---\ntype: invented\n---\n\n# A\n");
     reindex();

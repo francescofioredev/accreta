@@ -75,6 +75,20 @@ interface PageRow {
   frontmatter_error: string | null;
 }
 
+/** One entry per (page, target), naming every kind it is linked as: a field and the body are one fault, not two. */
+function byTarget<T extends { src_path: string; target: string; kind: string; reason?: string }>(
+  rows: T[],
+): { row: T; kinds: string }[] {
+  const groups = new Map<string, { row: T; kinds: string[] }>();
+  for (const row of rows) {
+    const key = `${row.src_path}\0${row.target}\0${row.reason ?? ""}`;
+    const group = groups.get(key);
+    if (group) group.kinds.push(row.kind);
+    else groups.set(key, { row, kinds: [row.kind] });
+  }
+  return [...groups.values()].map(({ row, kinds }) => ({ row, kinds: kinds.join(", ") }));
+}
+
 /**
  * Report what is wrong with a knowledge base.
  *
@@ -93,11 +107,11 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
       `SELECT src_path, target, kind, reason FROM broken_links ORDER BY src_path, target, kind`,
     )
     .all() as BrokenRow[];
-  for (const row of broken) {
+  for (const { row, kinds } of byTarget(broken)) {
     findings.push({
       kind: "broken-link",
       path: row.src_path,
-      detail: `[[${row.target}]] (${row.kind}) does not resolve: ${row.reason}`,
+      detail: `[[${row.target}]] (${kinds}) does not resolve: ${row.reason}`,
     });
   }
 
@@ -113,11 +127,11 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
        ORDER BY l.src_path, l.dst_path, l.kind`,
     )
     .all() as { src_path: string; target: string; kind: string }[];
-  for (const row of dangling) {
+  for (const { row, kinds } of byTarget(dangling)) {
     findings.push({
       kind: "dangling-link",
       path: row.src_path,
-      detail: `${row.target} (${row.kind}) is linked but no such page exists`,
+      detail: `${row.target} (${kinds}) is linked but no such page exists`,
     });
   }
 
