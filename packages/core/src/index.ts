@@ -37,6 +37,7 @@ export type {
   LocationVerdict,
   LocatorChange,
   ParsedCitation,
+  RevisionResolution,
   SourceAdapter,
 } from "./source/adapter.ts";
 export {

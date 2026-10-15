@@ -11,6 +11,7 @@ import {
   UnknownRevisionError,
   type LocationVerdict,
   type LocatorChange,
+  type RevisionResolution,
   type SourceAdapter,
 } from "@accreta/core";
 
@@ -126,6 +127,30 @@ export class GitSource implements SourceAdapter {
     } catch {
       return false;
     }
+  }
+
+  /** Only a commit id or a prefix of one: hex, so git never reads it as a ref, an expression or an option. */
+  async resolveRevision(revision: string): Promise<RevisionResolution> {
+    if (!/^[0-9a-f]{4,64}$/.test(revision)) return { status: "unknown" };
+    try {
+      const commit = (
+        await git(this.root, ["rev-parse", "--verify", "--quiet", `${revision}^{commit}`])
+      ).trim();
+      // A branch named like the prefix, or a tag object, resolves to a commit it does not abbreviate.
+      if (commit.startsWith(revision)) return { status: "resolved", revision: commit };
+    } catch {
+      // --quiet fails ambiguous and unknown alike, so the candidates below tell them apart.
+    }
+    const commits: string[] = [];
+    const named = await git(this.root, ["rev-parse", `--disambiguate=${revision}`]);
+    for (const id of named.split("\n").filter(Boolean)) {
+      const commit = await git(this.root, ["rev-parse", "--verify", "--quiet", `${id}^{commit}`])
+        .then((out) => out.trim())
+        .catch(() => "");
+      if (commit === id) commits.push(id);
+      if (commits.length > 1) return { status: "ambiguous" };
+    }
+    return commits[0] ? { status: "resolved", revision: commits[0] } : { status: "unknown" };
   }
 
   async changedSince(revision: string): Promise<string[]> {

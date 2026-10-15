@@ -25,6 +25,7 @@ export const LINT_FINDING_KINDS = [
   "citation-locator-missing",
   "citation-unpinned",
   "citation-revision-unknown",
+  "citation-revision-abbreviated",
   "duplicate-footnote",
   "unreadable-provenance-format",
   "unpinned-provenance-format",
@@ -339,6 +340,18 @@ export async function lintCitations(
     }
     return known;
   };
+  const fullRevisions = new Map<string, Promise<string | null>>();
+  const fullRevision = (adapter: SourceAdapter, revision: string) => {
+    const key = `${adapter.id}\0${revision}`;
+    let full = fullRevisions.get(key);
+    if (full === undefined) {
+      full = Promise.resolve(adapter.resolveRevision?.(revision))
+        .then((resolved) => (resolved?.status === "resolved" ? resolved.revision : null))
+        .catch(() => null);
+      fullRevisions.set(key, full);
+    }
+    return full;
+  };
 
   const firstLine = new Map<string, number>();
   for (const row of footnotes) {
@@ -395,6 +408,15 @@ export async function lintCitations(
           path: row.page_path,
           detail: `${label} cites revision ${row.revision}, which source "${adapter.id}" does not have`,
         });
+      } else {
+        const full = await fullRevision(adapter, row.revision);
+        if (full !== null && full !== row.revision) {
+          findings.push({
+            kind: "citation-revision-abbreviated",
+            path: row.page_path,
+            detail: `${label} cites ${row.revision}, an abbreviation that can turn ambiguous as source "${adapter.id}" grows; write ${full}`,
+          });
+        }
       }
     }
   }

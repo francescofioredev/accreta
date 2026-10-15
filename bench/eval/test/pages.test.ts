@@ -8,7 +8,6 @@ test("four footnotes from #123, one on an undeclared source, and an uncited clai
   const root = kbDir();
   const pin = repo(join(root, "sources", "app"), { "src/app.py": lines(20) });
   declareGit(root, "app", "sources/app");
-  const at = pin.slice(0, 7);
   page(root, "routing", {
     source: "app",
     verified: pin,
@@ -26,11 +25,11 @@ test("four footnotes from #123, one on an undeclared source, and an uncited clai
       "",
       "Nothing on this line carries any citation at all.",
       "",
-      `[^ok]: app @ ${at} · src/app.py#L2-L4`,
-      `[^path]: app @ ${at} · src/config.py#L1-L3`,
-      `[^range]: app @ ${at} · src/app.py#L18-L40`,
+      `[^ok]: app @ ${pin} · src/app.py#L2-L4`,
+      `[^path]: app @ ${pin} · src/config.py#L1-L3`,
+      `[^range]: app @ ${pin} · src/app.py#L18-L40`,
       `[^rev]: app @ deadbee · src/app.py#L5-L6`,
-      `[^other]: lib @ ${at} · README.md#L1-L2`,
+      `[^other]: lib @ ${pin} · README.md#L1-L2`,
     ].join("\n"),
   });
 
@@ -61,7 +60,7 @@ test("a clean knowledge base resolves every footnote and lints clean", () => {
     source: "app",
     verified: pin,
     canonical: "app:src/app.py#L1-L3",
-    body: `The router matches paths in registration order.[^a]\n\n[^a]: app @ ${pin.slice(0, 7)} · src/app.py#L1-L3`,
+    body: `The router matches paths in registration order.[^a]\n\n[^a]: app @ ${pin} · src/app.py#L1-L3`,
   });
   const m = measurePages(kbAt(root), pin);
   expect(m.citations.resolve).toMatchObject({ k: 1, n: 1 });

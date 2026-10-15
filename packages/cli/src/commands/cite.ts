@@ -112,16 +112,21 @@ export async function cite(
     }
   }
 
+  // One target off the expected revision refuses them all, before anything is printed.
   const citations: Citation[] = [];
   for (const target of targets) {
-    citations.push(await citeAt(sources, workspace.config.provenanceFormat, target));
+    citations.push(
+      await citeAt(sources, workspace.config.provenanceFormat, target, {
+        expectRevision: options.expectRevision,
+      }),
+    );
   }
-  // One target off the expected revision refuses them all, before anything is printed.
-  const expected = options.expectRevision;
-  if (expected !== undefined) {
-    for (const [i, citation] of citations.entries()) {
-      if (citation.revision !== expected) throw new Error(moved(targets[i]!, citation, expected));
-    }
+  // On stderr, so stdout stays the footnotes or the labelled lines; one source, so one note.
+  const prefixed = citations.find((c) => c.matchedPrefix !== undefined);
+  if (prefixed && format !== "json") {
+    ctx.err(
+      `--expect-revision ${prefixed.matchedPrefix} matched ${prefixed.revision} as a prefix; the footnote names it in full.`,
+    );
   }
   // A place that is not there must not look like a citation to paste.
   const code = citations.some((c) => c.location.verdict === "missing") ? 1 : 0;
@@ -150,14 +155,6 @@ export async function cite(
   return code;
 }
 
-function moved(target: ParsedCitation, citation: Citation, expected: string): string {
-  return citation.revision !== null
-    ? `Source "${target.sourceId}" is at ${citation.revision}, not ${expected}: it moved since you read it, or ${expected} did not come from cite. Re-read ${citation.canonicalSource}, then cite again.`
-    : citation.delegated
-      ? `Cannot confirm source "${target.sourceId}" is still at ${expected}: it is read through ${citation.delegated.via}, and accreta cannot tell its revision.`
-      : `Cannot confirm source "${target.sourceId}" is still at ${expected}: accreta could not check this place. Cite it without an expected revision to see why.`;
-}
-
 function toJson(citation: Citation) {
   return {
     canonical_source: citation.canonicalSource,
@@ -167,6 +164,7 @@ function toJson(citation: Citation) {
     ...(citation.delegated
       ? { delegated: { via: citation.delegated.via, scope: citation.delegated.guidance } }
       : {}),
+    ...(citation.matchedPrefix !== undefined ? { matched_prefix: citation.matchedPrefix } : {}),
     _provenance: provenance(CITE_FIELDS, SOURCE_NOTICE),
   };
 }
