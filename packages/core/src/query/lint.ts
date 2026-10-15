@@ -76,12 +76,12 @@ interface PageRow {
 }
 
 /** One entry per (page, target), naming every kind it is linked as: a field and the body are one fault, not two. */
-function byTarget<T extends { src_path: string; target: string; kind: string }>(
+function byTarget<T extends { src_path: string; target: string; kind: string; reason?: string }>(
   rows: T[],
 ): { row: T; kinds: string }[] {
   const groups = new Map<string, { row: T; kinds: string[] }>();
   for (const row of rows) {
-    const key = `${row.src_path}\0${row.target}`;
+    const key = `${row.src_path}\0${row.target}\0${row.reason ?? ""}`;
     const group = groups.get(key);
     if (group) group.kinds.push(row.kind);
     else groups.set(key, { row, kinds: [row.kind] });
