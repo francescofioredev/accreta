@@ -232,7 +232,7 @@ function sharedAliasFindings(db: Database): LintFinding[] {
     const more = named.length > MAX_NAMED ? ` and ${named.length - MAX_NAMED} more` : "";
     return {
       kind: "shared-alias",
-      path: pages.keys().next().value!,
+      path: [...pages].find(([, via]) => via.includes("alias"))![0],
       detail: `"${key}" names ${named.length} pages, so canonical has no single answer: ${named.slice(0, MAX_NAMED).join(", ")}${more}`,
     };
   });

@@ -399,6 +399,14 @@ describe("lint", () => {
     ]);
   });
 
+  test("the finding points at the alias page, not an alphabetically earlier title-only page", () => {
+    writePage("b.md", "---\ntype: note\n---\n\n# Forcing\n");
+    writePage("z.md", '---\ntype: note\naliases: ["forcing"]\n---\n\n# Z\n');
+    reindex();
+    const shared = lint(db, config).findings.filter((f) => f.kind === "shared-alias");
+    expect(shared.map((f) => f.path)).toEqual(["knowledge/z.md"]);
+  });
+
   test("an alias equal to its own page's title, or repeated on one page, is not shared", () => {
     writePage("a.md", '---\ntype: note\naliases: ["Forcing", "forcing"]\n---\n\n# Forcing\n');
     reindex();
