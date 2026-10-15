@@ -102,7 +102,18 @@ runs:
           echo "::error::accreta drift failed before writing a report."
           exit 1
         fi
-        "${cli[@]}" drift --json "${compare[@]}" >"$RUNNER_TEMP/accreta-drift.json" || true
+        # With --base, drift exits 1 only on what is new; no base report is an empty one, all new.
+        if [ ${#compare[@]} -eq 0 ]; then
+          echo '{"sources":[]}' >"$RUNNER_TEMP/accreta-empty-base.json"
+          compare=(--base "$RUNNER_TEMP/accreta-empty-base.json")
+        fi
+        status=0
+        "${cli[@]}" drift --json "${compare[@]}" >"$RUNNER_TEMP/accreta-drift.json" || status=$?
+        if [ "$status" -gt 1 ]; then
+          echo "::error::accreta drift --json failed before writing a report."
+          exit 1
+        fi
+        echo "attention=$status" >>"$GITHUB_OUTPUT"
         bun -e '
           const r = JSON.parse(await Bun.file(process.argv[1]).text());
           console.log(`pages-in-doubt=${r.pages_in_doubt}`);
@@ -111,7 +122,6 @@ runs:
           console.log(`pages-newly-unplaceable=${r.pages_newly_unplaceable}`);
           console.log(`sources-unloaded=${r.unloaded_sources.length}`);
           console.log(`sources-newly-unloaded=${r.sources_newly_unloaded}`);
-          console.log(`attention=${r.pages_newly_in_doubt + r.pages_newly_unplaceable + r.sources_newly_unloaded}`);
         ' "$RUNNER_TEMP/accreta-drift.json" >>"$GITHUB_OUTPUT"
 
     - name: Comment on the pull request

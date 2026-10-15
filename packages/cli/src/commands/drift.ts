@@ -136,8 +136,24 @@ export async function drift(
   }
 
   // "I cannot tell", like `unresolvable`: a typo in `type` must not turn a failing run green.
-  const failed = reports.some((report) => fails(report, strict)) || unloaded.length > 0;
+  const failed = base
+    ? failsAgainst(base, reports, unloaded, strict)
+    : reports.some((report) => fails(report, strict)) || unloaded.length > 0;
   return failed ? 1 : 0;
+}
+
+/** With `--base`, only what the change put in doubt fails, as the action counts it. */
+function failsAgainst(
+  base: BaseKeys,
+  reports: DriftReport[],
+  unloaded: UnloadedEntry[],
+  strict: boolean,
+): boolean {
+  const json = toJson(reports, base, unloaded);
+  if (json.pages_newly_in_doubt + json.pages_newly_unplaceable + json.sources_newly_unloaded > 0) {
+    return true;
+  }
+  return strict && reports.some((r) => uncheckedKeys(r.sourceId, r).some((key) => !base.has(key)));
 }
 
 function fails(report: DriftReport, strict: boolean): boolean {
@@ -437,7 +453,7 @@ const DRIFT_FIELDS = [
 /** With `--base`, `on_base` says the base branch already failed to load the same declaration. */
 type UnloadedEntry = UncheckedSource & { on_base?: boolean };
 
-/** Keys of what a base report already had in doubt or could not place, and what it did not load. */
+/** Keys of what a base report had in doubt, could not place, left unchecked, or did not load. */
 type BaseKeys = Set<string> & {
   unloaded?: Map<string, Pick<UncheckedSource, "id" | "pages">>;
 };
@@ -449,6 +465,16 @@ const citationKey = (source: string, page: string, c: DoubtedCitation) =>
 const fileKey = (source: string, page: string) => JSON.stringify(["file", source, page]);
 const unplacedKey = (source: string, page: string, revision: string) =>
   JSON.stringify(["unplaced", source, page, revision]);
+// By page alone: a delegated page re-verified at a new revision leaves no new work undone.
+const uncheckedKeys = (
+  source: string,
+  s: { unverifiable?: string[]; delegated?: { pending: { pages: string[] }[] } | null },
+) => [
+  ...(s.unverifiable ?? []).map((page) => JSON.stringify(["unverifiable", source, page])),
+  ...(s.delegated?.pending ?? []).flatMap((e) =>
+    e.pages.map((page) => JSON.stringify(["pending", source, page])),
+  ),
+];
 
 export function readBase(path: string, only?: string): BaseKeys {
   let json: DriftJson;
@@ -483,6 +509,7 @@ export function readBase(path: string, only?: string): BaseKeys {
     for (const entry of source.unresolvable ?? []) {
       for (const page of entry.pages) keys.add(unplacedKey(source.source_id, page, entry.revision));
     }
+    for (const key of uncheckedKeys(source.source_id, source)) keys.add(key);
   }
   // Absent from reports written before unloaded sources were reported: then none is inherited.
   for (const u of json.unloaded_sources ?? []) {
