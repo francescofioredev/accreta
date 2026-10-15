@@ -167,7 +167,8 @@ With a shell, use the CLI. Without one, the MCP tool beside it does the same.
 
 - **`--json`** prints the MCP tool's reply. Use it when you parse the output rather than read it.
   `drift --json` has a shape of its own. It names the pages the text only counts, and counts
-  some stale pages the text names: re-verify from both, or from `check_drift`.
+  some stale pages the text names: re-verify from both, or from `check_drift`. `cite` given
+  more than one target prints an array of those replies, one per target, in order.
 - **Long results come in pages.** `find_consumers`, `find_canonical` and `lint_knowledge_base`
   return at most 50 entries: `count` is the total, and passing `nextCursor` back as `cursor`
   gets the rest. The CLI prints everything unless you pass `--limit` or `--cursor`.
