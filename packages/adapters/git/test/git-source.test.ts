@@ -231,6 +231,40 @@ describe("GitSource", () => {
     }
   });
 
+  for (const [name, cut, expected, unexpected] of [
+    ["a full uppercase revision as written in uppercase", 40, "uppercase", "abbreviation"],
+    ["an uppercase prefix as an abbreviation", 10, "abbreviation", "uppercase"],
+  ] as const) {
+    test(`lint reports ${name}`, async () => {
+      write("a.md", "one\ntwo\n");
+      await commit("first");
+      const git = source();
+      const head = await git.revision();
+      const kb = mkdtempSync(join(tmpdir(), "accreta-git-kb-"));
+      try {
+        mkdirSync(join(kb, "knowledge"));
+        writeFileSync(
+          join(kb, "knowledge", "page.md"),
+          `---\ntype: note\n---\n\nA claim.[^a]\n\n[^a]: repo @ ${head.slice(0, cut).toUpperCase()} · a.md#L1-L2\n`,
+        );
+        const indexPath = join(kb, "index.sqlite");
+        buildIndex({ root: kb, config: DEFAULT_CONFIG, indexPath });
+        const db = openIndex(indexPath);
+        try {
+          const { findings } = await lintCitations(db, new Map([["repo", git]]));
+          expect(findings.map((f) => f.kind)).toEqual(["citation-revision-abbreviated"]);
+          expect(findings[0]?.detail).toContain(expected);
+          expect(findings[0]?.detail).not.toContain(unexpected);
+          expect(findings[0]?.detail).toContain(head);
+        } finally {
+          db.close();
+        }
+      } finally {
+        rmSync(kb, { recursive: true, force: true });
+      }
+    });
+  }
+
   test("lint says a prefix that became ambiguous now names several commits", async () => {
     const [a] = await collidingCommits();
     write("a.md", "one\ntwo\n");

@@ -50,7 +50,10 @@ export interface SourceAdapter {
    */
   knowsRevision?(revision: string): Promise<boolean>;
 
-  /** The full revision an abbreviated one names. Absent, revisions are compared exactly. */
+  /**
+   * The full revision an abbreviated one names. Absent, revisions are compared exactly.
+   * A `resolved` answer implies the source has that revision; lint relies on it.
+   */
   resolveRevision?(revision: string): Promise<RevisionResolution>;
 
   /**

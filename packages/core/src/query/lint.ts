@@ -414,7 +414,10 @@ export async function lintCitations(
         findings.push({
           kind: "citation-revision-abbreviated",
           path: row.page_path,
-          detail: `${label} cites ${row.revision}, an abbreviation that can turn ambiguous as source "${adapter.id}" grows; write ${state.full}`,
+          detail:
+            state.full.length === row.revision.length && state.full === row.revision.toLowerCase()
+              ? `${label} cites ${row.revision}, written in uppercase; write the lowercase form ${state.full}`
+              : `${label} cites ${row.revision}, an abbreviation that can turn ambiguous as source "${adapter.id}" grows; write ${state.full}`,
         });
       }
     }
