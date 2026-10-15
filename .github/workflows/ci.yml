@@ -188,7 +188,7 @@ jobs:
       # #244: on Windows a spawn may run a git.exe from its cwd before the one on PATH.
       # A renamed node.exe answers `--version` with a Node version, real git with "git version".
       - name: Which git a spawn in a source root runs
-        if: ${{ runner.os == 'Windows' && !cancelled() }}
+        if: ${{ matrix.os == 'windows-latest' && !cancelled() }}
         env:
           PLANTED_ROOT: ${{ runner.temp }}\planted-git
         run: |
@@ -198,8 +198,8 @@ jobs:
           echo "node: $(node -e "$script")"
           echo "bun:  $(bun -e "$script")"
 
-      - name: Report the known Windows failures
-        if: ${{ runner.os == 'Windows' && !cancelled() }}
+      - name: Report Windows step outcomes
+        if: ${{ matrix.os == 'windows-latest' && !cancelled() }}
         env:
           PROBES: ${{ steps.probes.outcome }}
           TEST: ${{ steps.test.outcome }}
