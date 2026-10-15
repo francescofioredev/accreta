@@ -195,6 +195,19 @@ describe("a footnote into a source other than the page's own", () => {
       expect(entry?.citedOnly).toEqual(["knowledge/contradiction.md"]);
       const rank = pageChanges(entry!)?.get("knowledge/contradiction.md");
       expect(rank).toBe(lines ? "changed" : undefined);
+      const why = "link.md is reached through a symlink";
+      if (lines) {
+        expect(entry?.citations?.map((c) => [c.path, c.refused])).toEqual([["link.md", why]]);
+        expect(entry?.refused).toBeUndefined();
+      } else {
+        // Not `real.md`: the page cites the link, and only the refusal put it here.
+        expect(entry?.citedPaths).toBeUndefined();
+        expect(entry?.refused).toEqual({
+          "knowledge/contradiction.md": [
+            { footnote: "b", path: "link.md", locator: "L5", refused: why },
+          ],
+        });
+      }
     });
   }
 

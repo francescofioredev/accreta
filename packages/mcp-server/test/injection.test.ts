@@ -2,7 +2,13 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { buildIndex, DelegatedSourceError, parseConfig, type SourceAdapter } from "@accreta/core";
+import {
+  buildIndex,
+  DelegatedSourceError,
+  parseConfig,
+  type LocationVerdict,
+  type SourceAdapter,
+} from "@accreta/core";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createContext, createServer, type ToolContext } from "../src/index.ts";
@@ -75,6 +81,8 @@ const SUBTREE_FIELDS = [
   "page.frontmatter",
   "reports[].stale[].pages_by_change",
   "reports[].stale[].cited_paths",
+  // Keyed by page path, like cited_paths.
+  "reports[].stale[].refused",
 ];
 
 // Page-derived text unmarked today, as "tool path CHANNEL". The fix belongs in src/tools.ts, not here.
@@ -83,6 +91,12 @@ const KNOWN_UNMARKED: string[] = [];
 // Surfaced but not page-authored, as "tool path CHANNEL" with why. Empty: a page's path is marked wherever it is not the caller's echo.
 const ACCEPTED_IDENTIFIERS: Record<string, string> = {};
 
+// Refuses one page's own path, naming it back as a symlink refusal does, so check_drift carries the reason.
+const refuses = (path: string): LocationVerdict | undefined =>
+  path.endsWith("-refused.md")
+    ? { verdict: "missing", part: "path", detail: `${path} is reached through a symlink` }
+    : undefined;
+
 // check_drift reports per citation only for a source that diffs contents, and the fixture's fs source does not.
 const DIFFING_SOURCE: SourceAdapter = {
   id: "lines",
@@ -90,7 +104,8 @@ const DIFFING_SOURCE: SourceAdapter = {
   // A page file, as any source whose root encloses the knowledge base reports; the notes cite it.
   changedSince: async () => ["knowledge/notes/CANARY-FILENAME.md"],
   // Unknown, with the cited path in its detail as an adapter's may be, so lint's unchecked_reasons carry it.
-  locate: async (path) => ({ verdict: "unknown", detail: `${path} cannot be checked here` }),
+  locate: async (path) =>
+    refuses(path) ?? { verdict: "unknown", detail: `${path} cannot be checked here` },
   citation: () => "",
   pinRevision: () => {},
   touchedSince: async (_revision, _path, locators) =>
@@ -102,7 +117,7 @@ const PLAIN_SOURCE: SourceAdapter = {
   id: "plain",
   revision: async () => "rev2",
   changedSince: async () => ["knowledge/notes/CANARY-FILENAME.md"],
-  locate: async () => ({ verdict: "found" }),
+  locate: async (path) => refuses(path) ?? { verdict: "found" },
   citation: () => "",
   pinRevision: () => {},
 };

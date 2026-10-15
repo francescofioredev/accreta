@@ -427,6 +427,19 @@ describe("detectDrift and a citation locate refuses (#303)", () => {
     ]);
   });
 
+  test("a refused citation keeps its place among the page's footnotes", async () => {
+    addPage("knowledge/a.md", "docs", "rev1");
+    addFootnote("knowledge/a.md", "x", "rev1", "link.md", "L5-L8");
+    addFootnote("knowledge/a.md", "yy", "rev1", "real.md", "L1");
+    const source = new RefusingSource(
+      { rev1: ["real.md"] },
+      { "rev1 real.md": { L1: { status: "touched" } } },
+      { "link.md": SYMLINK },
+    );
+    const [entry] = (await detectDrift(db, source)).stale;
+    expect(entry?.citations?.map((c) => c.footnote)).toEqual(["x", "yy"]);
+  });
+
   test("a range the diff leaves in place is in doubt when the source refuses it", async () => {
     addPage("knowledge/a.md", "docs", "rev1");
     addFootnote("knowledge/a.md", "x", "rev1", "link.md", "L5-L8");
