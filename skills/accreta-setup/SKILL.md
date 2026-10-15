@@ -287,8 +287,11 @@ accreta lint
 ```
 
 Cite the file, then read it. Write the page, and paste the footnote `cite` returns for every
-claim; never compose one. `--expect-revision` fails if the source moved since you read it: re-read
-and cite again. With no revision (a delegated source, an uncommitted file), leave it out. On a
+claim; never compose one. `cite` labels each line, `footnote:` first; a missing place prints
+`footnote: none: location missing` and exits 1, so a script checks the exit code. In a script,
+`accreta cite --format footnote` prints the footnote alone, and nothing when the place is
+missing. `--expect-revision` fails if the source moved since you read it: re-read and cite
+again. With no revision (a delegated source, an uncommitted file), leave it out. On a
 new page, record that revision of its own `source` in `last_verified_revision`; on a page you
 extended, leave its revision alone unless you re-verified the whole page.
 

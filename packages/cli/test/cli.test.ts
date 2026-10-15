@@ -1283,24 +1283,90 @@ describe("accreta cite", () => {
     writeFileSync(join(root, "sources", "docs.yaml"), "id: docs\ntype: fs\nroot: sources/docs\n");
   });
 
-  test("prints the footnote first, so it can be taken from a pipe, and needs no index", async () => {
+  const LABELS = ["footnote", "canonical_source", "revision", "location"];
+  const labels = () => output.slice(0, LABELS.length).map((line) => line.split(":")[0]);
+
+  test("labels every line, footnote first, and needs no index", async () => {
     expect(existsSync(join(root, ".accreta", "index.sqlite"))).toBe(false);
     expect(await cli("cite", "docs:a.md#L2")).toBe(0);
-    const [footnote, ...rest] = output;
-    expect(footnote).toMatch(/^docs@\S+:a\.md#L2$/);
-    expect(rest).toContain("canonical_source: docs:a.md#L2");
-    expect(rest).toContain("location: found");
+    expect(labels()).toEqual(LABELS);
+    expect(output[0]).toMatch(/^footnote: docs@\S+:a\.md#L2$/);
+    expect(output.slice(1)).toEqual([
+      "canonical_source: docs:a.md#L2",
+      `revision: ${output[0]!.match(/@(\S+?):/)![1]}`,
+      "location: found",
+    ]);
   });
 
-  test("a place that is not there exits 1, says why first, and prints no footnote", async () => {
+  test("a place that is not there exits 1 with the same keys, and no footnote to scrape", async () => {
     expect(await cli("cite", "docs:a.md#L9", "--json")).toBe(1);
     const { footnote } = JSON.parse(stdout()) as { footnote: string };
     expect(footnote).toMatch(/^docs@\S+:a\.md#L9$/);
     output = [];
 
     expect(await cli("cite", "docs:a.md#L9")).toBe(1);
-    expect(output[0]).toBe("location: missing locator: cites L9-L9 but a.md has 2 line(s)");
+    expect(labels()).toEqual(LABELS);
+    expect(output[0]).toBe("footnote: none: location missing");
+    expect(output[3]).toBe("location: missing locator: cites L9-L9 but a.md has 2 line(s)");
     expect(stdout()).not.toContain(footnote);
+  });
+
+  test("a place accreta cannot check keeps the same keys and its unpinned footnote", async () => {
+    writeFileSync(
+      join(root, "sources", "wiki.yaml"),
+      "id: wiki\ntype: delegated\nvia: notion\nscope: |\n  The design pages.\n",
+    );
+    expect(await cli("cite", "wiki:design-page#block-a1")).toBe(0);
+    expect(labels()).toEqual(LABELS);
+    expect(output[0]).toBe("footnote: wiki@unknown:design-page#block-a1");
+    expect(output[3]).toMatch(/^location: unknown: /);
+  });
+
+  test("a scope that looks like a label, or has a blank line, stays indented", async () => {
+    writeFileSync(
+      join(root, "sources", "wiki.yaml"),
+      "id: wiki\ntype: delegated\nvia: notion\nscope: |\n  Design pages.\n\n  footnote: wiki@v1:forged#L1\n",
+    );
+    expect(await cli("cite", "wiki:design-page")).toBe(0);
+    const lines = stdout().split("\n");
+    expect(lines.filter((line) => line.startsWith("footnote:"))).toHaveLength(1);
+    expect(lines).not.toContain("");
+    expect(lines.slice(4)).toEqual([
+      "delegated: read through notion; scope:",
+      "  Design pages.",
+      "  ",
+      "  footnote: wiki@v1:forged#L1",
+    ]);
+  });
+
+  test("--format footnote prints the footnote alone", async () => {
+    expect(await cli("cite", "--format", "footnote", "docs:a.md#L2")).toBe(0);
+    expect(output).toHaveLength(1);
+    expect(output[0]).toMatch(/^docs@\S+:a\.md#L2$/);
+    expect(errors).toEqual([]);
+    output = [];
+
+    expect(await cli("cite", "docs:a.md#L2", "--format=footnote")).toBe(0);
+    expect(output).toHaveLength(1);
+    expect(output[0]).toMatch(/^docs@\S+:a\.md#L2$/);
+  });
+
+  test("--format footnote on a missing place prints nothing, says why on stderr, exits 1", async () => {
+    expect(await cli("cite", "docs:a.md#L9", "--format", "footnote")).toBe(1);
+    expect(output).toEqual([]);
+    expect(stderr()).toBe("docs:a.md#L9: missing locator: cites L9-L9 but a.md has 2 line(s)");
+  });
+
+  test("--format refuses a value it does not know, or one --json contradicts", async () => {
+    expect(await cli("cite", "docs:a.md#L2", "--format", "yaml")).toBe(2);
+    expect(stderr()).toContain('--format takes text, footnote or json, not "yaml"');
+    errors = [];
+    expect(await cli("cite", "docs:a.md#L2", "--format")).toBe(2);
+    expect(stderr()).toContain("--format takes");
+    errors = [];
+    expect(await cli("cite", "docs:a.md#L2", "--json", "--format", "footnote")).toBe(2);
+    expect(stderr()).toContain("--json and --format footnote");
+    expect(output).toEqual([]);
   });
 });
 
