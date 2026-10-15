@@ -251,9 +251,12 @@ In the pinned-twice rows, every cited-only page pins its second footnote at the 
 revision, so it sits in both groups. `check_drift` lists it once per pin: in `pages`,
 `cited_only` and `pages_by_change` or `cited_paths` of each group, with only the citations
 pinned there. Against the same pages pinned once, that adds 136 B per page without diffs and
-122 B with diffs, past the two-revision cited-only budgets, so these rows have their own. The
-benchmark checks every group's pages, `cited_only` and `cited_paths` against what it generated,
-and the gate asserts that no page is listed in more groups than it has pins.
+122 B with diffs, past the two-revision cited-only budgets, so these rows have their own; their
+10% thresholds are 35 B and 64 B per page. The cost grows per pin, not per revision: at three
+revisions with two pins it stays at 352 B and 638.72 B per page. The probe checks each distinct
+group's pages, `cited_only` and `cited_paths` against the pins that put them there, and
+`repetition` checks that the corpus really pins pages twice. Which group each citation lands in
+is covered by core's `drift-cross-source.test.ts`, not here.
 
 Each of these was reproduced by rewriting the response at run time, and each fails the gate:
 

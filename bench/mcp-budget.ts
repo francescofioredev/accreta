@@ -543,8 +543,9 @@ export async function measureDrift(
       }[] = drift.value.reports[0]?.stale ?? [];
       expectProbe(
         "check_drift",
-        stale.length === wantGroups.size,
-        `${stale.length} stale revisions, want ${wantGroups.size}`,
+        stale.length === wantGroups.size &&
+          new Set(stale.map((s) => s.revision)).size === wantGroups.size,
+        `${stale.length} stale revisions (${new Set(stale.map((s) => s.revision)).size} distinct), want ${wantGroups.size}`,
       );
       // Per group, so a page listed in a group it has no pin in fails, and so does a missing one.
       const sorted = (list: string[]) => JSON.stringify(list.toSorted());
