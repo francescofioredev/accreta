@@ -165,7 +165,10 @@ jobs:
           echo "ACCRETA_UNSUPPORTED_RUNTIMES=${runtimes[*]}" >> "$GITHUB_ENV"
 
       # Every probe and the suite run even after a failure, so one pass shows all of a cell's state.
+      # Windows steps stay green while it is unsupported; the last step reports what failed.
       - name: SQLite probes
+        id: probes
+        continue-on-error: ${{ matrix.os == 'windows-latest' }}
         run: |
           status=0
           for runtime in node bun; do
@@ -177,7 +180,9 @@ jobs:
 
       # The whole suite, packaging test included, so each OS and runtime pair runs every test.
       - name: Test
+        id: test
         if: ${{ !cancelled() }}
+        continue-on-error: ${{ matrix.os == 'windows-latest' }}
         run: bun run test
 
       # #244: on Windows a spawn may run a git.exe from its cwd before the one on PATH.
@@ -192,6 +197,16 @@ jobs:
           script='require("node:child_process").spawn("git", ["--version"], { cwd: process.env.PLANTED_ROOT, stdio: "inherit" })'
           echo "node: $(node -e "$script")"
           echo "bun:  $(bun -e "$script")"
+
+      - name: Report the known Windows failures
+        if: ${{ runner.os == 'Windows' && !cancelled() }}
+        env:
+          PROBES: ${{ steps.probes.outcome }}
+          TEST: ${{ steps.test.outcome }}
+        run: |
+          line="Windows is unsupported (docs/platform-support.md): probes $PROBES, test $TEST"
+          echo "::warning::$line"
+          echo "$line" >> "$GITHUB_STEP_SUMMARY"
 
   # One stable name to require on main, however the matrix changes.
   runtime-matrix:

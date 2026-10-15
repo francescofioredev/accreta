@@ -45,7 +45,9 @@ cases.
 
 ## Windows
 
-Windows runs with `continue-on-error`, so its result does not block a merge. Measured on
+Windows runs with `continue-on-error`, so its result does not block a merge. Its probe and
+test steps do not fail the job either: the cell stays green and its last step posts a warning
+with each step's outcome. Measured on
 2026-10-13 in [run 38398640060](https://github.com/francescofioredev/accreta/actions/runs/38398640060):
 
 - The install, and the fetch and checksum of the refused Node builds, work.
