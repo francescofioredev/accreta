@@ -28,7 +28,7 @@ export const PRESET_VOCABULARY: Readonly<Record<Preset, PresetVocabulary>> = {
     ],
     linkFields: [
       "consumers",
-      "consumed_by",
+      "consumes",
       "delegates_to",
       "implements",
       "supersedes",

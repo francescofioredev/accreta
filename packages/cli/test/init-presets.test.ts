@@ -67,7 +67,7 @@ page_types:
 
 link_fields:
   - consumers
-  - consumed_by
+  - consumes
   - delegates_to
   - implements
   - supersedes
@@ -155,7 +155,7 @@ describe("init with several presets", () => {
     expect(config.pageTypes).toEqual(`${types} usecase decision integration`.split(" "));
     const fields = "cites cited_by supports contradicts supersedes superseded_by related";
     expect(config.linkFields).toEqual(
-      `${fields} discussed_in consumers consumed_by delegates_to implements amends amended_by`.split(
+      `${fields} discussed_in consumers consumes delegates_to implements amends amended_by`.split(
         " ",
       ),
     );
