@@ -71,7 +71,7 @@ export const COMMAND_ARGS: Readonly<Record<string, CommandArgs>> = {
   reindex: { flags: [], maxPositional: 0 },
   lint: { flags: ["--json", "--limit", "--cursor"], maxPositional: 0 },
   // The two positionals are the values of --format and --base; drift refuses any other.
-  drift: { flags: ["--strict", "--json", "--format", "--base"], maxPositional: 2 },
+  drift: { flags: ["--strict", "--json", "--format", "--base", "--source"], maxPositional: 2 },
   doctor: { flags: [], maxPositional: 0 },
   source: { flags: ["--set"], maxPositional: 3 },
   search: {
@@ -85,8 +85,8 @@ export const COMMAND_ARGS: Readonly<Record<string, CommandArgs>> = {
     maxPositional: 1,
   },
   canonical: { flags: ["--json", "--limit", "--cursor"], maxPositional: Infinity },
-  // The second positional is the value of --format; cite refuses any other.
-  cite: { flags: ["--expect-revision", "--json", "--format"], maxPositional: 2 },
+  // Every positional is a target, except the value of --format, which cite takes out.
+  cite: { flags: ["--expect-revision", "--json", "--format"], maxPositional: Infinity },
   // Up to three positionals: install, and the values of --client and --scope.
   mcp: { flags: ["--client", "--scope", "--force"], maxPositional: 3 },
 };

@@ -31,6 +31,7 @@ export const LINT_FINDING_KINDS = [
   "unloaded-source",
   "inconsistent-supersession",
   "unreadable-supersession-fields",
+  "shared-alias",
 ] as const;
 
 export type LintFindingKind = (typeof LINT_FINDING_KINDS)[number];
@@ -75,6 +76,20 @@ interface PageRow {
   frontmatter_error: string | null;
 }
 
+/** One entry per (page, target), naming every kind it is linked as: a field and the body are one fault, not two. */
+function byTarget<T extends { src_path: string; target: string; kind: string; reason?: string }>(
+  rows: T[],
+): { row: T; kinds: string }[] {
+  const groups = new Map<string, { row: T; kinds: string[] }>();
+  for (const row of rows) {
+    const key = `${row.src_path}\0${row.target}\0${row.reason ?? ""}`;
+    const group = groups.get(key);
+    if (group) group.kinds.push(row.kind);
+    else groups.set(key, { row, kinds: [row.kind] });
+  }
+  return [...groups.values()].map(({ row, kinds }) => ({ row, kinds: kinds.join(", ") }));
+}
+
 /**
  * Report what is wrong with a knowledge base.
  *
@@ -85,6 +100,7 @@ interface PageRow {
  * short answer. Lint is where that becomes visible.
  */
 export function lint(db: Database, config: AccretaConfig): LintReport {
+  requireTable(db, "aliases");
   const findings: LintFinding[] = [];
 
   // Links the indexer could not resolve to a path inside the knowledge base.
@@ -93,11 +109,11 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
       `SELECT src_path, target, kind, reason FROM broken_links ORDER BY src_path, target, kind`,
     )
     .all() as BrokenRow[];
-  for (const row of broken) {
+  for (const { row, kinds } of byTarget(broken)) {
     findings.push({
       kind: "broken-link",
       path: row.src_path,
-      detail: `[[${row.target}]] (${row.kind}) does not resolve: ${row.reason}`,
+      detail: `[[${row.target}]] (${kinds}) does not resolve: ${row.reason}`,
     });
   }
 
@@ -113,11 +129,11 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
        ORDER BY l.src_path, l.dst_path, l.kind`,
     )
     .all() as { src_path: string; target: string; kind: string }[];
-  for (const row of dangling) {
+  for (const { row, kinds } of byTarget(dangling)) {
     findings.push({
       kind: "dangling-link",
       path: row.src_path,
-      detail: `${row.target} (${row.kind}) is linked but no such page exists`,
+      detail: `${row.target} (${kinds}) is linked but no such page exists`,
     });
   }
 
@@ -191,6 +207,7 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
   }
 
   findings.push(...supersessionFindings(db, config));
+  findings.push(...sharedAliasFindings(db));
 
   return {
     findings,
@@ -199,6 +216,40 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
     citationsUnchecked: 0,
     uncheckedReasons: [],
   };
+}
+
+// ADR-0007 pages cap the number of findings, not their size.
+const MAX_NAMED = 20;
+
+/** Names `findCanonical` resolves to several pages via an alias, compared by stored `nameKey` as it does. */
+function sharedAliasFindings(db: Database): LintFinding[] {
+  const rows = db
+    .prepare(
+      `WITH claims AS (
+         SELECT alias AS key, path, 'alias' AS via FROM aliases
+         UNION
+         SELECT title_key, path, 'title' FROM pages WHERE title_key IN (SELECT alias FROM aliases)
+       )
+       SELECT key, path, via FROM claims
+       WHERE key IN (SELECT key FROM claims GROUP BY key HAVING COUNT(DISTINCT path) > 1)
+       ORDER BY key, path, via`,
+    )
+    .all() as { key: string; path: string; via: string }[];
+  const byKey = new Map<string, Map<string, string[]>>();
+  for (const row of rows) {
+    const pages = byKey.get(row.key) ?? new Map<string, string[]>();
+    pages.set(row.path, [...(pages.get(row.path) ?? []), row.via]);
+    byKey.set(row.key, pages);
+  }
+  return [...byKey].map(([key, pages]) => {
+    const named = [...pages].map(([path, via]) => `${path} (${via.join(", ")})`);
+    const more = named.length > MAX_NAMED ? ` and ${named.length - MAX_NAMED} more` : "";
+    return {
+      kind: "shared-alias",
+      path: [...pages].find(([, via]) => via.includes("alias"))![0],
+      detail: `"${key}" names ${named.length} pages, so canonical has no single answer: ${named.slice(0, MAX_NAMED).join(", ")}${more}`,
+    };
+  });
 }
 
 interface CitationRow {

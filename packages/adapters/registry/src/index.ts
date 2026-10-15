@@ -156,6 +156,17 @@ export const uncheckedPages = (pages: number | null) =>
     ? "an unknown number of pages cite it and were not checked"
     : `${pages} page(s) cite it and were not checked`;
 
+/** Why `id` names no source; a declaration that did not load may be the one meant. */
+export function noSourceNamed(
+  id: string,
+  known: readonly string[],
+  unloaded: readonly UnloadedSource[],
+): string {
+  const broken = unloaded.map((u) => (u.id === undefined ? `${u.file} (no id)` : u.file));
+  const loose = broken.length > 0 ? ` Did not load: ${broken.join(", ")}.` : "";
+  return `No source named "${id}". Known: ${known.join(", ") || "none"}.${loose}`;
+}
+
 /** The same finding for the CLI and the MCP server, so they cannot word it differently. */
 export function unloadedFindings(unchecked: readonly UncheckedSource[]) {
   return unchecked.map((source) => ({

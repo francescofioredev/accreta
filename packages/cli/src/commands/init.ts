@@ -33,6 +33,8 @@ export const PRESET_VOCABULARY: Readonly<Record<Preset, PresetVocabulary>> = {
       "implements",
       "supersedes",
       "superseded_by",
+      "amends",
+      "amended_by",
       "related",
       "discussed_in",
     ],
@@ -157,6 +159,8 @@ link_fields:
   - related
   - supersedes
   - superseded_by
+  - amends
+  - amended_by
   - discussed_in
 
 provenance:

@@ -167,7 +167,8 @@ With a shell, use the CLI. Without one, the MCP tool beside it does the same.
 
 - **`--json`** prints the MCP tool's reply. Use it when you parse the output rather than read it.
   `drift --json` has a shape of its own. It names the pages the text only counts, and counts
-  some stale pages the text names: re-verify from both, or from `check_drift`.
+  some stale pages the text names: re-verify from both, or from `check_drift`. `cite` given
+  more than one target prints an array of those replies, one per target, in order.
 - **Long results come in pages.** `find_consumers`, `find_canonical` and `lint_knowledge_base`
   return at most 50 entries: `count` is the total, and passing `nextCursor` back as `cursor`
   gets the rest. The CLI prints everything unless you pass `--limit` or `--cursor`.
@@ -274,6 +275,10 @@ an interruption to work around.
 - **inconsistent supersession** — pages that supersede one another in a loop, or a replacement
   only one of its two pages records. Resolve it by checking the source; never add the missing
   half just to clear the finding.
+- **shared aliases** — a name that two or more pages claim, as an alias or as one page's alias
+  and another's title, so `canonical` has no single answer for it. Keep the alias on the page
+  that defines the concept; if two pages really do, that is a contradiction to record. The finding
+  names at most 20 pages; run `canonical <name>` for the full list.
 
 It also prints how many citations it could not check, grouped by why. That is not a finding:
 nobody looked. The reason may be a source accreta cannot reach, a git file with uncommitted
