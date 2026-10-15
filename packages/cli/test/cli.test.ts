@@ -180,6 +180,19 @@ describe("accreta search", () => {
     expect(stdout()).not.toContain("knowledge/a.md");
   });
 
+  test("--json reports an alias matched on a word FTS5 would read as an operator", async () => {
+    writePage("c.md", '---\ntype: note\naliases: ["OR gate", "NOT NULL"]\n---\n\n# Logic\n');
+    await cli("reindex");
+    const aliasesFor = async (query: string) => {
+      output = [];
+      await cli("search", query, "--json");
+      const hits: { path: string; matched_aliases?: string[] }[] = JSON.parse(stdout()).results;
+      return hits.find((h) => h.path === "knowledge/c.md")?.matched_aliases;
+    };
+    expect(await aliasesFor("OR")).toEqual(["OR gate"]);
+    expect(await aliasesFor("NOT")).toEqual(["NOT NULL"]);
+  });
+
   test("a --limit the MCP tool would refuse is refused here", async () => {
     expect(await cli("search", "tropopause", "--limit", "51")).toBe(2);
     expect(stderr()).toContain("--limit");

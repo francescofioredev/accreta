@@ -192,7 +192,7 @@ function matchedAliasesOf(query: string, frontmatter: Record<string, unknown>): 
     .toLowerCase()
     .replace(/["*()]/g, " ")
     .split(/\s+/)
-    .filter((term) => term.length > 0 && !["and", "or", "not", "near"].includes(term));
+    .filter((term) => term.length > 0);
 
   return aliases.filter((alias) => {
     const text = alias.toLowerCase();
@@ -205,7 +205,8 @@ export function searchPagesTool(
   input: { query: string; types?: string[]; source?: string; limit?: number },
 ): SearchPagesOutput {
   const db = ctx.db;
-  const hits = searchPages(db, input);
+  const { query, types, source, limit } = input;
+  const hits = searchPages(db, { query, types, source, limit });
   const results = hits.map((hit) => {
     const page = getPage(db, hit.path, ctx.config);
     return hitOut(hit, page ? matchedAliasesOf(input.query, page.frontmatter) : []);
