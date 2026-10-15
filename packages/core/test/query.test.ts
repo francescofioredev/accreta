@@ -915,3 +915,57 @@ describe("lintCitations on footnotes", () => {
     expect(kinds).not.toContain("unpinned-provenance-format");
   });
 });
+
+const twoSources = (a: SourceAdapter, b: SourceAdapter) =>
+  new Map([
+    [a.id, a],
+    [b.id, b],
+  ]);
+
+const verified = (sourceId: string, revision: string) =>
+  `---\ntype: note\nsource: ${sourceId}\nlast_verified_revision: ${revision}\n---\n\n# A\n`;
+
+describe("lintCitations on last_verified_revision", () => {
+  const withHistory = (id: string, revisions: string[]): SourceAdapter => ({
+    ...source(id, {}),
+    knowsRevision: async (revision) => revisions.includes(revision),
+  });
+
+  test("a revision only another source has is reported (#260)", async () => {
+    writePage("a.md", verified("a", "rev-of-b"));
+    reindex();
+    const { findings } = await lintCitations(
+      db,
+      twoSources(withHistory("a", ["rev-of-a"]), withHistory("b", ["rev-of-b"])),
+    );
+    expect(findings).toEqual([
+      {
+        kind: "verified-revision-unknown",
+        path: "knowledge/a.md",
+        detail:
+          'source "a" cannot place last_verified_revision rev-of-b (history rewritten, shallow clone, or a different repository); re-verify against "a" before recording a revision',
+      },
+    ]);
+  });
+
+  test("a revision the page's own source has is clean", async () => {
+    writePage("a.md", verified("a", "rev-of-a"));
+    reindex();
+    const { findings } = await lintCitations(
+      db,
+      twoSources(withHistory("a", ["rev-of-a"]), withHistory("b", ["rev-of-b"])),
+    );
+    expect(findings).toEqual([]);
+  });
+
+  test("a source that keeps no history, or is not loaded, is not asked", async () => {
+    writePage("a.md", verified("a", "anything"));
+    writePage("b.md", verified("absent", "anything"));
+    reindex();
+    const { findings } = await lintCitations(
+      db,
+      twoSources(source("a", {}), withHistory("b", ["rev-of-b"])),
+    );
+    expect(findings).toEqual([]);
+  });
+});

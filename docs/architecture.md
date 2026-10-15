@@ -142,7 +142,8 @@ A pointer that *is* present is checked rather than trusted, whether it is `canon
 or a footnote. Footnotes are read back through the knowledge base's own `provenance.format`,
 and indexed with the sentence that cites them. `lint` asks the source, through
 `SourceAdapter.locate`, whether the path and locator exist. Where the source keeps history, it
-also asks whether the cited revision does. All of it is deterministic. What none of it can tell
+also asks whether the cited revision does, and whether the page's own `source` has its
+`last_verified_revision`. All of it is deterministic. What none of it can tell
 is whether a range that exists supports the claim made from it. That needs reading both, and is
 not attempted.
 

@@ -266,7 +266,8 @@ an interruption to work around.
 - **dangling links** — a link to a page that does not exist
 - **unknown page types** — a `type` outside the configured vocabulary
 - **missing provenance** — no `canonical_source`
-- **unverified pages** — no `last_verified_revision`
+- **unverified pages** — no `last_verified_revision`, or one the page's own `source` cannot
+  place (history rewritten, a shallow clone, or a commit from another repository)
 - **citations that point at nothing** — a `canonical_source` or footnote naming a path the
   source does not have, or a locator the source cannot place
 - **citations that name no revision, or one the source never had** — `unknown` where a
