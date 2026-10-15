@@ -17,7 +17,7 @@ import {
   type UncheckedSource,
 } from "@accreta/adapters";
 import { findWorkspace } from "../workspace.ts";
-import { loadSources, provenance, type CommandContext } from "./shared.ts";
+import { loadSources, printable, provenance, type CommandContext } from "./shared.ts";
 
 export type DriftFormat = "text" | "json" | "github";
 
@@ -271,15 +271,6 @@ export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport)
 
 const repinText = (c: CitedChange) =>
   c.change.status === "moved" ? [printable(`${c.path}#${c.locator} → ${c.change.locator}`)] : [];
-
-// A terminal escape, newline or invisible format character would let a page or a declaration
-// rewrite the report or pass for another path. The backslash is escaped so every `\u` is ours.
-const printable = (value: string) =>
-  value.replaceAll(/[\\\p{Cc}\p{Cf}\u2028\u2029]/gu, (c) => {
-    if (c === "\\") return "\\\\";
-    const hex = c.codePointAt(0)!.toString(16);
-    return hex.length > 4 ? `\\u{${hex}}` : `\\u${hex.padStart(4, "0")}`;
-  });
 
 const DOUBT_ORDER: PageChange[] = ["changed", "moved", "untouched", "uncited"];
 
