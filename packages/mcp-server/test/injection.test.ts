@@ -288,6 +288,7 @@ describe("every tool response, against pages that try to give instructions", () 
   const seenBy = new Map<string, Set<string>>();
   const declaredBy = new Map<string, Set<string>>();
   const markedFieldsSeen = new Set<string>();
+  const leakPaths = new Set<string>();
   const shapesBy = new Map<string, Map<string, Set<string>>>();
   const tools: string[] = [];
   const readErrors: string[] = [];
@@ -330,6 +331,7 @@ describe("every tool response, against pages that try to give instructions", () 
           for (const field of audited.declared) declared.add(field);
           for (const leak of audited.leaks) {
             seen.add(leak.channel);
+            leakPaths.add(`${tool.name} ${leak.path}`);
             if (leak.field) markedFieldsSeen.add(`${tool.name} ${leak.field}`);
             else unmarked.add(`${tool.name} ${leak.path} ${leak.channel}`);
           }
@@ -369,6 +371,15 @@ describe("every tool response, against pages that try to give instructions", () 
 
   test("the write probes reach a confirmed write, so the write's reply is swept too", () => {
     expect(lastWrite).toMatchObject({ ok: true });
+  });
+
+  // Only `lines` diffs contents and only `plain` cannot, so each path names one source (#303).
+  test("check_drift carries why a source refused a citation, per citation and per page", () => {
+    const drift = [...leakPaths].filter((path) => path.startsWith("check_drift "));
+    expect(drift).toContain("check_drift reports[].stale[].citations[].refused");
+    expect(drift.some((path) => path.startsWith("check_drift reports[].stale[].refused."))).toBe(
+      true,
+    );
   });
 
   test("no read probe returns an error, so each one swept a real reply", () => {
