@@ -196,7 +196,7 @@ export function readFootnotes(body: string): { footnotes: Footnote[]; orphans: F
       definitions.push({ id: definition[1]!, line: index + 1, text: definition[2]! });
       prose.push("");
     } else {
-      // A definition runs on, lazily or indented, until a blank line and an unindented one, as on GitHub.
+      // A definition runs on, lazily or indented, until a block start or a blank line and an unindented one, as on GitHub.
       if ((afterBlank && /^\S/.test(line)) || BLOCK_START_RE.test(line)) within = null;
       prose.push(within === null ? masked : "");
     }
