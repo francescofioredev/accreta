@@ -36,7 +36,7 @@ export interface SupersessionFields {
 export const DEFAULT_CONFIG: AccretaConfig = {
   knowledgeBase: "knowledge",
   pageTypes: ["note", "source", "concept", "decision", "synthesis"],
-  linkFields: ["related", "supersedes", "superseded_by", "discussed_in"],
+  linkFields: ["related", "supersedes", "superseded_by", "amends", "amended_by", "discussed_in"],
   provenanceFormat: "{source} @ {rev} · {path}#{locator}",
 };
 
