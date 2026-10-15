@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   buildIndex,
   DEFAULT_CONFIG,
+  StaleIndexError,
   type AccretaConfig,
   type Database,
   type LocationVerdict,
@@ -328,4 +330,23 @@ test("a call that throws still releases the index it pinned", async () => {
 
   await expect(call).rejects.toThrow("source down");
   expect(isOpen(pinned!)).toBe(false);
+});
+
+test("a reopen after a swap refuses an index of another format", () => {
+  writePage("a.md", "---\ntype: note\n---\n\n# A\n\nalpha\n");
+  reindex();
+  const ctx = createContext(root);
+  expect(searchPagesTool(ctx, { query: "alpha" }).count).toBe(1);
+
+  const older = `${indexPath()}.older`;
+  buildIndex({ root, config, indexPath: older });
+  const writable = new DatabaseSync(older);
+  writable.exec("DELETE FROM meta WHERE key = 'index_format'");
+  writable.close();
+  renameSync(older, indexPath());
+
+  expect(() => ctx.db).toThrow(StaleIndexError);
+
+  reindex();
+  expect(searchPagesTool(ctx, { query: "alpha" }).count).toBe(1);
 });

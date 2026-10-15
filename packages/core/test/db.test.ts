@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openIndex, sqliteSupport } from "../src/index-db/db.ts";
+import { INDEX_FORMAT, INDEX_FORMAT_KEY } from "../src/index-db/format.ts";
 
 let root = "";
 let indexPath = "";
@@ -10,7 +11,12 @@ let indexPath = "";
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "accreta-db-"));
   indexPath = join(root, "index.sqlite");
-  openIndex(indexPath).close();
+  const writer = openIndex(indexPath);
+  // A reader refuses an index with no format, and this one is built by hand.
+  writer
+    .prepare("INSERT INTO meta (key, value) VALUES ($key, $value)")
+    .run({ $key: INDEX_FORMAT_KEY, $value: String(INDEX_FORMAT) });
+  writer.close();
 });
 
 afterEach(() => {

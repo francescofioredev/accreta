@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mkdirSync, readFileSync } from "node:fs";
 import { UNSUPPORTED_RUNTIME } from "../runtime.ts";
+import { requireIndexFormat } from "./format.ts";
 
 const SCHEMA_PATH = join(dirname(fileURLToPath(import.meta.url)), "schema.sql");
 
@@ -72,6 +73,14 @@ export function openIndex(path: string, opts: OpenOptions = {}): Database {
   if (!opts.readonly) {
     db.exec("PRAGMA journal_mode = WAL");
     db.exec(readFileSync(SCHEMA_PATH, "utf-8"));
+  } else {
+    // Here rather than per query: every reader opens through this, including a reopen after a swap.
+    try {
+      requireIndexFormat(db);
+    } catch (error) {
+      db.close();
+      throw error;
+    }
   }
 
   db.exec("PRAGMA foreign_keys = ON");

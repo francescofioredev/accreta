@@ -8,6 +8,7 @@ import { nameKey } from "../name-key.ts";
 import { parsePage } from "../page.ts";
 import { parseCitation } from "../source/adapter.ts";
 import { openIndex, sealForReading, type Database } from "./db.ts";
+import { INDEX_FORMAT, INDEX_FORMAT_KEY } from "./format.ts";
 
 export interface BuildResult {
   pages: number;
@@ -313,6 +314,7 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
     upsertMeta.run({ $key: "page_count", $value: String(pages) });
     upsertMeta.run({ $key: "max_mtime", $value: String(Math.floor(maxMtime)) });
     upsertMeta.run({ $key: "knowledge_base", $value: config.knowledgeBase });
+    upsertMeta.run({ $key: INDEX_FORMAT_KEY, $value: String(INDEX_FORMAT) });
 
     db.exec("COMMIT");
   } catch (error) {
