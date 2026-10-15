@@ -425,13 +425,13 @@ const DRIFT_FIELDS = [
   "sources[].repin[].citations[].cited_at",
   "sources[].unresolvable[].revision",
   "sources[].unresolvable[].pages",
-  "sources[].unresolvable[].citedOnly",
+  "sources[].unresolvable[].cited_only",
   "sources[].unverifiable",
   "sources[].unpinned[].page",
   "sources[].unpinned[].footnote",
   "sources[].delegated.pending[].revision",
   "sources[].delegated.pending[].pages",
-  "sources[].delegated.pending[].citedOnly",
+  "sources[].delegated.pending[].cited_only",
 ] as const;
 
 /** With `--base`, `on_base` says the base branch already failed to load the same declaration. */
