@@ -20,7 +20,7 @@ import {
   pageChanges,
   UnknownRevisionError,
 } from "@accreta/core";
-import { GitCommandError, GitSource, scopeRefusal } from "../src/index.ts";
+import { GitCommandError, GitSource, scopeRefusal, unmatchedPaths } from "../src/index.ts";
 
 let root = "";
 
@@ -989,7 +989,9 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
     );
     expect(() => sub(["./sub/docs/*.md"])).toThrow('(did you mean "docs/*.md"?)');
     expect(() => sub(["sub"])).toThrow('(did you mean "."?)');
-    expect(() => sub(["docs", "../other.md"])).not.toThrow();
+    // It matches a tracked file, so only the earlier out-of-root check refuses it.
+    expect(unmatchedPaths(join(root, "sub"), ["docs", "../other.md"])).toBeUndefined();
+    expect(() => sub(["docs", "../other.md"])).toThrow("resolves outside the source root");
   });
 
   test("a suggestion is offered only when it matches", () => {
