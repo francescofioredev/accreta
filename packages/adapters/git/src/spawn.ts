@@ -91,7 +91,8 @@ const onSignal = Object.fromEntries(
 
 function guard(pid: number): void {
   if (live.size === 0) {
-    for (const signal of SIGNALS) process.once(signal, onSignal[signal]);
+    // First in line: a host's own once-listener would otherwise unhook itself and leave us re-raising.
+    for (const signal of SIGNALS) process.prependOnceListener(signal, onSignal[signal]);
     process.once("exit", killLive);
   }
   live.add(pid);
@@ -119,6 +120,8 @@ export class TimeoutError extends Error {
 
 export interface RunResult {
   exitCode: number;
+  /** The signal that killed the child, if one did. */
+  signal: NodeJS.Signals | null;
   stdout: Buffer;
   stderr: Buffer;
 }
@@ -177,6 +180,7 @@ export function run(
       settled = true;
       resolveResult({
         exitCode: code ?? 128 + (signal ? constants.signals[signal] : 0),
+        signal,
         stdout: Buffer.concat(stdout),
         stderr: Buffer.concat(stderr),
       });

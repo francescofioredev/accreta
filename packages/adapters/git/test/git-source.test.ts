@@ -1019,9 +1019,12 @@ describe("GitSource spawn hardening", () => {
       });
       delete process.env[name];
     }
-    process.env.GIT_LITERAL_PATHSPECS = "1";
-    const patterned = new GitSource({ id: "s", root, citationFormat: "x", paths: ["*.md"] });
-    expect(await patterned.locate("a.md")).toEqual({ verdict: "found" });
+    for (const name of ["GIT_NOGLOB_PATHSPECS", "GIT_LITERAL_PATHSPECS"]) {
+      process.env[name] = "1";
+      const patterned = new GitSource({ id: "s", root, citationFormat: "x", paths: ["*.md"] });
+      expect(await patterned.locate("a.md")).toEqual({ verdict: "found" });
+      delete process.env[name];
+    }
   });
 
   test("a git dir committed inside the corpus does not lend its config to a root in it", async () => {
@@ -1058,6 +1061,25 @@ describe("GitSource spawn hardening", () => {
     const inside = new GitSource({ id: "c", root: join(embedded, "tree"), citationFormat: "x" });
     expect(await inside.locate("a.md", "L1")).toMatchObject({ verdict: "unknown" });
     expect(existsSync(marker)).toBe(false);
+    // Without the guard plain git does run the corpus's filter, so the setup is a real attack.
+    at(join(embedded, "tree"), ["status", "--porcelain"]);
+    expect(existsSync(marker)).toBe(true);
+  });
+
+  test("a git killed by a signal is no answer about the revision", async () => {
+    const pidFile = join(outside, "git.pid");
+    plant("git", `echo $$ > "${pidFile}"\nexec sleep 30\n`);
+    Object.assign(process.env, { PATH: outside });
+
+    const asked = source().knowsRevision("0".repeat(40));
+    asked.catch(() => {});
+    const pid = () => (existsSync(pidFile) ? Number(readFileSync(pidFile, "utf-8")) : 0);
+    const deadline = Date.now() + 5_000;
+    while (!(pid() > 0) && Date.now() < deadline) await Bun.sleep(20);
+    // Never 0: kill(0) would signal this test's own process group.
+    expect(pid()).toBeGreaterThan(0);
+    process.kill(pid(), "SIGKILL");
+    await expect(asked).rejects.toThrow("git cat-file was killed by SIGKILL");
   });
 
   test.skipIf(!gitAtLeast(2, 44))(

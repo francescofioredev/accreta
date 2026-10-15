@@ -76,15 +76,18 @@ async function git(
   }
   // Trust: the source's .git/config, and all it includes, runs as code; the timeout bounds a hang only.
   // fsmonitor runs in status, ls-files and check-attr and only saves time; filters decide what is on disk.
-  // safe.bareRepository: a git dir committed inside the corpus must not lend its config to a root in it.
+  // safe.bareRepository: a git dir inside the corpus must not lend its config; git before 2.38 ignores it.
   const hardened = ["-c", "core.fsmonitor=false", "-c", "safe.bareRepository=explicit"];
-  const { exitCode, stdout, stderr } = await run(file, [...hardened, ...args], {
+  // The subcommand only: locate's details must name no path.
+  const command = `git ${args.find((arg) => !arg.startsWith("-")) ?? ""}`;
+  const { exitCode, signal, stdout, stderr } = await run(file, [...hardened, ...args], {
     cwd: root,
     env,
     timeoutMs: timeoutMs(),
-    // The subcommand only: locate's details must name no path.
-    command: `git ${args.find((arg) => !arg.startsWith("-")) ?? ""}`,
+    command,
   });
+  // Not a GitCommandError: git said nothing about the repository, so no caller may read it as an answer.
+  if (signal !== null) throw new Error(`${command} was killed by ${signal}`);
   if (exitCode === 0) return stdout.toString("utf-8");
   throw new GitCommandError(args, exitCode, stderr.toString("utf-8").trim());
 }
@@ -162,7 +165,8 @@ export class GitSource implements SourceAdapter {
    */
   async knowsRevision(revision: string): Promise<boolean> {
     try {
-      // A promisor remote would fetch a revision taken from frontmatter; the env var, since the flag needs 2.44.
+      // A promisor remote would fetch a frontmatter revision. Env var, not the flag: an older git ignores it
+      // instead of failing; there is no guard on a git without it.
       await git(this.root, ["cat-file", "-e", `${revision}^{commit}`], { GIT_NO_LAZY_FETCH: "1" });
       return true;
     } catch (error) {

@@ -169,7 +169,8 @@ paths: []
       return {
         reachable: "no",
         detail: `git could not run: ${error instanceof Error ? error.message : String(error)}`,
-        remedy: "Put git 2.24 or newer on PATH, or raise ACCRETA_GIT_TIMEOUT_MS if it timed out.",
+        remedy:
+          "Put git 2.24 or newer on PATH (2.38 or newer to refuse a git dir inside the corpus), or raise ACCRETA_GIT_TIMEOUT_MS if it timed out.",
       };
     }
     if (!repository) {

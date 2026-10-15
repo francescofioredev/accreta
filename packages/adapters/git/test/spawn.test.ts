@@ -118,40 +118,54 @@ async function stopsBeating(file: string): Promise<boolean> {
   return false;
 }
 
+/** A host process that runs `prelude`, then a heartbeat child through `run()`, and gets `signal`. */
+async function signalHost(signal: NodeJS.Signals, prelude = ""): Promise<{ beating: boolean }> {
+  const heartbeat = join(base, "beat");
+  const script = join(base, "child.sh");
+  writeFileSync(
+    script,
+    `echo $$ > "${heartbeat}.pid"\nwhile :; do echo . >> "${heartbeat}"; sleep 0.1; done\n`,
+  );
+  const code = `
+      import { run } from ${JSON.stringify(join(import.meta.dir, "../src/spawn.ts"))};
+      ${prelude}
+      await run("/bin/sh", [${JSON.stringify(script)}], {
+        cwd: ${JSON.stringify(base)}, env: process.env, timeoutMs: 60000, command: "sh",
+      });`;
+  const host = Bun.spawn([process.execPath, "-e", code], { stdout: "ignore", stderr: "ignore" });
+  try {
+    const deadline = Date.now() + 5_000;
+    while (!existsSync(heartbeat) && Date.now() < deadline) await Bun.sleep(50);
+    expect(existsSync(heartbeat)).toBe(true);
+
+    host.kill(signal);
+    await host.exited;
+    return { beating: !(await stopsBeating(heartbeat)) };
+  } finally {
+    host.kill("SIGKILL");
+    try {
+      process.kill(Number(readFileSync(`${heartbeat}.pid`, "utf-8")), "SIGKILL");
+    } catch {
+      // Already gone, as it should be.
+    }
+  }
+}
+
 describe("run", () => {
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     test(`${signal} to the host takes the child's process group with it`, async () => {
-      const heartbeat = join(base, "beat");
-      const script = join(base, "child.sh");
-      writeFileSync(
-        script,
-        `echo $$ > "${heartbeat}.pid"\nwhile :; do echo . >> "${heartbeat}"; sleep 0.1; done\n`,
-      );
-      const code = `
-          import { run } from ${JSON.stringify(join(import.meta.dir, "../src/spawn.ts"))};
-          await run("/bin/sh", [${JSON.stringify(script)}], {
-            cwd: ${JSON.stringify(base)}, env: process.env, timeoutMs: 60000, command: "sh",
-          });`;
-      const host = Bun.spawn([process.execPath, "-e", code], {
-        stdout: "ignore",
-        stderr: "ignore",
-      });
-      try {
-        const deadline = Date.now() + 5_000;
-        while (!existsSync(heartbeat) && Date.now() < deadline) await Bun.sleep(50);
-        expect(existsSync(heartbeat)).toBe(true);
-
-        host.kill(signal);
-        await host.exited;
-        expect(await stopsBeating(heartbeat)).toBe(true);
-      } finally {
-        host.kill("SIGKILL");
-        try {
-          process.kill(Number(readFileSync(`${heartbeat}.pid`, "utf-8")), "SIGKILL");
-        } catch {
-          // Already gone, as it should be.
-        }
-      }
+      expect(await signalHost(signal)).toEqual({ beating: false });
     }, 15_000);
   }
+
+  test("a host's own graceful shutdown on SIGINT still runs to the end", async () => {
+    const cleaned = join(base, "cleaned");
+    const prelude = `import { writeFileSync } from "node:fs";
+      process.once("SIGINT", () => setTimeout(() => {
+        writeFileSync(${JSON.stringify(cleaned)}, "");
+        process.exit(0);
+      }, 300));`;
+    expect(await signalHost("SIGINT", prelude)).toEqual({ beating: false });
+    expect(existsSync(cleaned)).toBe(true);
+  }, 15_000);
 });
