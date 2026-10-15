@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import {
   chmodSync,
   existsSync,
@@ -14,7 +14,8 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { run } from "../src/main.ts";
-import { COMMAND_ARGS } from "../src/commands/shared.ts";
+import { COMMAND_ARGS, loadSources } from "../src/commands/shared.ts";
+import { findWorkspace } from "../src/workspace.ts";
 import type { CommandContext } from "../src/commands.ts";
 import type { DriftReport, SourceAdapter } from "@accreta/core";
 import { revisionOnce } from "../src/commands/cite.ts";
@@ -1450,6 +1451,17 @@ describe("accreta cite", () => {
       const once = revisionOnce(adapter as unknown as SourceAdapter);
       expect([await once.revision(), await once.revision(), once.id]).toEqual(["r1", "r1", "x"]);
       expect(calls).toBe(1);
+    });
+
+    test("a batch asks each source for its revision once", async () => {
+      const { sources } = loadSources(findWorkspace(root));
+      const spy = spyOn(Object.getPrototypeOf(sources[0]) as SourceAdapter, "revision");
+      try {
+        expect(await cli("cite", "docs:a.md#L1", "docs:a.md#L2", "more:b.md#L1")).toBe(0);
+        expect(spy).toHaveBeenCalledTimes(2);
+      } finally {
+        spy.mockRestore();
+      }
     });
 
     test("a multi-paragraph delegated scope does not split a block", async () => {

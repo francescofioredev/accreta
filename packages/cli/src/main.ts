@@ -43,9 +43,9 @@ Usage: accreta <command> [arguments]
                            The citation for a claim, at the source's current revision.
                            Before reading, cite the file and keep its revision; after
                            writing, cite the place with --expect-revision <rev>, which
-                           fails if the source has moved since; with several targets,
-                           all must name one source. Several targets: one result each,
-                           in order, and --json prints an array when there is more than one.
+                           fails if the source has moved since. Several targets give one
+                           result each, in order, and must name one source with
+                           --expect-revision; --json then prints an array.
                            --format text|footnote|json: text (default) labels each line;
                            a missing place prints "footnote: none: location missing" and
                            exits 1, so check the exit code. footnote prints the footnotes
