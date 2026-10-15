@@ -2,7 +2,7 @@ import { existsSync, realpathSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { SourceAdapter, SourceDeclaration } from "@accreta/core";
 import { FsSource, SNAPSHOT_BUDGET_BYTES, snapshotHealth } from "@accreta/adapter-fs";
-import { GitSource, isWorkingTree } from "@accreta/adapter-git";
+import { GitSource, isWorkingTree, unmatchedPaths } from "@accreta/adapter-git";
 import { DelegatedSource } from "@accreta/adapter-delegated";
 
 export interface SourceContext {
@@ -169,6 +169,9 @@ paths: []
         remedy: "Point `root` at a checkout, or declare it as `type: fs` instead.",
       };
     }
+    // The same verdict construction would give, so doctor cannot pass what drift refuses.
+    const refusal = unmatchedPaths(root, stringsOr(d.options.paths) ?? []);
+    if (refusal) return { reachable: "no", detail: refusal };
     return { reachable: "yes", detail: `${root} is a git repository` };
   },
 };
