@@ -942,7 +942,8 @@ describe("lintCitations on last_verified_revision", () => {
       {
         kind: "verified-revision-unknown",
         path: "knowledge/a.md",
-        detail: 'last_verified_revision rev-of-b is not a revision source "a" has',
+        detail:
+          'source "a" cannot place last_verified_revision rev-of-b (history rewritten, shallow clone, or a different repository); re-verify against "a" before recording a revision',
       },
     ]);
   });

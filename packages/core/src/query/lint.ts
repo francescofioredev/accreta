@@ -414,7 +414,7 @@ export async function lintCitations(
       findings.push({
         kind: "verified-revision-unknown",
         path: page.path,
-        detail: `last_verified_revision ${page.last_verified_revision} is not a revision source "${adapter.id}" has`,
+        detail: `source "${adapter.id}" cannot place last_verified_revision ${page.last_verified_revision} (history rewritten, shallow clone, or a different repository); re-verify against "${adapter.id}" before recording a revision`,
       });
     }
   }

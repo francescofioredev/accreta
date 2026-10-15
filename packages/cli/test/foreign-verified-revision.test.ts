@@ -56,6 +56,6 @@ test("lint names a last_verified_revision only another source has (#260)", async
 
   expect(await cli("lint")).toBe(1);
   expect(output.join("\n")).toContain(
-    `knowledge/a.md: last_verified_revision ${foreign} is not a revision source "a" has`,
+    `knowledge/a.md: source "a" cannot place last_verified_revision ${foreign}`,
   );
 });
