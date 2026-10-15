@@ -23,6 +23,8 @@ link_fields:
   - implements # the interface or contract this page's subject realizes
   - supersedes
   - superseded_by
+  - amends # the earlier decision this page's decision changes but does not replace
+  - amended_by # a later decision that changes this one
   - related
   - discussed_in
 
@@ -65,6 +67,16 @@ untouched by a hundred commits is not stale.
 **Beware the rename.** A moved or renamed file shows up as a change to both paths. The page
 is usually still correct and the citation is not; fix the path rather than re-verifying the
 whole page.
+
+## Decision records
+
+A decision record carries its status in frontmatter, as the record states it:
+`status: Accepted`, `Proposed`, `Deprecated`. Nothing indexes it yet, so a search cannot
+filter on it; say it in the summary when a reader needs it.
+
+Decisions amend each other far more often than they replace each other. When a later record
+changes an earlier one that still holds in part, link them with `amends` / `amended_by`.
+Use `supersedes` / `superseded_by` only when the earlier decision no longer holds at all.
 
 ## Concepts are where the value is
 
