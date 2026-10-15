@@ -155,8 +155,8 @@ With a shell, use the CLI. Without one, the MCP tool beside it does the same.
 | — | `update_verified_revision` | records a verified revision; only with `ACCRETA_ALLOW_WRITES=1` |
 
 - **`--json`** prints the MCP tool's reply. Use it when you parse the output rather than read it.
-  `drift --json` has a shape of its own and only counts stale pages whose cited lines are
-  unchanged: drive re-verification from `accreta drift` or `check_drift`.
+  `drift --json` has a shape of its own. It names the pages the text only counts, and counts
+  some stale pages the text names: re-verify from both, or from `check_drift`.
 - **Long results come in pages.** `find_consumers`, `find_canonical` and `lint_knowledge_base`
   return at most 50 entries: `count` is the total, and passing `nextCursor` back as `cursor`
   gets the rest. The CLI prints everything unless you pass `--limit` or `--cursor`.
@@ -176,13 +176,19 @@ With a shell, use the CLI. Without one, the MCP tool beside it does the same.
    the footnote it returns. It fails if the source moved since you read it: re-read, cite again.
    With no revision from step 1, leave `--expect-revision` out. `location: missing` means the
    target is wrong; fix it rather than paste.
-5. **Record the revision of the page's own `source`** in `last_verified_revision`.
+5. **Record the revision of the page's own `source`** in `last_verified_revision`. On a page
+   you extended, only if you re-verified the whole page against it.
 6. **`accreta reindex`**, then **`accreta lint`**. Fix what it reports.
 
 A citation `cite` cannot pin comes back with `unknown` where the revision belongs, and lint
 reports it as `citation-unpinned`. Paste it as returned: never write a revision into it. For an
 uncommitted file, commit and cite again. For a delegated source, the revision you read through
 the connector goes in `last_verified_revision` only.
+
+If lint reports that `provenance.format` has no `{rev}`, or you change the format, fix the format
+in `accreta.config.yaml` first, then re-cite every existing footnote with `accreta cite`. Lint
+lists each old footnote with a #locator as `unparseable-citation`, but one without a #locator can
+read as prose and drop out of lint and drift, so do not rely on lint to find them all.
 
 ### Never write a speculative page
 
@@ -216,7 +222,7 @@ damaging thing you can do here.
 The loop is **drift → re-verify → cite → lint**: for each page drift names, re-read the changed
 parts, then follow Ingesting 4–6 with `--expect-revision` set to drift's revision for that source
 (`source @ rev`; `current_revision` in JSON). If that fails, the source moved again: rerun drift.
-Repeat until drift names no page in doubt.
+Repeat until drift exits 0.
 
 A page can appear under a source it only cites (`cited_only`; "cited at" in `accreta drift`):
 re-check the cited lines and re-pin those footnotes with `cite`, then skip step 5: record no

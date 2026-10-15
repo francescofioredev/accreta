@@ -385,6 +385,9 @@ for (const [name, makeFixture] of QUESTIONABLE) {
           part: "path",
         });
       }
+      expect(await adapter.locate("alias.md", "L1")).toMatchObject({
+        detail: expect.stringContaining('cite "chapter-07.md"'),
+      });
       expect(await adapter.locate("chapter-07.md", "L1")).toEqual({ verdict: "found" });
     });
 

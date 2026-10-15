@@ -23,8 +23,9 @@ const USAGE = `accreta — a knowledge base an agent writes and keeps current
 
 Usage: accreta <command> [arguments]
 
-  init [--preset <name>]   Create accreta.config.yaml, knowledge/, sources/ and
-                           a constitution. Presets: codebase, research.
+  init [--preset <names>]  Create accreta.config.yaml, knowledge/, sources/ and
+                           a constitution. Presets: codebase, research; several
+                           compose, comma-separated (--preset codebase,research)
                            --agent-file <name> names the constitution (default AGENTS.md)
   reindex                  Rebuild the index from the knowledge base
   lint                     Report unresolvable links, missing provenance, unknown types
@@ -43,6 +44,10 @@ Usage: accreta <command> [arguments]
                            Before reading, cite the file and keep its revision; after
                            writing, cite the place with --expect-revision <rev>, which
                            fails if the source has moved since
+  mcp                      Start the MCP server on stdio; an agent client runs this
+  mcp install --client <claude|cursor|codex|vscode> [--scope project|user]
+                           Add that server to the client's config (--force replaces
+                           an accreta entry that differs)
 
   --json                   On lint, search, show, consumers, canonical and cite: print
                            the JSON the matching MCP tool returns
@@ -186,6 +191,8 @@ function parseArgs(argv: string[]): ParsedArgs & {
       continue;
     }
     if (arg === "--preset") {
+      // A second --preset once silently replaced the first.
+      if (preset !== undefined) problems.push("--preset is given once; compose with --preset a,b.");
       preset = value();
       continue;
     }
@@ -287,7 +294,7 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
     case "cite":
       return cite(ctx, positional[0] ?? "", { json, expectRevision: parsed.expectRevision });
     case "mcp":
-      return mcp(ctx, positional);
+      return mcp(ctx, rest);
     default:
       ctx.err(`Unknown command "${command}".\n`);
       ctx.err(USAGE);

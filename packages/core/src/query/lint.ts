@@ -142,7 +142,7 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
       kind: "unpinned-provenance-format",
       path: "accreta.config.yaml",
       detail:
-        "provenance.format has no {rev}, so no footnote names its revision; add {rev}, then re-cite existing footnotes with `accreta cite`, as until then they may not read as citations",
+        "provenance.format has no {rev}, so no footnote names its revision; add {rev}, then re-cite every existing footnote with `accreta cite`: lint lists each one with a #locator as unparseable-citation, but one without can read as prose and drop out of lint and drift",
     });
   }
 
@@ -359,7 +359,7 @@ export async function lintCitations(
       findings.push({
         kind: "unparseable-citation",
         path: row.page_path,
-        detail: `${label} "${row.text}" does not read as the configured provenance.format`,
+        detail: `${label} "${row.text}" does not read as the current provenance.format; re-cite it with \`accreta cite\``,
       });
       continue;
     }

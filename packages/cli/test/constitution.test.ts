@@ -3,10 +3,13 @@ import { MAX_PAGE_LIMIT } from "@accreta/core";
 import { COMMAND_ARGS } from "../src/commands/shared.ts";
 import { composeConstitution, isPreset, PRESETS } from "../src/constitution.ts";
 
-const RENDERINGS = [undefined, ...PRESETS].map((preset) => ({
-  preset: preset ?? "no preset",
-  text: composeConstitution({ preset }),
-}));
+const RENDERINGS = [
+  ...[undefined, ...PRESETS].map((preset) => ({
+    preset: preset ?? "no preset",
+    text: composeConstitution({ preset }),
+  })),
+  { preset: PRESETS.join(","), text: composeConstitution({ presets: PRESETS }) },
+];
 
 /** The commands each `--flag` in the text is quoted for, read from the Commands section. */
 function quotedFlags(text: string): Record<string, string[]> {
@@ -91,6 +94,7 @@ describe("composeConstitution", () => {
         "Paste it as returned: never write a revision into it.",
         "`cited_only`",
         "skip step 5: record no",
+        "re-cite every existing footnote with `accreta cite`",
         "unless\nthat source is delegated",
         "the revision of the page's own `source`",
       ]) {

@@ -99,7 +99,7 @@ describe("accreta init", () => {
   });
 
   test("an unknown preset is refused before anything is written", async () => {
-    expect(await cli("init", "--preset", "nonsense")).toBe(1);
+    expect(await cli("init", "--preset", "nonsense")).toBe(2);
     expect(stderr()).toContain("Unknown preset");
     expect(existsSync(join(root, "accreta.config.yaml"))).toBe(false);
   });
@@ -335,6 +335,7 @@ describe("accreta drift", () => {
 
     expect(await cli("drift")).toBe(1);
     expect(stdout()).toContain("cannot place");
+    expect(stdout()).toContain("fromapreviousrun:\n      knowledge/a.md (verified)");
   });
 
   test("an fs page goes stale across two separate processes", async () => {
@@ -366,7 +367,7 @@ describe("accreta drift", () => {
     utimesSync(join(docs, "a.md"), 2000, 2000);
 
     const second = accreta("drift");
-    expect(second.out).toContain("1 page(s) may have drifted");
+    expect(second.out).toContain("1 page(s) in doubt");
     expect(second.out).toContain(`knowledge/a.md (verified at ${revision})`);
     expect(second.out).not.toContain("cannot place");
     expect(second.code).toBe(1);
@@ -420,7 +421,7 @@ describe("accreta drift", () => {
       utimesSync(join(docs, "a.md"), 2000, 2000);
 
       const second = spawnCli(env, "drift");
-      expect(second.out).toContain("1 page(s) may have drifted");
+      expect(second.out).toContain("1 page(s) in doubt");
       expect(second.out).not.toContain("cannot place");
     } finally {
       delete process.env.ACCRETA_INDEX_PATH;
@@ -542,7 +543,9 @@ describe("accreta drift", () => {
 
     expect(await cli("drift")).toBe(1);
     // Three pages, one revision: the count must be the pages.
-    expect(stdout()).toContain("3 page(s) may have drifted");
+    // Drift still exits 1 here, so the first line must not read as all clear.
+    expect(stdout()).toContain("  no page in doubt; 3 to re-pin or re-verify\n");
+    expect(stdout()).toContain("3 page(s) behind the source, no cited line changed");
     for (const name of ["one", "two", "three"]) {
       expect(stdout()).toContain(`knowledge/${name}.md`);
     }
@@ -596,13 +599,74 @@ describe("accreta drift at line granularity", () => {
 
     expect(await cli("drift")).toBe(1);
     const out = stdout();
-    expect(out).toContain("3 page(s) may have drifted");
+    expect(out).toContain("1 page(s) in doubt");
     expect(out).toContain("knowledge/changed.md (verified at");
     expect(out).toContain("1 cited range(s) changed");
     expect(out).toContain("cited lines unchanged");
     expect(out).toContain("cites none of the changed files");
     expect(out.indexOf("knowledge/changed.md")).toBeLessThan(out.indexOf("knowledge/still.md"));
     expect(out.indexOf("knowledge/still.md")).toBeLessThan(out.indexOf("knowledge/elsewhere.md"));
+  });
+
+  test("the header counts only pages in doubt, as --json does", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+
+    const docs = join(root, "sources", "docs");
+    mkdirSync(docs, { recursive: true });
+    const git = async (...args: string[]) => {
+      const proc = Bun.spawn(["git", ...args], { cwd: docs, stdout: "pipe", stderr: "pipe" });
+      if ((await proc.exited) !== 0) throw new Error(await new Response(proc.stderr).text());
+    };
+    writeFileSync(join(docs, "a.md"), twentyLines(), "utf-8");
+    writeFileSync(join(docs, "b.md"), "untouched\n", "utf-8");
+    await git("init", "-q");
+    await git("config", "user.email", "t@example.invalid");
+    await git("config", "user.name", "Test");
+    await git("add", ".");
+    await git("commit", "-qm", "first");
+    const revision = headOf(docs);
+
+    writeFileSync(
+      join(root, "sources", "docs.yaml"),
+      "id: docs\ntype: git\nroot: sources/docs\n",
+      "utf-8",
+    );
+    const page = (name: string, citation: string) =>
+      writePage(
+        `${name}.md`,
+        `---\ntype: note\nsource: docs\nlast_verified_revision: ${revision}\n---\n\n# ${name}\n\n` +
+          `A claim.[^c]\n\n[^c]: docs @ ${revision.slice(0, 7)} · ${citation}\n`,
+      );
+    page("changed", "a.md#L3-L5");
+    page("moved", "a.md#L12-L14");
+    page("still", "a.md#L1-L2");
+    page("elsewhere", "b.md#L1");
+    await cli("reindex");
+
+    // Line 4 rewritten, and a line inserted at 8 pushes 12-14 down unchanged.
+    const lines = twentyLines({ 4: "rewritten" }).split("\n");
+    lines.splice(7, 0, "inserted");
+    writeFileSync(join(docs, "a.md"), lines.join("\n"), "utf-8");
+    await git("commit", "-qam", "second");
+
+    output = [];
+    expect(await cli("drift", "--json")).toBe(1);
+    const json = JSON.parse(stdout()) as { pages_in_doubt: number };
+    expect(json.pages_in_doubt).toBe(1);
+
+    output = [];
+    expect(await cli("drift")).toBe(1);
+    const out = stdout();
+    expect(out).toContain(`  ${json.pages_in_doubt} page(s) in doubt:`);
+    expect(out).toContain("  1 page(s) to re-pin, cited lines moved:");
+    expect(out).toContain("re-pin a.md#L12-L14 → L13-L15");
+    expect(out).toContain("  2 page(s) behind the source, no cited line changed:");
+    expect(out).not.toContain("may have drifted");
+
+    output = [];
+    await cli("drift", "--format", "github");
+    expect(stdout()).toContain(`**${json.pages_in_doubt} page in doubt:**`);
   });
 });
 
@@ -725,9 +789,62 @@ describe("accreta drift for a pull request", () => {
 
     output = [];
     await cli("drift", "--format", "github");
-    expect(stdout()).toContain("1 page(s) only need re-pinning");
+    expect(stdout()).toContain("1 citation(s) to re-pin on 1 page(s)");
     expect(stdout()).toContain(
       `| \`knowledge/third.md\` | \`c.md#L1-L2\` \`[^c]\` | \`${from.slice(0, 7)}\` | \`L2-L3\` |`,
+    );
+  });
+
+  test("a page in doubt also lists the citations it only needs to re-pin", async () => {
+    const { from } = await fixture();
+    const docs = join(root, "sources", "docs");
+    const short = from.slice(0, 7);
+    writePage(
+      "first.md",
+      `---\ntype: note\nsource: docs\nlast_verified_revision: ${from}\n---\n\n# first\n\n` +
+        `A claim.[^c] Another.[^d]\n\n[^c]: docs @ ${short} · a.md#L3-L5\n` +
+        `[^d]: docs @ ${short} · a.md#L15-L16\n`,
+    );
+    writePage(
+      "second.md",
+      `---\ntype: note\nsource: docs\nlast_verified_revision: ${from}\n---\n\n# second\n\n` +
+        `A claim.[^c]\n\n[^c]: docs @ ${short} · a.md#L18\n`,
+    );
+    await cli("reindex");
+    const lines = twentyLines({ 4: "rewritten" }).split("\n");
+    lines.splice(9, 0, "inserted");
+    writeFileSync(join(docs, "a.md"), lines.join("\n"), "utf-8");
+    Bun.spawnSync(["git", "commit", "-qam", "shift a"], { cwd: docs });
+
+    output = [];
+    expect(await cli("drift", "--json")).toBe(1);
+    const [source] = JSON.parse(stdout()).sources;
+    const first = source.in_doubt.find((p: { page: string }) => p.page === "knowledge/first.md");
+    expect(first.citations.map((c: { footnote: string }) => c.footnote)).toEqual(["c"]);
+    expect(source.repin).toEqual([
+      {
+        page: "knowledge/first.md",
+        verified_at: from,
+        citations: [
+          { footnote: "d", path: "a.md", locator: "L15-L16", cited_at: short, now: "L16-L17" },
+        ],
+      },
+      {
+        page: "knowledge/second.md",
+        verified_at: from,
+        citations: [{ footnote: "c", path: "a.md", locator: "L18", cited_at: short, now: "L19" }],
+      },
+    ]);
+
+    output = [];
+    await cli("drift");
+    expect(stdout()).toContain("1 cited range(s) changed; re-pin a.md#L15-L16 → L16-L17");
+    output = [];
+    await cli("drift", "--format", "github");
+    // A citation sits in one table only, so the summary counts citations, not pages.
+    expect(stdout()).toContain("2 citation(s) to re-pin on 2 page(s)");
+    expect(stdout()).toContain(
+      `| \`knowledge/first.md\` | \`a.md#L15-L16\` \`[^d]\` | \`${short}\` | \`L16-L17\` |`,
     );
   });
 
@@ -1123,6 +1240,23 @@ describe("accreta lint — citations", () => {
     expect(report._provenance.page_derived_fields).toContain("unchecked_reasons[].paths");
   });
 
+  test("footnotes in a format the config no longer uses fail lint (#249)", async () => {
+    writeSource("doc.md", "one\ntwo\nthree\n");
+    writePage(
+      "a.md",
+      '---\ntype: note\ncanonical_source: "docs:doc.md#L1"\nlast_verified_revision: r\n---\n\n' +
+        "# A\n\nOne.[^one] Two.[^two]\n\n[^one]: docs · doc.md#L1\n[^two]: docs · doc.md#L2\n",
+    );
+    await cli("init");
+    await cli("reindex");
+    output = [];
+
+    expect(await cli("lint")).toBe(1);
+    expect(stdout()).toContain("unparseable-citation (2)");
+    expect(stdout()).toContain("[^one] (line 11)");
+    expect(stdout()).toContain("accreta cite");
+  });
+
   test("a citation that resolves is not reported", async () => {
     writeSource("doc.md", "one\ntwo\nthree\n");
     writePage(
@@ -1375,6 +1509,7 @@ describe("accreta doctor", () => {
     await cli("doctor");
     expect(stdout().match(/has no \{rev\}/g)).toHaveLength(1);
     expect(stdout()).toContain("accreta cite");
+    expect(stdout()).toContain("can read as prose");
   });
 
   test("the default provenance format is not flagged for its revision", async () => {
@@ -1407,5 +1542,52 @@ describe("accreta doctor", () => {
 
     expect(await cli("doctor")).toBe(1);
     expect(stdout()).toContain("unknown source type");
+  });
+
+  test("two declarations sharing an id are both named, and neither wins", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    mkdirSync(join(root, "sources", "docs"), { recursive: true });
+    for (const name of ["a.yaml", "b.yaml"]) {
+      writeFileSync(join(root, "sources", name), "id: docs\ntype: fs\nroot: sources/docs\n");
+    }
+    const [a, b] = ["a.yaml", "b.yaml"].map((name) => join("sources", name));
+    output = [];
+
+    expect(await cli("doctor")).toBe(1);
+    expect(stdout()).toContain(`docs — fs — ${a}`);
+    expect(stdout()).toContain(`docs — fs — ${b}`);
+    expect(stdout()).toContain(`id \`docs\` is also declared in ${b}`);
+    expect(stdout()).toContain(`id \`docs\` is also declared in ${a}`);
+
+    // The checks already fail here; doctor must not be the one command that passes.
+    await cli("reindex");
+    for (const command of ["lint", "drift"]) {
+      const result = spawnCli({}, command);
+      expect(result.code).toBe(1);
+      expect(result.out).toContain(`id \`docs\` is also declared in ${b}`);
+      expect(result.out).toContain(`id \`docs\` is also declared in ${a}`);
+    }
+  });
+
+  test("a declaration missing only its type still claims its id", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    mkdirSync(join(root, "sources", "docs"), { recursive: true });
+    writeFileSync(join(root, "sources", "a.yaml"), "id: docs\ntype: fs\nroot: sources/docs\n");
+    writeFileSync(join(root, "sources", "b.yaml"), "id: docs\n");
+    const [a, b] = ["a.yaml", "b.yaml"].map((name) => join("sources", name));
+    output = [];
+
+    expect(await cli("doctor")).toBe(1);
+    expect(stdout()).toContain("needs a non-empty `type`");
+    expect(stdout()).toContain(`id \`docs\` is also declared in ${b}`);
+    expect(stdout()).toContain(`id \`docs\` is also declared in ${a}`);
+
+    await cli("reindex");
+    const lint = spawnCli({}, "lint");
+    expect(lint.code).toBe(1);
+    expect(lint.out).toContain(`id \`docs\` is also declared in ${b}`);
+    expect(lint.out).toContain(`id \`docs\` is also declared in ${a}`);
   });
 });

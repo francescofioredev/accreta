@@ -57,7 +57,28 @@ describe("drift counts each page once", () => {
   test("a page with footnotes pinned at two stale revisions", () => {
     const noaa = report("noaa", [stale("b0", "old", true), stale("b1", "new", true)]);
     expect(toJson([noaa]).pages_in_doubt).toBe(1);
-    expect(text(noaa)).toContain("1 page(s) may have drifted");
+    expect(text(noaa)).toContain("1 page(s) in doubt");
+  });
+
+  test("a page pinned at revisions in doubt, moved and untouched counts only as in doubt", () => {
+    const at = (revision: string, change: CitedChange["change"]): StaleRevision => ({
+      ...stale(revision, revision, true),
+      citations: [{ ...touched(revision, revision), change }],
+    });
+    const noaa = report("noaa", [
+      at("b0", { status: "untouched" }),
+      at("b1", { status: "moved", locator: "L6-L8" }),
+      at("b2", { status: "touched" }),
+    ]);
+    expect(toJson([noaa]).pages_in_doubt).toBe(1);
+    const out = text(noaa);
+    expect(out).toContain("  1 page(s) in doubt:");
+    expect(out).not.toContain("to re-pin");
+    expect(out).not.toContain("behind the source");
+    // Every revision's detail stays, under the one group.
+    expect(out).toContain(`${PAGE} (cited at b0) — cited lines unchanged`);
+    expect(out).toContain(`${PAGE} (cited at b1) — re-pin note.md#L5-L7 → L6-L8`);
+    expect(out).toContain(`${PAGE} (cited at b2) — 1 cited range(s) changed`);
   });
 
   test("a page no source can place, twice", () => {
@@ -68,6 +89,18 @@ describe("drift counts each page once", () => {
     const json = toJson([unplaced("ipcc", "a0"), unplaced("noaa", "b0")], new Set());
     expect(json.pages_unplaceable).toBe(1);
     expect(json.pages_newly_unplaceable).toBe(1);
+  });
+
+  test("a page under two revisions one source cannot place", () => {
+    const noaa: DriftReport = {
+      ...report("noaa", []),
+      unresolvable: [
+        { revision: "b0", pages: [PAGE], citedOnly: [PAGE] },
+        { revision: "b1", pages: [PAGE], citedOnly: [PAGE] },
+      ],
+    };
+    expect(toJson([noaa]).pages_unplaceable).toBe(1);
+    expect(text(noaa)).toContain("1 page(s) rest on 2 revision(s) this source cannot place:");
   });
 });
 
@@ -106,6 +139,17 @@ describe("a page that only cites the source", () => {
     const page = toJson([noaa]).sources[0]!.in_doubt[0]!;
     expect(page.cited_at).toBe("b1");
     expect(page.verified_at).toBeUndefined();
+  });
+
+  test("is labelled cited at under a revision the source cannot place", () => {
+    const noaa: DriftReport = {
+      ...report("noaa", []),
+      unresolvable: [{ revision: "b0", pages: ["knowledge/own.md", PAGE], citedOnly: [PAGE] }],
+    };
+    const out = text(noaa);
+    expect(out).toContain("2 page(s) rest on 1 revision(s) this source cannot place:\n    b0:");
+    expect(out).toContain("knowledge/own.md (verified)");
+    expect(out).toContain(`${PAGE} (cited)`);
   });
 
   test("a per-file source names only the changed files it cites", () => {

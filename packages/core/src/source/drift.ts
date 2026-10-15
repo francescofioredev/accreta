@@ -351,6 +351,7 @@ interface CitationsInto {
 /** Every citation into this source, whichever page holds it. */
 function citationsInto(db: Database, sourceId: string, ownRows: PageRow[]): CitationsInto {
   requireTable(db, "citations");
+  requireTable(db, "canonical_cites");
   const own = new Map<string, Cite[]>();
   const lent: Lent = new Map();
   const unpinnedCites: UnpinnedCitation[] = [];
@@ -372,18 +373,17 @@ function citationsInto(db: Database, sourceId: string, ownRows: PageRow[]): Cita
     });
   }
 
-  // SQL only narrows to values containing "id:"; parsing decides, so drift reads them as lint does.
+  // The build keeps only values parseCitation attributes to a source other than the page's.
   const canonicalRows = db
     .prepare(
-      `SELECT path, canonical_source FROM pages
-       WHERE (source IS NULL OR source <> $source) AND instr(canonical_source, $source || ':') > 0`,
+      `SELECT page_path AS path, canonical_source FROM canonical_cites WHERE source = $source`,
     )
     // Named, not ?1: Node 22.16's node:sqlite refuses numbered parameters with "column index out of range".
     .all({ $source: sourceId }) as { path: string; canonical_source: string }[];
   const canonical = new Map<string, Cite>();
   for (const row of canonicalRows) {
     const parsed = parseCitation(row.canonical_source);
-    if (ownPages.has(row.path) || parsed?.sourceId !== sourceId) continue;
+    if (parsed?.sourceId !== sourceId) continue;
     const locator = parsed.locator ?? null;
     canonical.set(row.path, { footnote: null, revision: null, path: parsed.path, locator });
   }

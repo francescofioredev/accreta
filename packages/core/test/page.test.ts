@@ -61,6 +61,13 @@ describe("parsePage", () => {
     expect(page.frontmatterError).toContain("scalar");
   });
 
+  test("a recursive YAML alias is recorded, not passed on as fields", () => {
+    const page = parsePage("---\n&top\ntype: note\nself: *top\n---\n\n# R\n", "fb");
+    expect(page.frontmatter).toEqual({});
+    expect(page.title).toBe("R");
+    expect(page.frontmatterError).toContain("cannot be stored as JSON");
+  });
+
   test("aliases survive as a list", () => {
     const page = parsePage(
       '---\naliases: ["radiative forcing", "climate forcing"]\n---\n\n# X\n',

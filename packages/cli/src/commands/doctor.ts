@@ -1,8 +1,16 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { checkConfig, compileCitationTemplate, DEFAULT_CONFIG, sqliteSupport } from "@accreta/core";
-import { KNOWN_TYPES, kindFor, readDeclarationFiles, stateDirFor } from "@accreta/adapters";
+import {
+  clashingIds,
+  declaredId,
+  KNOWN_TYPES,
+  kindFor,
+  readDeclarationFiles,
+  stateDirFor,
+} from "@accreta/adapters";
 import { CONFIG_FILENAME, findWorkspace } from "../workspace.ts";
+import { reportMcp } from "./mcp-config.ts";
 import { reportPreflight, type CommandContext } from "./shared.ts";
 import { compareVersions, findInstalledSkills, SKILL_NAME } from "./skill-floor.ts";
 
@@ -41,7 +49,7 @@ export async function doctor(ctx: CommandContext, version: string): Promise<numb
     ctx.out("  unpinned: provenance.format has no {rev}, so no footnote names its revision");
     ctx.out(`    → add {rev} (default: "${DEFAULT_CONFIG.provenanceFormat}")`);
     ctx.out(
-      "    → then re-cite existing footnotes with `accreta cite`: until then they may not read as citations",
+      "    → then re-cite every existing footnote with `accreta cite`: lint lists each one with a #locator as unparseable-citation, but one without can read as prose and drop out of lint and drift",
     );
   }
 
@@ -63,21 +71,29 @@ export async function doctor(ctx: CommandContext, version: string): Promise<numb
   );
 
   const declarations = readDeclarationFiles(workspace.root);
+  const clashes = clashingIds(declarations);
   ctx.out(`\nsources (${declarations.length})`);
   if (declarations.length === 0) ctx.out("  none declared in sources/");
 
   for (const entry of declarations) {
+    const { file } = entry;
+    const id = declaredId(entry);
+    const others =
+      id === undefined ? [] : (clashes.get(id)?.filter((other) => other !== file) ?? []);
+    const declaration = "error" in entry ? undefined : entry.declaration;
+    const kind = declaration && kindFor(declaration.type);
     if ("error" in entry) {
-      ctx.out(`  ${entry.file}`);
+      ctx.out(`  ${file}`);
       ctx.out(`    no: not a source declaration — ${entry.error}`);
-      exitCode = 1;
-      continue;
+    } else {
+      ctx.out(`  ${entry.declaration.id} — ${entry.declaration.type} — ${file}`);
+      if (!kind) ctx.out(`    no: unknown source type. Known: ${KNOWN_TYPES.join(", ")}.`);
     }
-    const { declaration } = entry;
-    ctx.out(`  ${declaration.id} — ${declaration.type}`);
-    const kind = kindFor(declaration.type);
-    if (!kind) {
-      ctx.out(`    no: unknown source type. Known: ${KNOWN_TYPES.join(", ")}.`);
+    if (others.length > 0) {
+      ctx.out(`    no: id \`${id}\` is also declared in ${others.join(", ")}`);
+      ctx.out("      → give each a distinct id or remove all but one");
+    }
+    if (!declaration || !kind || others.length > 0) {
       exitCode = 1;
       continue;
     }
@@ -92,12 +108,7 @@ export async function doctor(ctx: CommandContext, version: string): Promise<numb
     if (preflight.reachable === "no") exitCode = 1;
   }
 
-  ctx.out("\nmcp");
-  ctx.out(
-    mentionsAccretaServer(workspace.root)
-      ? "  ok: .mcp.json in this workspace names accreta's server"
-      : "  unknown: no .mcp.json here names accreta's server — the agent may be configured elsewhere",
-  );
+  if (reportMcp(ctx, workspace.root)) exitCode = 1;
 
   reportSkill(ctx, version);
 
@@ -137,19 +148,5 @@ function reportSkill(ctx: CommandContext, version: string): void {
     } else {
       ctx.out(`  ok: ${skill.where} found, requires ${skill.floor.requires}`);
     }
-  }
-}
-
-/** Only this workspace's file. An agent configured elsewhere is invisible, and saying so is the point. */
-function mentionsAccretaServer(root: string): boolean {
-  const path = join(root, ".mcp.json");
-  if (!existsSync(path)) return false;
-  try {
-    const parsed = JSON.parse(readFileSync(path, "utf-8")) as {
-      mcpServers?: Record<string, unknown>;
-    };
-    return Object.keys(parsed.mcpServers ?? {}).some((name) => name.includes("accreta"));
-  } catch {
-    return false;
   }
 }

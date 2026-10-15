@@ -1,11 +1,21 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   buildIndex,
   DEFAULT_CONFIG,
   detectDrift,
+  lintCitations,
   openIndex,
   pageChanges,
   UnknownRevisionError,
@@ -670,6 +680,83 @@ describe("drift over GitSource names the page whose cited lines changed", () => 
       "L300-L302",
     );
     expect(rank).toBe("changed");
+  });
+});
+
+// Git versions a link's text, so an edit behind it lists only the target and never drifts the page.
+describe("lint over GitSource asks a symlink citation to name its target", () => {
+  let kb = "";
+
+  beforeEach(async () => {
+    kb = mkdtempSync(join(tmpdir(), "accreta-git-kb-"));
+    write("docs/real.md", lines(12));
+    symlinkSync("real.md", join(root, "docs", "link.md"));
+    symlinkSync("docs", join(root, "alias"));
+    writeFileSync(join(kb, "outside.md"), lines(12));
+    symlinkSync(join(kb, "outside.md"), join(root, "docs", "away.md"));
+    await commit("first");
+  });
+
+  afterEach(() => {
+    rmSync(kb, { recursive: true, force: true });
+  });
+
+  async function lintCiting(path: string) {
+    const git = source();
+    const from = await git.revision();
+    mkdirSync(join(kb, "knowledge"), { recursive: true });
+    writeFileSync(
+      join(kb, "knowledge", "page.md"),
+      `---\ntype: note\nsource: repo\nlast_verified_revision: ${from}\n---\n\nA claim.[^a]\n\n[^a]: repo @ ${from} · ${path}#L5-L8\n`,
+    );
+    const indexPath = join(kb, "index.sqlite");
+    buildIndex({ root: kb, config: DEFAULT_CONFIG, indexPath });
+    const db = openIndex(indexPath);
+    try {
+      return (await lintCitations(db, new Map([["repo", git]]))).findings;
+    } finally {
+      db.close();
+    }
+  }
+
+  test("a symlinked file", async () => {
+    const [finding] = await lintCiting("docs/link.md");
+    expect(finding).toMatchObject({ kind: "citation-path-missing", path: "knowledge/page.md" });
+    expect(finding?.detail).toContain('"docs/real.md"');
+  });
+
+  test("a symlinked directory on the way", async () => {
+    const [finding] = await lintCiting("alias/real.md");
+    expect(finding).toMatchObject({ kind: "citation-path-missing", path: "knowledge/page.md" });
+    expect(finding?.detail).toContain('"docs/real.md"');
+  });
+
+  test("a symlink out of the source names no target", async () => {
+    const [finding] = await lintCiting("docs/away.md");
+    expect(finding).toMatchObject({ kind: "citation-path-missing", path: "knowledge/page.md" });
+    expect(finding?.detail).toContain("symlink to nothing");
+    expect(finding?.detail).not.toContain("outside.md");
+  });
+
+  test("a symlink to a directory is not told to cite the directory", async () => {
+    const [finding] = await lintCiting("alias");
+    expect(finding).toMatchObject({ kind: "citation-path-missing", path: "knowledge/page.md" });
+    expect(finding?.detail).toContain("symlink to a directory");
+    expect(finding?.detail).not.toContain('cite "docs"');
+  });
+
+  test("a name in another Unicode normalisation says so", async () => {
+    const [nfc, nfd] = ["docs/café.md".normalize("NFC"), "docs/café.md".normalize("NFD")];
+    write(nfc, lines(12));
+    await commit("add an accented name");
+    // Only a normalisation-insensitive disk (APFS) resolves the other form at all.
+    if (!existsSync(join(root, nfd))) return;
+    const [finding] = await lintCiting(nfd);
+    expect(finding?.detail).toContain("Unicode normalisation");
+  });
+
+  test("the target itself is found", async () => {
+    expect(await lintCiting("docs/real.md")).toEqual([]);
   });
 });
 
