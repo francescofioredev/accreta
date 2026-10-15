@@ -24,7 +24,12 @@ import {
   type SourceAdapter,
   type UnresolvableRevision,
 } from "@accreta/core";
-import { countUnchecked, unloadedFindings, type UnloadedSource } from "@accreta/adapters";
+import {
+  countUnchecked,
+  noSourceNamed,
+  unloadedFindings,
+  type UnloadedSource,
+} from "@accreta/adapters";
 import type { GetPageOutput, HitOutput, PageOutput, SearchPagesOutput } from "./schemas.ts";
 
 /** A handle a call holds across awaits; it stays open until `release`, even past a rebuild. */
@@ -348,7 +353,7 @@ async function checkDrift(ctx: ToolContext, db: Database, input: { source?: stri
   if (adapters.length === 0) {
     return {
       message: input.source
-        ? `No source named "${input.source}". Known: ${[...ctx.sources.keys()].join(", ") || "none"}.`
+        ? noSourceNamed(input.source, [...ctx.sources.keys()], ctx.unloadedSources)
         : unloaded_sources.length > 0
           ? "No declared source loaded; see unloaded_sources."
           : "No sources are declared.",
