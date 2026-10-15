@@ -275,6 +275,10 @@ an interruption to work around.
 - **inconsistent supersession** — pages that supersede one another in a loop, or a replacement
   only one of its two pages records. Resolve it by checking the source; never add the missing
   half just to clear the finding.
+- **shared aliases** — a name that two or more pages claim, as an alias or as one page's alias
+  and another's title, so `canonical` has no single answer for it. Keep the alias on the page
+  that defines the concept; if two pages really do, that is a contradiction to record. The finding
+  names at most 20 pages; run `canonical <name>` for the full list.
 
 It also prints how many citations it could not check, grouped by why. That is not a finding:
 nobody looked. The reason may be a source accreta cannot reach, a git file with uncommitted

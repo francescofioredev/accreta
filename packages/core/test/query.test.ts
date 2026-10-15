@@ -400,6 +400,11 @@ describe("an index built before a table existed", () => {
     );
   });
 
+  test("lint says to reindex when aliases is missing", () => {
+    dropTable("aliases");
+    expect(() => lint(db, config)).toThrow(StaleIndexError);
+  });
+
   test("citation readers say to reindex when citations is missing", async () => {
     dropTable("citations");
     expect(() => countPagesCiting(db, "s")).toThrow(
@@ -484,6 +489,58 @@ describe("lint", () => {
     const kinds = findings.map((f) => f.kind);
     expect(kinds).toContain("missing-provenance");
     expect(kinds).toContain("unverified-page");
+  });
+
+  test("an alias declared by two pages is one finding naming both (#263)", () => {
+    writePage("a.md", '---\ntype: note\naliases: ["tenant override"]\n---\n\n# A\n');
+    writePage("b.md", '---\ntype: note\naliases: ["Tenant Override "]\n---\n\n# B\n');
+    reindex();
+    expect(findCanonical(db, "tenant override", config)).toHaveLength(2);
+    const shared = lint(db, config).findings.filter((f) => f.kind === "shared-alias");
+    expect(shared).toHaveLength(1);
+    expect(shared[0]?.path).toBe("knowledge/a.md");
+    expect(shared[0]?.detail).toContain('"tenant override"');
+    expect(shared[0]?.detail).toContain("knowledge/a.md (alias)");
+    expect(shared[0]?.detail).toContain("knowledge/b.md (alias)");
+  });
+
+  test("a decomposed alias collides with a composed one, as canonical matches them", () => {
+    writePage("a.md", '---\ntype: note\naliases: ["\u00c9t\u00e9"]\n---\n\n# A\n');
+    writePage("b.md", '---\ntype: note\naliases: ["E\u0301te\u0301"]\n---\n\n# B\n');
+    reindex();
+    expect(lint(db, config).findings.filter((f) => f.kind === "shared-alias")).toHaveLength(1);
+  });
+
+  test("an alias equal to another page's title is shared, because canonical returns both", () => {
+    writePage("a.md", '---\ntype: note\naliases: ["Forcing"]\n---\n\n# A\n');
+    writePage("b.md", "---\ntype: note\n---\n\n# Forcing\n");
+    reindex();
+    expect(findCanonical(db, "forcing", config)).toHaveLength(2);
+    const shared = lint(db, config).findings.filter((f) => f.kind === "shared-alias");
+    expect(shared.map((f) => f.detail)).toEqual([
+      '"forcing" names 2 pages, so canonical has no single answer: knowledge/a.md (alias), knowledge/b.md (title)',
+    ]);
+  });
+
+  test("the finding points at the alias page, not an alphabetically earlier title-only page", () => {
+    writePage("b.md", "---\ntype: note\n---\n\n# Forcing\n");
+    writePage("z.md", '---\ntype: note\naliases: ["forcing"]\n---\n\n# Z\n');
+    reindex();
+    const shared = lint(db, config).findings.filter((f) => f.kind === "shared-alias");
+    expect(shared.map((f) => f.path)).toEqual(["knowledge/z.md"]);
+  });
+
+  test("an alias equal to its own page's title, or repeated on one page, is not shared", () => {
+    writePage("a.md", '---\ntype: note\naliases: ["Forcing", "forcing"]\n---\n\n# Forcing\n');
+    reindex();
+    expect(lint(db, config).findings.filter((f) => f.kind === "shared-alias")).toEqual([]);
+  });
+
+  test("two pages sharing only a title are left alone: no alias is involved", () => {
+    writePage("a.md", "---\ntype: note\n---\n\n# Overview\n");
+    writePage("b.md", "---\ntype: note\n---\n\n# Overview\n");
+    reindex();
+    expect(lint(db, config).findings.filter((f) => f.kind === "shared-alias")).toEqual([]);
   });
 
   test("a well-formed page produces no findings", () => {
