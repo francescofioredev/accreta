@@ -29,10 +29,13 @@ let workspace = "";
 let runnerTemp = "";
 let preloadMarker = "";
 let gitTrace = "";
+let headSha = "";
+let baseSha = "";
 
-function git(...args: string[]): void {
+function git(...args: string[]): string {
   const proc = Bun.spawnSync(["git", ...args], { cwd: workspace });
   if (proc.exitCode !== 0) throw new Error(proc.stderr.toString());
+  return proc.stdout.toString().trim();
 }
 
 /** The checkout's own files, written where Bun would pick them up if started there. */
@@ -50,8 +53,8 @@ function expand(value: string): string {
   const known: Record<string, string> = {
     "runner.temp": runnerTemp,
     "github.action_path": ACTION_PATH,
-    "github.event.pull_request.head.sha": "",
-    "github.event.pull_request.base.sha": "",
+    "github.event.pull_request.head.sha": headSha,
+    "github.event.pull_request.base.sha": baseSha,
     "inputs.working-directory": KB,
     "inputs.github-token": "test-token",
     "inputs.comment-author": "github-actions[bot]",
@@ -100,6 +103,12 @@ beforeAll(() => {
   git("init", "-q", "-b", "main");
   git("add", "-A");
   git("-c", "user.email=t@example.invalid", "-c", "user.name=Test", "commit", "-qm", "kb");
+  baseSha = git("rev-parse", "HEAD");
+  // The base worktree the action checks out holds the plant too.
+  writeFileSync(join(workspace, "change.txt"), "pull request\n");
+  git("add", "-A");
+  git("-c", "user.email=t@example.invalid", "-c", "user.name=Test", "commit", "-qm", "change");
+  headSha = git("rev-parse", "HEAD");
 });
 
 afterAll(() => {
@@ -127,6 +136,9 @@ test("no step of the action lets the checkout configure Bun", () => {
     const step = action.runs.steps.find((s) => s.name === name)!;
     const { code, output } = runStep(step);
     expect({ name, code, output }).toEqual({ name, code: 0, output: expect.any(String) });
+    // Both mean the base-branch run did not happen, which is the path that used to `cd` into the base checkout.
+    expect(output).not.toContain("failed on the base branch");
+    expect(output).not.toContain("has no knowledge base");
   }
 
   expect(readFileSync(join(runnerTemp, "output"), "utf-8")).toContain("pages-in-doubt=");

@@ -29,6 +29,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false # the action never pushes, so the token need not sit in .git/config
       - uses: francescofioredev/accreta@main # pin a release tag or commit once one ships the action
         with:
           working-directory: . # where accreta.config.yaml lives
@@ -125,8 +126,13 @@ knowledge base through `ACCRETA_ROOT`, so neither file in the repository configu
 `working-directory` must therefore be the directory that holds `accreta.config.yaml`, not one
 below it.
 
-Git still runs inside the checkout, so anything that configures git through the runner's
-environment, such as `GIT_CONFIG_*` set by an earlier step, still reaches it.
+Git still runs inside the checkout, and Bun still reads the runner's environment and home
+directory: a global `$HOME/.bunfig.toml` or `$XDG_CONFIG_HOME/.bunfig.toml`, and variables
+reaching it through `GITHUB_ENV` or `GIT_CONFIG_*`, all set by an earlier step, still apply.
+
+This holds for consumers who reference `owner/repo@ref`. This repository's own `drift.yml` uses
+`uses: ./`, so there the action, its scripts and its install come from the pull request's
+checkout.
 
 ## Limits
 

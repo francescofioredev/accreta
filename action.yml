@@ -125,7 +125,7 @@ runs:
         DRIFT_KEY: ${{ inputs.working-directory }}
         DRIFT_AUTHOR: ${{ inputs.comment-author }}
         DRIFT_CREATE: ${{ inputs.comment-when-clean == 'true' || steps.drift.outputs.attention != '0' }}
-      # Started outside the checkout, like Check drift: this step holds the write token.
+      # Started outside the checkout, like Check drift: this step holds the write token, and a default checkout's git config does too.
       run: |
         cd "$(mktemp -d "$RUNNER_TEMP/accreta-cwd-XXXXXX")"
         bun --no-env-file "$GITHUB_ACTION_PATH/scripts/drift-comment.ts"
