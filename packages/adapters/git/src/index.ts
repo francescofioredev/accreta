@@ -1,6 +1,5 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { constants } from "node:os";
 import { relative, resolve, sep } from "node:path";
 import {
   countLines,
@@ -13,6 +12,9 @@ import {
   type LocatorChange,
   type SourceAdapter,
 } from "@accreta/core";
+import { executable, run } from "./spawn.ts";
+
+export { TimeoutError } from "./spawn.ts";
 
 export interface GitSourceOptions {
   id: string;
@@ -27,32 +29,73 @@ export interface GitSourceOptions {
   paths?: readonly string[];
 }
 
-function gitEnv(): NodeJS.ProcessEnv {
+// 40x the slowest call measured in a 50,000-file, 5,000-commit repo (status, 1.5 s; rev-list 42 ms, warm).
+// A hung filter must not hang `drift`.
+const DEFAULT_TIMEOUT_MS = 60_000;
+
+function timeoutMs(): number {
+  const raw = process.env.ACCRETA_GIT_TIMEOUT_MS;
+  if (raw === undefined || raw === "") return DEFAULT_TIMEOUT_MS;
+  const ms = Number(raw);
+  if (!Number.isInteger(ms) || ms <= 0) {
+    throw new Error(`ACCRETA_GIT_TIMEOUT_MS must be a whole number of milliseconds, not "${raw}"`);
+  }
+  return ms;
+}
+
+// Each points git at another repository, or another repository's objects; a hook sets the first three.
+// GIT_NAMESPACE stays: it scopes only transfer commands, and changed none of these calls' output.
+const FOREIGN_REPOSITORY = [
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_INDEX_FILE",
+  "GIT_COMMON_DIR",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  // These clash with --literal-pathspecs, or change what a declared `paths` pattern matches.
+  "GIT_GLOB_PATHSPECS",
+  "GIT_NOGLOB_PATHSPECS",
+  "GIT_ICASE_PATHSPECS",
+  "GIT_LITERAL_PATHSPECS",
+];
+
+function gitEnv(extraEnv: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   // accreta only reads; without this `status` rewrites .git/index and a user's commit can hit index.lock.
-  const env: NodeJS.ProcessEnv = { ...process.env, GIT_OPTIONAL_LOCKS: "0" };
+  const env: NodeJS.ProcessEnv = { ...process.env, GIT_OPTIONAL_LOCKS: "0", ...extraEnv };
   // GIT_DIFF_OPTS would override the -U0 that hunk parsing depends on.
   delete env.GIT_DIFF_OPTS;
+  for (const name of FOREIGN_REPOSITORY) delete env[name];
   return env;
 }
 
-/** Run a git command in the repository, returning stdout. */
-function git(root: string, args: string[]): Promise<string> {
-  const env = gitEnv();
+// Trust: the source's .git/config, and all it includes, runs as code; the timeout bounds a hang only.
+// fsmonitor runs in status, ls-files and check-attr and only saves time; filters decide what is on disk.
+// safe.bareRepository: a git dir inside the corpus must not lend its config; git before 2.38 ignores it.
+const HARDENED = ["-c", "core.fsmonitor=false", "-c", "safe.bareRepository=explicit"];
 
-  return new Promise((resolveOutput, reject) => {
-    // Streamed, not execFile: its maxBuffer turns a large diff into an error.
-    const child = spawn("git", args, { cwd: root, env, stdio: ["ignore", "pipe", "pipe"] });
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
-    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
-    child.on("error", reject);
-    child.on("close", (code, signal) => {
-      if (code === 0) return resolveOutput(Buffer.concat(stdout).toString("utf-8"));
-      const exitCode = code ?? 128 + (signal ? constants.signals[signal] : 0);
-      reject(new GitCommandError(args, exitCode, Buffer.concat(stderr).toString("utf-8").trim()));
-    });
+/** Run a git command in the repository, returning stdout. */
+async function git(
+  root: string,
+  args: string[],
+  extraEnv: NodeJS.ProcessEnv = {},
+): Promise<string> {
+  const env = gitEnv(extraEnv);
+  const file = executable("git");
+  if (file === undefined) {
+    throw Object.assign(new Error("spawn git ENOENT"), { code: "ENOENT", path: "git" });
+  }
+  // The subcommand only: locate's details must name no path.
+  const command = `git ${args.find((arg) => !arg.startsWith("-")) ?? ""}`;
+  const { exitCode, signal, stdout, stderr } = await run(file, [...HARDENED, ...args], {
+    cwd: root,
+    env,
+    timeoutMs: timeoutMs(),
+    command,
   });
+  // Not a GitCommandError: git said nothing about the repository, so no caller may read it as an answer.
+  if (signal !== null) throw new Error(`${command} was killed by ${signal}`);
+  if (exitCode === 0) return stdout.toString("utf-8");
+  throw new GitCommandError(args, exitCode, stderr.toString("utf-8").trim());
 }
 
 export class GitCommandError extends Error {
@@ -77,18 +120,27 @@ export async function isWorkingTree(root: string): Promise<boolean> {
   try {
     await git(root, ["rev-parse", "--git-dir"]);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    // Git that cannot start or times out has not said the root is no repository.
+    if (error instanceof GitCommandError) return false;
+    throw error;
   }
 }
 
 function gitSync(root: string, args: string[], stdout: "pipe" | "ignore" = "pipe") {
-  const run = spawnSync("git", args, {
+  const file = executable("git");
+  if (file === undefined) return { status: null, out: "" };
+  // Synchronous, so no process group: these calls run no filter or fsmonitor that could outlive git.
+  const result = spawnSync(file, [...HARDENED, ...args], {
     cwd: root,
     env: gitEnv(),
     stdio: ["ignore", stdout, "ignore"],
+    timeout: timeoutMs(),
+    killSignal: "SIGKILL",
   });
-  return { status: run.status, out: run.stdout?.toString("utf-8") ?? "" };
+  // A timeout or a signal is no answer, like a git that cannot start: null, never an exit code.
+  const status = result.signal === null ? result.status : null;
+  return { status, out: status === null ? "" : (result.stdout?.toString("utf-8") ?? "") };
 }
 
 /**
@@ -198,10 +250,13 @@ export class GitSource implements SourceAdapter {
    */
   async knowsRevision(revision: string): Promise<boolean> {
     try {
-      await git(this.root, ["cat-file", "-e", `${revision}^{commit}`]);
+      // A promisor remote would fetch a frontmatter revision. Env var, not the flag: an older git ignores it
+      // instead of failing; there is no guard on a git without it.
+      await git(this.root, ["cat-file", "-e", `${revision}^{commit}`], { GIT_NO_LAZY_FETCH: "1" });
       return true;
-    } catch {
-      return false;
+    } catch (error) {
+      if (error instanceof GitCommandError) return false;
+      throw error;
     }
   }
 
@@ -214,7 +269,17 @@ export class GitSource implements SourceAdapter {
 
     // Citations name a renamed file's old path; -z stops git quoting a non-ASCII one.
     // --relative: citations name paths from the root, not the repository top.
-    const args = ["diff", "--name-only", "-z", "--no-renames", "--relative", revision, "HEAD"];
+    // --end-of-options: the revision comes from page frontmatter, so it must never read as a flag.
+    const args = [
+      "diff",
+      "--name-only",
+      "-z",
+      "--no-renames",
+      "--relative",
+      "--end-of-options",
+      revision,
+      "HEAD",
+    ];
     if (this.paths.length > 0) args.push("--", ...this.paths);
     const out = await git(this.root, args);
     return out.split("\0").filter(Boolean).toSorted();
@@ -252,6 +317,7 @@ export class GitSource implements SourceAdapter {
       "--no-textconv",
       // A `-diff` attribute or a NUL byte would print "Binary files differ" and no hunks.
       "--text",
+      "--end-of-options",
       revision,
       "HEAD",
       "--",
