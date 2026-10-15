@@ -346,4 +346,7 @@ test("a reopen after a swap refuses an index of another format", () => {
   renameSync(older, indexPath());
 
   expect(() => ctx.db).toThrow(StaleIndexError);
+
+  reindex();
+  expect(searchPagesTool(ctx, { query: "alpha" }).count).toBe(1);
 });
