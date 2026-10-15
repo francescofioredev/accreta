@@ -7,6 +7,7 @@ import {
   type CitedChange,
   type DriftReport,
   type PageChange,
+  type RefusedCitation,
   type StaleRevision,
   type UnresolvableRevision,
 } from "@accreta/core";
@@ -298,19 +299,36 @@ function printStale(ctx: Pick<CommandContext, "out">, label: string, rows: Stale
   if (rows.length === 0) return;
   ctx.out(`  ${distinct(rows.map((row) => row.page))} ${label}:`);
   for (const { entry, page, doubt } of rows) {
-    const why = doubt ? ` — ${explainDoubt(doubt, entry, page)}` : "";
+    const refused = entry.refused?.[page];
+    const why = doubt
+      ? ` — ${explainDoubt(doubt, entry, page)}`
+      : refused
+        ? ` — ${refusedText(refused)}`
+        : "";
     ctx.out(`    ${printable(page)} (${atLabel(entry, page)} ${printable(entry.revision)})${why}`);
   }
 }
+
+const refusedText = (refused: readonly { refused: string }[]) =>
+  `the source refuses ${refused.map((c) => printable(c.refused)).join("; ")}`;
 
 function explainDoubt(doubt: PageChange, entry: StaleRevision, page: string): string {
   const mine = (entry.citations ?? []).filter((c) => c.page === page);
   const count = (status: string) => mine.filter((c) => c.change.status === status).length;
   switch (doubt) {
     case "changed": {
-      const changed = `${count("touched") + count("unknown")} cited range(s) changed`;
+      const refused = mine.filter(
+        (c): c is RefusedCitation & CitedChange => c.refused !== undefined,
+      );
+      const ranges = count("touched") + count("unknown") - refused.length;
       const moved = mine.flatMap(repinText);
-      return moved.length > 0 ? `${changed}; re-pin ${moved.join(", ")}` : changed;
+      return [
+        ranges > 0 ? `${ranges} cited range(s) changed` : "",
+        refused.length > 0 ? refusedText(refused) : "",
+        moved.length > 0 ? `re-pin ${moved.join(", ")}` : "",
+      ]
+        .filter(Boolean)
+        .join("; ");
     }
     case "moved":
       return `re-pin ${mine.flatMap(repinText).join(", ")}`;
@@ -331,6 +349,8 @@ interface DoubtedPage {
   citations: DoubtedCitation[] | null;
   /** The changed files; for a page with `cited_at`, only those it cites. */
   changed_paths?: string[];
+  /** Instead, for a page with `cited_at` here only because the source refuses its citations. */
+  refused?: RefusedCitation[];
   /** With `--base`, for a page the source can only judge per file. */
   on_base?: boolean;
 }
@@ -342,6 +362,8 @@ interface DoubtedCitation {
   /** The revision the locator's lines belong to. */
   cited_at: string;
   change: "touched" | "unknown";
+  /** Why the source refuses the place, when that is why its change is unknown. */
+  refused?: string;
   /** With `--base`: the base branch already had this citation in doubt. */
   on_base?: boolean;
 }
@@ -551,11 +573,14 @@ function verdict(report: DriftReport, base?: BaseKeys): SourceVerdict {
         ? { cited_at: entry.revision }
         : { verified_at: entry.revision };
       if (level === null) {
+        const refused = entry.refused?.[page];
         inDoubt.push({
           page,
           ...at,
           citations: null,
-          changed_paths: entry.citedPaths?.[page] ?? entry.changedPaths,
+          ...(refused
+            ? { refused }
+            : { changed_paths: entry.citedPaths?.[page] ?? entry.changedPaths }),
           ...(base ? { on_base: base.has(fileKey(id, page)) } : {}),
         });
       } else if (level === "changed") {
@@ -569,6 +594,7 @@ function verdict(report: DriftReport, base?: BaseKeys): SourceVerdict {
               locator: c.locator,
               cited_at: c.revision,
               change: c.change.status as DoubtedCitation["change"],
+              ...(c.refused === undefined ? {} : { refused: c.refused }),
             };
             if (base) cited.on_base = base.has(citationKey(id, page, cited));
             return cited;
@@ -821,25 +847,40 @@ function pagesHeadline(json: DriftJson, compared: boolean): string {
 function doubtRows(page: DoubtedPage, onBase: boolean): string[] {
   if (page.citations === null) {
     if ((page.on_base ?? false) !== onBase) return [];
+    const at = cellCode((page.verified_at ?? page.cited_at)!);
+    if (page.refused) {
+      return page.refused.map(
+        (c) => `| ${cellCode(page.page)} | ${cited(c)} | ${at} | ${refusedCell(c.refused)} |`,
+      );
+    }
     const paths = page.changed_paths ?? [];
     const shown = paths.slice(0, 5).map(cellCode);
     if (paths.length > 5) shown.push(`and ${paths.length - 5} more`);
     // A page of the source rests on all of it; one that only cites it, on the files it cites.
     const files = page.cited_at === undefined ? `any of ${shown.join(", ")}` : shown.join(", ");
     return [
-      `| ${cellCode(page.page)} | ${files} | ${cellCode((page.verified_at ?? page.cited_at)!)} | file changed; this source cannot tell lines |`,
+      `| ${cellCode(page.page)} | ${files} | ${at} | file changed; this source cannot tell lines |`,
     ];
   }
   return page.citations
     .filter((c) => (c.on_base ?? false) === onBase)
-    .map(
-      (c) =>
-        `| ${cellCode(page.page)} | ${cellCode(c.locator === null ? c.path : `${c.path}#${c.locator}`)}${footnote(c.footnote)} ` +
-        `| ${cellCode(c.cited_at)} | ${c.change === "touched" ? "changed" : "unknown: re-read it"} |`,
-    );
+    .map((c) => {
+      const change =
+        c.refused !== undefined
+          ? refusedCell(c.refused)
+          : c.change === "touched"
+            ? "changed"
+            : "unknown: re-read it";
+      return `| ${cellCode(page.page)} | ${cited(c)} | ${cellCode(c.cited_at)} | ${change} |`;
+    });
 }
 
 const footnote = (id: string | null) => (id === null ? "" : ` ${cellCode(`[^${id}]`)}`);
+
+const cited = (c: { path: string; locator: string | null; footnote: string | null }) =>
+  `${cellCode(c.locator === null ? c.path : `${c.path}#${c.locator}`)}${footnote(c.footnote)}`;
+
+const refusedCell = (why: string) => `refused: ${cellCode(why)}`;
 
 /** Keep the rows that fit the budget, newly-in-doubt ones first, each kind in order, and count the rest. */
 function fit(lines: Line[], limit: number): string {

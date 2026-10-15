@@ -56,7 +56,11 @@ function generate(n: number): string {
   mkdirSync(knowledge, { recursive: true });
   writeFileSync(join(root, "accreta.config.yaml"), CONFIG_YAML);
   const pick = () => SOURCES[Math.floor(rng() * SOURCES.length)]!;
-  const file = () => `docs/file-${Math.floor(rng() * 200)}.md#L1-L5`;
+  // 200 files by 50 ranges, so a cache of `locate` answers does not hide the corpus's size.
+  const file = () => {
+    const line = 1 + Math.floor(rng() * 50);
+    return `docs/file-${Math.floor(rng() * 200)}.md#L${line}-L${line + 4}`;
+  };
 
   for (let i = 0; i < n; i++) {
     const own = SOURCES[i % SOURCES.length]!;
