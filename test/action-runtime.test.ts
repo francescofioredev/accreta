@@ -140,6 +140,8 @@ test("no step of the action lets the checkout configure Bun", () => {
     expect(output).not.toContain("failed on the base branch");
     expect(output).not.toContain("has no knowledge base");
   }
+  // And the base-branch run did happen, or the checks above prove nothing.
+  expect(existsSync(join(runnerTemp, "accreta-base.json"))).toBe(true);
 
   expect(readFileSync(join(runnerTemp, "output"), "utf-8")).toContain("pages-in-doubt=");
   expect({

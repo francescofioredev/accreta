@@ -126,13 +126,13 @@ knowledge base through `ACCRETA_ROOT`, so neither file in the repository configu
 `working-directory` must therefore be the directory that holds `accreta.config.yaml`, not one
 below it.
 
-Git still runs inside the checkout, and Bun still reads the runner's environment and home
-directory: a global `$HOME/.bunfig.toml` or `$XDG_CONFIG_HOME/.bunfig.toml`, and variables
-reaching it through `GITHUB_ENV` or `GIT_CONFIG_*`, all set by an earlier step, still apply.
+The guarantee above holds only for consumers who reference `owner/repo@ref`. This repository's
+own `drift.yml` uses `uses: ./`, so there the action, its scripts and its install come from the
+pull request's checkout.
 
-This holds for consumers who reference `owner/repo@ref`. This repository's own `drift.yml` uses
-`uses: ./`, so there the action, its scripts and its install come from the pull request's
-checkout.
+What an earlier step sets still applies: Bun reads a global `$HOME/.bunfig.toml` or
+`$XDG_CONFIG_HOME/.bunfig.toml` and variables written to `GITHUB_ENV`, and Git, which still runs
+inside the checkout, reads `GIT_CONFIG_*`.
 
 ## Limits
 
