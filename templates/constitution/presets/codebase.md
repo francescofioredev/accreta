@@ -72,10 +72,13 @@ whole page.
 
 A decision record carries its status in frontmatter, as the record states it:
 `status: Accepted`, `Proposed`, `Deprecated`. Nothing indexes it yet, so a search cannot
-filter on it; say it in the summary when a reader needs it.
+filter on it; state it in the body too, which search does index. A status that names another
+record, such as "Superseded by 0012", still needs the matching link field: `status` is not in
+the link graph.
 
 Decisions amend each other far more often than they replace each other. When a later record
-changes an earlier one that still holds in part, link them with `amends` / `amended_by`.
+changes an earlier one that still holds in part, link them with `amends` / `amended_by`, on
+both pages; lint checks only the supersession pair, so nothing catches a missing half.
 Use `supersedes` / `superseded_by` only when the earlier decision no longer holds at all.
 
 ## Concepts are where the value is
