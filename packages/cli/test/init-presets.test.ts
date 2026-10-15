@@ -147,6 +147,14 @@ describe("decision records (#270)", () => {
   });
 });
 
+describe("preset vocabulary (#318)", () => {
+  test("no preset declares consumed_by, which would flip old pages", () => {
+    for (const vocabulary of Object.values(PRESET_VOCABULARY)) {
+      expect(vocabulary.linkFields ?? []).not.toContain("consumed_by");
+    }
+  });
+});
+
 describe("init with several presets", () => {
   test("the config is the union, in the order given and then each preset's own", async () => {
     expect(await cli("init", "--preset", "research,codebase")).toBe(0);

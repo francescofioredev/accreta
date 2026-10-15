@@ -167,7 +167,7 @@ export function createServer(ctx: ToolContext): McpServer {
     "find_consumers",
     {
       description:
-        "Impact analysis across the link graph. Returns both directions, distinguished by a `direction` field: 'inbound' means another page points at this one, 'outbound' means this page points elsewhere. Use for 'what depends on X' and 'where is X discussed'. Inline [[mentions]] are excluded unless include_inline is set." +
+        "Impact analysis across the link graph. Returns both directions, distinguished by a `direction` field: 'inbound' means another page points at this one, 'outbound' means this page points elsewhere. `direction` says which page declares the link, not who depends on whom; the meaning is in `kind` (a field on X such as `consumers` is outbound yet names what depends on X). Use for 'what is linked to X' and 'where is X discussed'. Inline [[mentions]] are excluded unless include_inline is set." +
         PAGE_DERIVED +
         PAGED,
       inputSchema: {

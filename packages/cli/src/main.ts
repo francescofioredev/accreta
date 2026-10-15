@@ -36,8 +36,9 @@ Usage: accreta <command> [arguments]
   search <query>           Full-text search (--type <type>, repeatable; --source <id>;
                            --limit <n>, 1-50, default 20)
   show <path|wikilink>     Print a page
-  consumers <path>         Links in and out of this page, by any field, not just a
-                           "consumers" field (--inline; --kind <field>, repeatable)
+  consumers <path>         Links in and out of this page, by any field (← declared
+                           elsewhere, → declared here; the field, not the arrow,
+                           says who calls whom) (--inline; --kind <field>, repeatable)
   canonical <term>         Resolve a term to the page that defines it
   cite <source>:<path>[#locator]...
                            The citation for a claim, at the source's current revision.

@@ -18,7 +18,7 @@ page_types:
 
 link_fields:
   - consumers # what calls this page's subject
-  - consumes # what this page's subject calls; the inverse of `consumers`
+  - consumes # what this page's subject calls; the inverse of `consumers`; declare it on either page, `consumers` shows both
   - delegates_to # what this page's subject hands work to
   - implements # the interface or contract this page's subject realizes
   - supersedes

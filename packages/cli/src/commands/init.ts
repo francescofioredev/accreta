@@ -28,7 +28,7 @@ export const PRESET_VOCABULARY: Readonly<Record<Preset, PresetVocabulary>> = {
     ],
     linkFields: [
       "consumers",
-      "consumes",
+      "consumes", // replaces consumed_by (#318); never reuse that name with the meaning flipped
       "delegates_to",
       "implements",
       "supersedes",
