@@ -117,6 +117,17 @@ goes for any other run whose token is refused (403), such as Dependabot's.
 Do not switch to `pull_request_target` to get a write token. It would run the fork's code, and
 `accreta reindex` parses the fork's pages, with that token in reach.
 
+## What the checkout cannot change
+
+Bun reads `bunfig.toml`, including its `preload` scripts, and `.env` from the directory it starts
+in. The action starts Bun in an empty temporary directory with `--no-env-file`, and names the
+knowledge base through `ACCRETA_ROOT`, so neither file in the repository configures the run.
+`working-directory` must therefore be the directory that holds `accreta.config.yaml`, not one
+below it.
+
+Git still runs inside the checkout, so anything that configures git through the runner's
+environment, such as `GIT_CONFIG_*` set by an earlier step, still reaches it.
+
 ## Limits
 
 - Outside a pull request, or on a checkout that is neither its head nor GitHub's test merge,

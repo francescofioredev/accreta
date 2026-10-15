@@ -65,14 +65,18 @@ runs:
         PR_HEAD: ${{ github.event.pull_request.head.sha }}
         PR_BASE: ${{ github.event.pull_request.base.sha }}
       run: |
-        cli=(bun --conditions=@accreta/source "$GITHUB_ACTION_PATH/packages/cli/src/bin.ts")
+        # Bun reads bunfig.toml (preload) and .env from its cwd: never start it in the checkout.
+        neutral="$(mktemp -d "$RUNNER_TEMP/accreta-cwd-XXXXXX")"
+        bun_() { (cd "$neutral" && bun --no-env-file "$@"); }
+        export ACCRETA_ROOT="$PWD"
+        cli=(bun_ --conditions=@accreta/source "$GITHUB_ACTION_PATH/packages/cli/src/bin.ts")
         "${cli[@]}" reindex
 
         # Drift on the base branch is what was already in doubt before this change.
         compare=()
         rev="$RUNNER_TEMP/accreta-base-revision"
         rm -f "$rev"
-        bun "$GITHUB_ACTION_PATH/scripts/drift-base.ts" "$rev"
+        bun_ "$GITHUB_ACTION_PATH/scripts/drift-base.ts" "$rev" "$PWD"
         if [ -s "$rev" ]; then
           base="$RUNNER_TEMP/accreta-base"
           # A registration left by an earlier run on this runner would make `add` fail.
@@ -85,8 +89,7 @@ runs:
           if [ ! -f "$kb/accreta.config.yaml" ]; then
             echo "::notice::The base branch has no knowledge base here: every page counts as new."
           elif (
-            cd "$kb" &&
-              export ACCRETA_INDEX_PATH="$RUNNER_TEMP/accreta-base.sqlite" &&
+            export ACCRETA_ROOT="$kb" ACCRETA_INDEX_PATH="$RUNNER_TEMP/accreta-base.sqlite" &&
               "${cli[@]}" reindex >/dev/null &&
               { "${cli[@]}" drift --json >"$report" || [ -s "$report" ]; }
           ); then
@@ -103,7 +106,7 @@ runs:
           exit 1
         fi
         "${cli[@]}" drift --json "${compare[@]}" >"$RUNNER_TEMP/accreta-drift.json" || true
-        bun -e '
+        bun_ -e '
           const r = JSON.parse(await Bun.file(process.argv[1]).text());
           console.log(`pages-in-doubt=${r.pages_in_doubt}`);
           console.log(`pages-newly-in-doubt=${r.pages_newly_in_doubt}`);
@@ -122,7 +125,10 @@ runs:
         DRIFT_KEY: ${{ inputs.working-directory }}
         DRIFT_AUTHOR: ${{ inputs.comment-author }}
         DRIFT_CREATE: ${{ inputs.comment-when-clean == 'true' || steps.drift.outputs.attention != '0' }}
-      run: bun "$GITHUB_ACTION_PATH/scripts/drift-comment.ts"
+      # Started outside the checkout, like Check drift: this step holds the write token.
+      run: |
+        cd "$(mktemp -d "$RUNNER_TEMP/accreta-cwd-XXXXXX")"
+        bun --no-env-file "$GITHUB_ACTION_PATH/scripts/drift-comment.ts"
 
     - name: Fail on drift
       if: ${{ inputs.fail-on-drift == 'true' && steps.drift.outputs.attention != '0' }}
