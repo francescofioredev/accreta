@@ -88,8 +88,9 @@ export async function drift(
     }
   }
 
+  const compared = base && toJson(reports, base, unloaded);
   if (options.format === "json") {
-    ctx.out(JSON.stringify(toJson(reports, base, unloaded), null, 2));
+    ctx.out(JSON.stringify(compared || toJson(reports, base, unloaded), null, 2));
   } else if (options.format === "github") {
     ctx.out(toGithub(reports, base, GITHUB_BODY_LIMIT, unloaded));
   } else {
@@ -100,12 +101,37 @@ export async function drift(
     }
     if (reports.length === 0 && unloaded.length === 0) {
       ctx.out("No sources declared in sources/. Nothing to check.");
-    } else for (const report of reports) printText(ctx, report);
+    } else {
+      if (compared) ctx.out(againstBase(compared));
+      for (const report of reports) printText(ctx, report);
+    }
   }
 
   // "I cannot tell", like `unresolvable`: a typo in `type` must not turn a failing run green.
-  const failed = reports.some((report) => fails(report, strict)) || unloaded.length > 0;
+  const failed =
+    base && compared
+      ? failsAgainst(compared, base, reports, strict)
+      : reports.some((report) => fails(report, strict)) || unloaded.length > 0;
   return failed ? 1 : 0;
+}
+
+/** Text mode's verdict with `--base`, since its rows do not say which pages the base had. */
+function againstBase(json: DriftJson): string {
+  const kept = json.pages_in_doubt - json.pages_newly_in_doubt;
+  return `${json.pages_newly_in_doubt} page(s) newly in doubt; ${kept} already in doubt on the base branch`;
+}
+
+/** With `--base`, only what the change put in doubt fails, as the action counts it. */
+function failsAgainst(
+  json: DriftJson,
+  base: BaseKeys,
+  reports: DriftReport[],
+  strict: boolean,
+): boolean {
+  if (json.pages_newly_in_doubt + json.pages_newly_unplaceable + json.sources_newly_unloaded > 0) {
+    return true;
+  }
+  return strict && reports.some((r) => uncheckedKeys(r.sourceId, r).some((key) => !base.has(key)));
 }
 
 function fails(report: DriftReport, strict: boolean): boolean {
@@ -197,7 +223,7 @@ export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport)
     const inDoubt = group(rank("changed"));
     const rest = group(rank("moved"), rank("untouched"), rank("uncited"));
     if (inDoubt.length === 0) {
-      // Drift still fails on these, so the line must not read as all clear.
+      // Without --base drift still fails on these, so the line must not read as all clear.
       const count = distinct(rest.map((row) => row.page));
       ctx.out(
         count > 0 ? `  no page in doubt; ${count} to re-pin or re-verify` : "  no page in doubt",
@@ -350,7 +376,7 @@ interface DriftJson {
 /** With `--base`, `on_base` says the base branch already failed to load the same declaration. */
 type UnloadedEntry = UncheckedSource & { on_base?: boolean };
 
-/** Keys of what a base report already had in doubt or could not place, and what it did not load. */
+/** Keys of what a base report had in doubt, could not place, left unchecked, or did not load. */
 type BaseKeys = Set<string> & {
   unloaded?: Map<string, Pick<UncheckedSource, "id" | "pages">>;
 };
@@ -362,6 +388,14 @@ const citationKey = (source: string, page: string, c: DoubtedCitation) =>
 const fileKey = (source: string, page: string) => JSON.stringify(["file", source, page]);
 const unplacedKey = (source: string, page: string, revision: string) =>
   JSON.stringify(["unplaced", source, page, revision]);
+// One key by page: a page gaining a revision, or re-verified at a new one, leaves no new work undone.
+const uncheckedKeys = (
+  source: string,
+  s: { unverifiable?: string[]; delegated?: { pending: { pages: string[] }[] } | null },
+) =>
+  [...(s.unverifiable ?? []), ...(s.delegated?.pending ?? []).flatMap((e) => e.pages)].map((page) =>
+    JSON.stringify(["unchecked", source, page]),
+  );
 
 export function readBase(path: string): BaseKeys {
   let json: DriftJson;
@@ -388,6 +422,7 @@ export function readBase(path: string): BaseKeys {
     for (const entry of source.unresolvable ?? []) {
       for (const page of entry.pages) keys.add(unplacedKey(source.source_id, page, entry.revision));
     }
+    for (const key of uncheckedKeys(source.source_id, source)) keys.add(key);
   }
   // Absent from reports written before unloaded sources were reported: then none is inherited.
   for (const u of json.unloaded_sources ?? []) {

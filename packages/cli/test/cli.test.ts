@@ -1001,12 +1001,14 @@ describe("accreta drift --base", () => {
     expect(first).toBeGreaterThan(already);
   });
 
-  test("an edit to an uncited line alone puts no page newly in doubt, though drift exits 1", async () => {
+  test("an edit to an uncited line alone puts no page newly in doubt, so only --base passes", async () => {
     const { edit, baseReport } = await repo();
     await baseReport();
     await edit("b.md", { 15: "uncited" });
 
-    expect(await cli("drift", "--json", "--base", "base.json")).toBe(1);
+    expect(await cli("drift")).toBe(1);
+    output = [];
+    expect(await cli("drift", "--json", "--base", "base.json")).toBe(0);
     const report = JSON.parse(stdout());
     expect(report.pages_newly_in_doubt).toBe(0);
     expect(report.sources[0].in_doubt).toEqual([]);
