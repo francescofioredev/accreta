@@ -117,6 +117,18 @@ scan drift ran before #239, so the same file measures either side.
 | index file, 10k | 55,762,944 → 57,798,656 B (+3.7%) | 55,812,096 → 57,774,080 B (+3.5%) |
 | rebuild | no measurable change | no measurable change |
 
+**Before and after #303.** Drift asks `locate` about every citation it would rank untouched. The
+`by lines` column times a source that also answers `touchedSince`; `locates` is the mean number of
+`locate` calls per source per run, where the bench's `locate` costs nothing. Medians of 5
+interleaved runs, Bun 1.4.2, Apple M3, load average near 11:
+
+| | before → after |
+| --- | --- |
+| drift per source, 1k pages | 0.29 → 0.36 ms (118 locates) |
+| drift per source by lines, 1k pages | 0.30 → 0.43 ms (159 locates) |
+| drift per source, 10k pages | 3.19 → 3.11 ms (197 locates) |
+| drift per source by lines, 10k pages | 3.30 → 4.01 ms (200 locates) |
+
 # MCP response budget
 
 The consumer of the MCP server is a language model with a finite context window, so every

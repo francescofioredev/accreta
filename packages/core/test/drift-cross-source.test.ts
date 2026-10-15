@@ -45,8 +45,11 @@ class ScriptedSource implements SourceAdapter {
     return new Map(locators.map((l) => [l, answer[l] ?? { status: "untouched" as const }]));
   };
 
-  async locate(): Promise<LocationVerdict> {
-    return { verdict: "found" };
+  readonly refuses = new Set<string>();
+
+  async locate(path: string): Promise<LocationVerdict> {
+    if (!this.refuses.has(path)) return { verdict: "found" };
+    return { verdict: "missing", part: "path", detail: `${path} is reached through a symlink` };
   }
 
   citation(path: string, locator?: string): string {
@@ -178,6 +181,22 @@ describe("a footnote into a source other than the page's own", () => {
     const report = await detectDrift(db, new ScriptedSource("noaa", "rev2", { rev1: ["x.md"] }));
     expect(report.stale).toEqual([]);
   });
+
+  for (const lines of [undefined, {}]) {
+    const kind = lines ? "a line-aware" : "a per-file";
+    test(`a page citing only what ${kind} source refuses is named, not dropped (#303)`, async () => {
+      addPage("knowledge/contradiction.md", "ipcc", "ipcc1");
+      addFootnote("knowledge/contradiction.md", "b", "rev1", "link.md", "L5");
+      const noaa = new ScriptedSource("noaa", "rev2", { rev1: ["real.md"] }, lines);
+      noaa.refuses.add("link.md");
+
+      const [entry] = (await detectDrift(db, noaa)).stale;
+
+      expect(entry?.citedOnly).toEqual(["knowledge/contradiction.md"]);
+      const rank = pageChanges(entry!)?.get("knowledge/contradiction.md");
+      expect(rank).toBe(lines ? "changed" : undefined);
+    });
+  }
 
   test("a per-file source says which of the changed files such a page cites", async () => {
     addPage("knowledge/contradiction.md", "ipcc", "ipcc1");

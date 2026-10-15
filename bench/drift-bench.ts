@@ -13,6 +13,7 @@ import {
   parseConfig,
   type Database,
   type LocationVerdict,
+  type LocatorChange,
   type SourceAdapter,
 } from "@accreta/core";
 
@@ -96,7 +97,9 @@ class MovedSource implements SourceAdapter {
   async changedSince(): Promise<string[]> {
     return ["docs/file-0.md", "docs/file-1.md", "docs/file-2.md"];
   }
+  locates = 0;
   async locate(): Promise<LocationVerdict> {
+    this.locates++;
     return { verdict: "found" };
   }
   citation(path: string): string {
@@ -104,6 +107,20 @@ class MovedSource implements SourceAdapter {
   }
   pinRevision(): void {}
 }
+
+// Ranks pages by their cited lines, so drift asks `locate` about the citations it would clear (#303).
+class DiffingSource extends MovedSource {
+  async touchedSince(
+    _revision: string,
+    _path: string,
+    locators: readonly string[],
+  ): Promise<Map<string, LocatorChange>> {
+    return new Map(locators.map((locator) => [locator, { status: "untouched" }]));
+  }
+}
+
+const perCall = (sources: MovedSource[]) =>
+  sources.reduce((n, a) => n + a.locates, 0) / (RUNS * sources.length);
 
 function median(samples: number[]): number {
   const sorted = samples.toSorted((a, b) => a - b);
@@ -128,15 +145,22 @@ async function measure(size: number) {
       .get();
     const canonicalSql = hasTable ? CANONICAL_SQL : CANONICAL_SQL_BEFORE;
     const adapters = SOURCES.map((id) => new MovedSource(id));
+    const diffing = SOURCES.map((id) => new DiffingSource(id));
     const drift: number[] = [];
+    const lines: number[] = [];
     const canonical: number[] = [];
     const footnotes: number[] = [];
     await detectDrift(db, adapters[0]!);
+    await detectDrift(db, diffing[0]!);
+    for (const a of [...adapters, ...diffing]) a.locates = 0;
     for (let run = 0; run < RUNS; run++) {
       for (const adapter of adapters) {
         let t0 = performance.now();
         await detectDrift(db, adapter);
         drift.push(performance.now() - t0);
+        t0 = performance.now();
+        await detectDrift(db, diffing[adapters.indexOf(adapter)]!);
+        lines.push(performance.now() - t0);
         t0 = performance.now();
         db.prepare(canonicalSql).all({ $source: adapter.id });
         canonical.push(performance.now() - t0);
@@ -153,6 +177,9 @@ async function measure(size: number) {
       indexBytes: statSync(indexPath).size,
       buildMs: build.ms,
       driftMs: median(drift),
+      linesMs: median(lines),
+      locates: perCall(adapters),
+      linesLocates: perCall(diffing),
       canonicalMs: median(canonical),
       footnoteMs: median(footnotes),
       plans,
@@ -166,14 +193,14 @@ const runtime = typeof Bun === "undefined" ? `node ${process.versions.node}` : `
 console.log(`platform: ${process.platform} ${process.arch}, ${runtime}`);
 console.log(`${SOURCES.length} sources, median of ${RUNS} runs per source\n`);
 console.log(
-  "  pages  citations     build  index bytes  drift/source  canonical query  footnote query",
+  "  pages  citations     build  index bytes  drift/source  locates  by lines  locates  canonical query  footnote query",
 );
 const plans: string[] = [];
 for (const size of SIZES) {
   const r = await measure(size);
   const ms = (x: number) => `${x.toFixed(2)}ms`;
   console.log(
-    `  ${String(r.pages).padStart(5)}  ${String(r.citations).padStart(9)}  ${ms(r.buildMs).padStart(8)}  ${String(r.indexBytes).padStart(11)}  ${ms(r.driftMs).padStart(12)}  ${ms(r.canonicalMs).padStart(15)}  ${ms(r.footnoteMs).padStart(14)}`,
+    `  ${String(r.pages).padStart(5)}  ${String(r.citations).padStart(9)}  ${ms(r.buildMs).padStart(8)}  ${String(r.indexBytes).padStart(11)}  ${ms(r.driftMs).padStart(12)}  ${String(r.locates).padStart(7)}  ${ms(r.linesMs).padStart(8)}  ${String(r.linesLocates).padStart(7)}  ${ms(r.canonicalMs).padStart(15)}  ${ms(r.footnoteMs).padStart(14)}`,
   );
   plans.push(
     `  ${r.pages} canonical: ${r.plans.canonical}`,

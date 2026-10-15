@@ -98,6 +98,8 @@ export interface CitedChange {
   /** The revision the citation names, or the page's when it names none: its line numbers belong to it. */
   revision: string;
   change: LocatorChange;
+  /** Why `locate` refused the place; its change is then `unknown`, since no diff vouches for it. */
+  refused?: string;
 }
 
 /**
@@ -228,6 +230,25 @@ export async function detectDrift(db: Database, adapter: SourceAdapter): Promise
     return changes.get(revision)!;
   };
 
+  // Asked together, so a source that batches its lookups answers them in one pass.
+  const verdicts = new Map<string, Promise<string | null>>();
+  const refusals: Refusals = (places) =>
+    Promise.all(
+      places.map(({ path, locator }) => {
+        const key = JSON.stringify([path, locator]);
+        let verdict = verdicts.get(key);
+        if (!verdict) {
+          verdict = adapter.locate(path, locator ?? undefined).then(
+            (answer) => (answer.verdict === "missing" ? answer.detail : null),
+            // A source that threw told us nothing, which is not a refusal.
+            () => null,
+          );
+          verdicts.set(key, verdict);
+        }
+        return verdict;
+      }),
+    );
+
   // A footnote pinned elsewhere is checked at its pin when its page's group will not check it,
   // or when the pin cannot be placed: that is the same answer whatever else the change touched.
   for (const [revision, pages] of byRevision) {
@@ -258,11 +279,20 @@ export async function detectDrift(db: Database, adapter: SourceAdapter): Promise
     // to ignore the report.
     if (changedPaths.length === 0) continue;
 
-    // A page here only through a pinned citation rests on the files it cites, not the whole source.
+    // A page here only through a pinned citation rests on the files it cites, not the whole source;
+    // one the source refuses no diff can clear, as a symlink's target changes under another name.
     const changed = new Set(changedPaths);
-    const touched = [...(lent.get(revision) ?? [])]
-      .filter(([, cites]) => cites.some((cite) => changed.has(cite.path)))
-      .map(([page]) => page);
+    const touched: string[] = [];
+    const quiet: [string, Cite[]][] = [];
+    for (const [page, cites] of lent.get(revision) ?? []) {
+      if (cites.some((cite) => changed.has(cite.path))) touched.push(page);
+      else quiet.push([page, cites]);
+    }
+    const refused = await refusals(quiet.flatMap(([, cites]) => cites));
+    let at = 0;
+    for (const [page, cites] of quiet) {
+      if (refused.slice(at, (at += cites.length)).some(Boolean)) touched.push(page);
+    }
     const group = grouped(byRevision.get(revision) ?? [], touched);
     if (group.pages.length > 0) stale.push({ revision, changedPaths, ...group });
   }
@@ -272,7 +302,7 @@ export async function detectDrift(db: Database, adapter: SourceAdapter): Promise
     const borrowed = lent.get(entry.revision);
     const citesOf = (page: string) => borrowed?.get(page) ?? cited.own.get(page) ?? [];
     if (touchedSince) {
-      entry.citations = await citedChanges(touchedSince, entry, citesOf, changedSince);
+      entry.citations = await citedChanges(touchedSince, entry, citesOf, changedSince, refusals);
       continue;
     }
     const changed = new Set(entry.changedPaths);
@@ -328,6 +358,9 @@ interface Cite {
 }
 
 type Lent = Map<string, Map<string, Cite[]>>;
+
+/** Why the source refuses each place, or null where it finds it or cannot tell. */
+type Refusals = (places: readonly Pick<Cite, "path" | "locator">[]) => Promise<(string | null)[]>;
 
 function lend(lent: Lent, revision: string, page: string, cite: Cite): void {
   const pages = lent.get(revision) ?? new Map<string, Cite[]>();
@@ -435,8 +468,10 @@ async function citedChanges(
   entry: StaleRevision,
   citesOf: (page: string) => Cite[],
   changedSince: (revision: string) => Promise<string[] | null>,
+  refusals: Refusals,
 ): Promise<CitedChange[]> {
   const cited: CitedChange[] = [];
+  const unlisted: CitedChange[] = [];
   const asks = new Map<string, { revision: string; path: string; locators: Set<string> }>();
   const pending: { cited: CitedChange; key: string }[] = [];
   const changedFrom = new Map<string, Set<string> | null>();
@@ -450,16 +485,20 @@ async function citedChanges(
       }
       // A pin the source cannot place is reported as unresolvable at that pin, not here.
       const since = changedFrom.get(from);
-      if (!since?.has(cite.path)) continue;
-      // A whole-document citation into a changed document is touched by definition.
+      if (!since) continue;
       const change: CitedChange = {
         page,
         footnote: cite.footnote,
         path: cite.path,
         locator: cite.locator,
         revision: from,
-        change: { status: "touched" },
+        change: { status: since.has(cite.path) ? "touched" : "untouched" },
       };
+      if (change.change.status === "untouched") {
+        unlisted.push(change);
+        continue;
+      }
+      // A whole-document citation into a changed document is touched by definition.
       cited.push(change);
       if (cite.locator === null) continue;
 
@@ -483,5 +522,25 @@ async function citedChanges(
   for (const { cited: change, key } of pending) {
     change.change = answers.get(key)?.get(change.locator!) ?? { status: "unknown" };
   }
-  return cited;
+
+  // Untouched only where the source vouches for the place: no diff lists a symlink's target.
+  const cleared = [
+    ...cited.filter((c) => c.change.status === "untouched" || c.change.status === "moved"),
+    ...unlisted,
+  ];
+  const refused = await refusals(
+    cleared.map(({ path, locator, change }) => ({
+      path,
+      locator: change.status === "moved" ? change.locator : locator,
+    })),
+  );
+  cleared.forEach((change, i) => {
+    if (!refused[i]) return;
+    change.change = { status: "unknown" };
+    change.refused = refused[i];
+  });
+  // Only a refused one is listed, as a citation into an unchanged path never was.
+  cited.push(...unlisted.filter((change) => change.refused));
+  const order = new Map(entry.pages.map((page, i) => [page, i]));
+  return cited.toSorted((a, b) => order.get(a.page)! - order.get(b.page)!);
 }
