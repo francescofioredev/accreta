@@ -85,7 +85,8 @@ export const COMMAND_ARGS: Readonly<Record<string, CommandArgs>> = {
     maxPositional: 1,
   },
   canonical: { flags: ["--json", "--limit", "--cursor"], maxPositional: Infinity },
-  cite: { flags: ["--expect-revision", "--json"], maxPositional: 1 },
+  // Every positional is a target, except the value of --format, which cite takes out.
+  cite: { flags: ["--expect-revision", "--json", "--format"], maxPositional: Infinity },
   // Up to three positionals: install, and the values of --client and --scope.
   mcp: { flags: ["--client", "--scope", "--force"], maxPositional: 3 },
 };

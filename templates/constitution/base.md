@@ -32,6 +32,9 @@ blocks; a mail thread has messages. Cite what the source can actually be pointed
 rather than inventing a range. An invented locator is worse than a missing one: it reads as
 precision and cannot be checked.
 
+An absence has no locator either. For "no record 7 exists", cite the document that would list
+it, whole, and state the absence in the claim.
+
 The revision is the part people drop, and it is the part that matters. Without it the
 citation says where the claim came from but not *when*, and drift detection has nothing to
 compare against. A page with citations that omit revisions is a page that can never be
@@ -62,6 +65,12 @@ No reconciliation is attempted here; the disagreement is the current state of th
 A knowledge base that presents contested things as settled is worse than one that says
 nothing, because it is confidently wrong and reads as authoritative.
 
+Record it inline, in the page whose claim is contested; that page's writer does. It gets a
+page of its own only if the vocabulary has a type for disagreements, such as
+`contradiction`, and it spans pages or matters in its own right. Search for one first; if none
+exists, the first writer to find the disagreement writes it, and the contested pages link to
+it instead of repeating it.
+
 ---
 
 ## What a page is
@@ -76,7 +85,7 @@ source: ipcc-ar6-wg1
 aliases: ["radiative forcing", "climate forcing"]
 canonical_source: "ipcc-ar6-wg1:chapter-07.md#L142"
 last_verified_revision: 9a4f2c1e8b03d5f7a6c2e9b1d4f8a0c3e5b7d9f2
-related: [[concepts/climate-sensitivity]]
+related: ["[[concepts/climate-sensitivity]]", "[[concepts/feedback]]"]
 ---
 
 # Radiative forcing
@@ -106,8 +115,10 @@ Two kinds, both indexed into one graph:
   `supersedes`, `discussed_in`, whatever this knowledge base declares.
 - **Inline `[[wikilinks]]`** in prose, untyped.
 
-Prefer a typed relation when the relationship has a name. `related: [[x]]` says something
-`[[x]]` in a sentence does not.
+Prefer a typed relation when the relationship has a name: it says something `[[x]]` in a
+sentence does not. Quote each target; unquoted, `[[x]]` is a nested list to other YAML
+readers. A field reads from the page it is on: `supersedes` on page `A` names what `A`
+supersedes.
 
 Link targets are knowledge-base-relative. `[[concepts/forcing]]` and
 `[[../concepts/forcing]]` resolve to the same page, so write whichever reads better in
@@ -156,7 +167,8 @@ With a shell, use the CLI. Without one, the MCP tool beside it does the same.
 
 - **`--json`** prints the MCP tool's reply. Use it when you parse the output rather than read it.
   `drift --json` has a shape of its own. It names the pages the text only counts, and counts
-  some stale pages the text names: re-verify from both, or from `check_drift`.
+  some stale pages the text names: re-verify from both, or from `check_drift`. `cite` given
+  more than one target prints an array of those replies, one per target, in order.
 - **Long results come in pages.** `find_consumers`, `find_canonical` and `lint_knowledge_base`
   return at most 50 entries: `count` is the total, and passing `nextCursor` back as `cursor`
   gets the rest. The CLI prints everything unless you pass `--limit` or `--cursor`.
