@@ -21,7 +21,23 @@ order, and none of them starts before the one above it has finished:
 2. The knowledge base is generated, with every source at v4.12.34.
 3. H1, H3, surfaces and cost are measured, with every source still at v4.12.34
    (`pages.ts --at v4.12.34`).
-4. Every source is checked out at v4.13.0, and H2 is measured (`drift-score.ts --to v4.13.0`).
+4. Every source is checked out at v4.13.13, and H2 is measured (`drift-score.ts --to v4.13.13`).
+
+Revision 2026-10-15, before any scored run:
+- H2 is scored at v4.13.13, not v4.13.0 (option (b) on #136). Dry-run slices scored at later
+  tags (positives per citation, recall 1, no exclusions):
+
+  | Tag | Sonnet + lint, runs 1 and 2 | Opus, run 1 | Changed files, inside slice / outside |
+  |---|---|---|---|
+  | v4.13.0 | 26, 24 | — | 12 / 9 |
+  | v4.13.5 | 35, 32 | 72 | 13 / 25 |
+  | v4.13.13 | 40, 36 | 84 | 13 / 40 |
+
+  The slice holds 371 of 699 changed lines at v4.13.13. Sonnet's mean scales to about 72
+  positives for the full ingest, about 55 if the rest of `src/` is cited half as densely
+  (v4.13.5: 52 and 43; v4.13.0: about 30). v4.13.13 is the only candidate that clears 36 under
+  the pessimistic projection with room for misses, with 53 changed files against the 20 needed.
+- The baseline arm is the repository with file tools (`repo-tools`, maintainer decision on #137).
 
 ## Runs
 
@@ -106,7 +122,7 @@ The unit is the footnote citation (maintainer decision on #136, 2026-10-13).
 
 - Take the cited lines at the citation's own revision. A footnote without a pin uses its
   page's `last_verified_revision`.
-- Look for them verbatim, as whole lines, in the file at the source's HEAD (v4.13.0).
+- Look for them verbatim, as whole lines, in the file at the source's HEAD (v4.13.13).
 - Follow renames with `git diff -M`.
 
 The outcomes:
@@ -159,7 +175,7 @@ Defects are reported whatever the gate says.
 
 - 30 claims are sampled from pages with at least one changed source file but no flagged
   citation.
-- Two graders judge at v4.13.0 whether each claim still holds.
+- Two graders judge at v4.13.13 whether each claim still holds.
 - Reported: the stale share with Clopper–Pearson intervals, next to H2.
 
 **Known limitations.**
@@ -175,9 +191,9 @@ Defects are reported whatever the gate says.
 - **Questions:** 30, written and hashed as in step 1. The schema is in `lib/answers.ts`.
 - **Arms:** the same model in both, one session per question.
   - **With the knowledge base:** the accreta MCP server only.
-  - **Without:** the baseline. **Pending with the maintainer:** closed-book (no tools), or the
-    repository with file tools. The runner takes it as `--baseline <arm>`, and the result
-    names the arm it used.
+  - **Without:** the baseline, the repository with file tools (`repo-tools`, maintainer
+    decision on #137). The runner takes it as `--baseline <arm>`, and the result names the arm
+    it used.
 - **Blinding.**
   - Sessions are shuffled with the seed under opaque item ids.
   - The sheets go to `--out`. The arm key and the raw sessions go to `--key-out`, a separate
@@ -243,7 +259,7 @@ Defects are reported whatever the gate says.
 
 ```
 bun bench/eval/pages.ts --kb <kb> --at v4.12.34
-bun bench/eval/drift-score.ts --kb <kb> --to v4.13.0 [--citations]
+bun bench/eval/drift-score.ts --kb <kb> --to v4.13.13 [--citations]
 bun bench/eval/answers.ts run --questions q.json --arms arms.json --baseline <arm> \
   --out <sheets> --key-out <key> (--canned c.json | --live --seed <s> --seed-sha256 <hex> \
   --questions-sha256 <hex>)
