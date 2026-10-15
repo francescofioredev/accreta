@@ -1,5 +1,12 @@
 import { getPage, type PageRecord } from "@accreta/core";
-import { printJson, provenance, withIndex, type CommandContext } from "./shared.ts";
+import {
+  printable,
+  printableBlock,
+  printJson,
+  provenance,
+  withIndex,
+  type CommandContext,
+} from "./shared.ts";
 
 // `page.path` is left out: it is the path the caller asked for, resolved.
 const PAGE_FIELDS = [
@@ -33,16 +40,18 @@ export function show(
       return page ? 0 : 1;
     }
     if (!page) {
-      ctx.err(`No page matches "${target}".`);
+      ctx.err(`No page matches "${printable(target)}".`);
       return 1;
     }
-    ctx.out(`# ${page.title}`);
-    ctx.out(`path: ${page.path}`);
-    ctx.out(`type: ${page.type}`);
-    if (page.canonicalSource) ctx.out(`canonical_source: ${page.canonicalSource}`);
-    if (page.lastVerifiedRevision) ctx.out(`verified at: ${page.lastVerifiedRevision}`);
+    ctx.out(`# ${printable(page.title)}`);
+    ctx.out(`path: ${printable(page.path)}`);
+    ctx.out(`type: ${printable(page.type)}`);
+    if (page.canonicalSource) ctx.out(`canonical_source: ${printable(page.canonicalSource)}`);
+    if (page.lastVerifiedRevision) {
+      ctx.out(`verified at: ${printable(page.lastVerifiedRevision)}`);
+    }
     ctx.out("");
-    ctx.out(page.body.trim());
+    ctx.out(printableBlock(page.body.trim()));
     return 0;
   });
 }

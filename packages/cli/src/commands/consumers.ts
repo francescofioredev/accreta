@@ -1,5 +1,6 @@
 import { findRelated, type Relation } from "@accreta/core";
 import {
+  printable,
   printJson,
   provenance,
   readPage,
@@ -48,7 +49,7 @@ export function consumers(
       });
       return 0;
     }
-    if (!result.targetExists) ctx.out(`(no page at ${result.target})`);
+    if (!result.targetExists) ctx.out(`(no page at ${printable(result.target)})`);
     if (result.total === 0) {
       ctx.out(
         options.includeInline
@@ -59,7 +60,8 @@ export function consumers(
     }
     for (const relation of result.relations) {
       const arrow = relation.direction === "inbound" ? "←" : "→";
-      ctx.out(`${arrow} ${relation.path}  [${relation.kind}]  ${relation.title ?? ""}`);
+      const title = printable(relation.title ?? "");
+      ctx.out(`${arrow} ${printable(relation.path)}  [${printable(relation.kind)}]  ${title}`);
     }
     if (!page) {
       ctx.out(`\n${result.total} relation(s).`);

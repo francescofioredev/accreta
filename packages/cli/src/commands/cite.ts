@@ -8,6 +8,8 @@ import {
 import { findWorkspace } from "../workspace.ts";
 import {
   loadSources,
+  printable,
+  printableBlock,
   printJson,
   provenance,
   SOURCE_NOTICE,
@@ -73,7 +75,7 @@ export async function cite(
     const target = parseCitation(raw);
     if (!target) {
       ctx.err(
-        `"${raw}" is not source:path[#locator]; a path with "#" or whitespace in it cannot be cited.`,
+        `"${printable(raw)}" is not source:path[#locator]; a path with "#" or whitespace in it cannot be cited.`,
       );
       return 2;
     }
@@ -97,17 +99,19 @@ export async function cite(
     const broken = loaded.unloaded.find((u) => u.id === target.sourceId);
     if (broken) {
       throw new Error(
-        `Source "${target.sourceId}" is declared in ${broken.file} but did not load: ${broken.reason}`,
+        `Source "${printable(target.sourceId)}" is declared in ${printable(broken.file)} but did not load: ${printable(broken.reason)}`,
       );
     }
     // Input errors exit 2, not 1 like a refusal; the sentences are core's, which MCP returns.
     if (!sources.has(target.sourceId)) {
       const known = [...sources.keys()].toSorted().join(", ") || "none";
-      ctx.err(`Unknown source "${target.sourceId}". Configured sources: ${known}.`);
+      ctx.err(`Unknown source "${printable(target.sourceId)}". Configured sources: ${known}.`);
       return 2;
     }
     if (target.path.split("/").some((part) => part === "" || part === "." || part === "..")) {
-      ctx.err(`Path "${target.path}" is not canonical: it has an empty, "." or ".." segment`);
+      ctx.err(
+        `Path "${printable(target.path)}" is not canonical: it has an empty, "." or ".." segment`,
+      );
       return 2;
     }
   }
@@ -136,7 +140,9 @@ export async function cite(
     // All or nothing: line N is always target N, and a missing place leaves stdout empty.
     for (const { canonicalSource, location } of citations) {
       if (location.verdict === "missing") {
-        ctx.err(`${canonicalSource}: missing ${location.part}: ${location.detail}`);
+        ctx.err(
+          `${printable(canonicalSource)}: missing ${location.part}: ${printable(location.detail)}`,
+        );
       }
     }
     if (code === 0) for (const citation of citations) ctx.out(citation.footnote);
@@ -154,7 +160,7 @@ function moved(target: ParsedCitation, citation: Citation, expected: string): st
   return citation.revision !== null
     ? `Source "${target.sourceId}" is at ${citation.revision}, not ${expected}: it moved since you read it, or ${expected} did not come from cite. Re-read ${citation.canonicalSource}, then cite again.`
     : citation.delegated
-      ? `Cannot confirm source "${target.sourceId}" is still at ${expected}: it is read through ${citation.delegated.via}, and accreta cannot tell its revision.`
+      ? `Cannot confirm source "${target.sourceId}" is still at ${expected}: it is read through ${printable(citation.delegated.via)}, and accreta cannot tell its revision.`
       : `Cannot confirm source "${target.sourceId}" is still at ${expected}: accreta could not check this place. Cite it without an expected revision to see why.`;
 }
 
@@ -174,21 +180,28 @@ function toJson(citation: Citation) {
 /** The same keys in the same order whatever the verdict, so a script reads them by label. */
 function printBlock(ctx: CommandContext, citation: Citation): void {
   const missing = citation.location.verdict === "missing";
-  ctx.out(`footnote: ${missing ? "none: location missing" : citation.footnote}`);
-  ctx.out(`canonical_source: ${citation.canonicalSource}`);
-  ctx.out(`revision: ${citation.revision ?? "none, so the footnote is unpinned"}`);
+  ctx.out(`footnote: ${missing ? "none: location missing" : printable(citation.footnote)}`);
+  ctx.out(`canonical_source: ${printable(citation.canonicalSource)}`);
+  ctx.out(
+    `revision: ${citation.revision === null ? "none, so the footnote is unpinned" : printable(citation.revision)}`,
+  );
   ctx.out(continued(locationLine(citation)));
   if (citation.delegated) {
     const { via, guidance } = citation.delegated;
-    ctx.out(continued(`delegated: read through ${via}; scope:\n${guidance.trimEnd()}`));
+    const scope = printableBlock(guidance.trimEnd());
+    ctx.out(continued(`delegated: read through ${printable(via)}; scope:\n${scope}`));
   }
 }
 
 function locationLine({ location }: Citation): string {
   if (location.verdict === "found") return "location: found";
-  if (location.verdict === "unknown") return `location: unknown: ${location.detail}`;
-  return `location: missing ${location.part}: ${location.detail}`;
+  if (location.verdict === "unknown")
+    return `location: unknown: ${printableLines(location.detail)}`;
+  return `location: missing ${location.part}: ${printableLines(location.detail)}`;
 }
+
+// A source's error output may run over several lines; each stays one, for continued() to indent.
+const printableLines = (text: string) => text.split(/\r?\n/).map(printable).join("\n");
 
 /** Indents every line after the first, a blank one as two spaces, so none can pose as a label. */
 function continued(text: string): string {
