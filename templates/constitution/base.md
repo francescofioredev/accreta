@@ -94,8 +94,12 @@ Two fields do most of the work:
 
 **A page drawn from two sources still names one.** `source` and `last_verified_revision` each
 hold a single value: the source the page is mainly about, and the revision of it you verified.
-Cite every other source in footnotes; drift checks those too. A list in either field is not
-supported, and lint reports it.
+Cite every other source in footnotes; drift checks the pinned ones (`{rev}`). A list in either
+field is not supported, and lint reports it.
+
+**A contradiction page has no main source.** Either side may be named in `source`; the choice
+carries no authority and does not make that side the winner. Give both sides a pinned footnote,
+since only pinned footnotes are drift-checked.
 
 **`aliases` are not decoration.** They are how a reader who knows a concept by another name
 finds it, and search consults them alongside the title and the body. A page that declares

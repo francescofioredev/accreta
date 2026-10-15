@@ -85,7 +85,7 @@ function unsupportedValue(value: unknown): { loadedAs: string; fix: string } | n
   if (Array.isArray(value)) {
     return {
       loadedAs: "a list",
-      fix: "lists are not supported: name one source in source and last_verified_revision, and cite the others in footnotes",
+      fix: "lists are not supported: name one source in `source` and its revision in `last_verified_revision`, and cite the others in footnotes",
     };
   }
   return null;
