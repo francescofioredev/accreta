@@ -16,11 +16,12 @@ interface SourceAdapter {
   citation(path: string, locator?: string): string;
   pinRevision(revision: string): void;
   knowsRevision?(revision: string): Promise<boolean>; // optional
+  resolveRevision?(revision: string): Promise<RevisionResolution>; // optional
   touchedSince?(revision: string, path: string, locators: readonly string[]): Promise<Map<string, LocatorChange>>; // optional
 }
 ```
 
-Five methods, and two optional ones. `packages/core` imports no adapter and never branches on which one it holds —
+Five methods, and three optional ones. `packages/core` imports no adapter and never branches on which one it holds —
 if you find yourself wanting it to, the interface is missing something and the fix is to
 extend the interface. See [ADR-0002](adr/0002-source-adapter-interface.md).
 
@@ -134,6 +135,15 @@ fabricated or mistyped commit. Implement it only if you can answer from the hist
 `git` asks `cat-file -e`. Leave it out if you cannot. Absent means "cannot tell", which is what
 `fs` (no history) and `delegated` (nothing to ask) truthfully say. Never return `false` for a
 revision you merely do not remember: every citation into your source would become a finding.
+
+## `resolveRevision()`, if your source can expand a short revision
+
+Answers `resolved` with the full revision, `ambiguous` when the input prefixes several, or
+`unknown`. `cite` uses it to accept a unique prefix as the expected revision, and `lint` uses
+it to flag an abbreviated or now-ambiguous footnote revision and to tell known from unknown
+in one call. Without it the core compares revisions exactly. Take hex only and never resolve
+a ref, an expression or an option: `git` rejects `main` and `HEAD~1`, because a branch moves
+and would pin a claim to nothing.
 
 ## `touchedSince()`, if your source can diff contents
 

@@ -327,30 +327,29 @@ export async function lintCitations(
     }
   }
 
-  // One question per revision, for the same reason as per location.
-  const revisions = new Map<string, Promise<boolean | null>>();
-  const knows = (adapter: SourceAdapter, revision: string) => {
+  // One question per revision, for the same reason as per location; the resolver goes first because it settles the common case alone.
+  type RevisionState = { known: boolean | null; full: string | null; ambiguous: boolean };
+  const revisions = new Map<string, Promise<RevisionState>>();
+  const revisionState = (adapter: SourceAdapter, revision: string) => {
     const key = `${adapter.id}\0${revision}`;
-    let known = revisions.get(key);
-    if (known === undefined) {
-      known = adapter.knowsRevision
-        ? adapter.knowsRevision(revision).catch(() => null)
-        : Promise.resolve(null);
-      revisions.set(key, known);
+    let state = revisions.get(key);
+    if (state === undefined) {
+      state = (async (): Promise<RevisionState> => {
+        const resolved = await Promise.resolve(adapter.resolveRevision?.(revision)).catch(
+          () => undefined,
+        );
+        if (resolved?.status === "resolved") {
+          return { known: true, full: resolved.revision, ambiguous: false };
+        }
+        if (resolved?.status === "ambiguous") return { known: false, full: null, ambiguous: true };
+        const known = adapter.knowsRevision
+          ? await adapter.knowsRevision(revision).catch(() => null)
+          : null;
+        return { known, full: null, ambiguous: false };
+      })();
+      revisions.set(key, state);
     }
-    return known;
-  };
-  const fullRevisions = new Map<string, Promise<string | null>>();
-  const fullRevision = (adapter: SourceAdapter, revision: string) => {
-    const key = `${adapter.id}\0${revision}`;
-    let full = fullRevisions.get(key);
-    if (full === undefined) {
-      full = Promise.resolve(adapter.resolveRevision?.(revision))
-        .then((resolved) => (resolved?.status === "resolved" ? resolved.revision : null))
-        .catch(() => null);
-      fullRevisions.set(key, full);
-    }
-    return full;
+    return state;
   };
 
   const firstLine = new Map<string, number>();
@@ -402,21 +401,21 @@ export async function lintCitations(
     }
 
     if (row.revision && row.revision !== UNPINNED_REVISION) {
-      if ((await knows(adapter, row.revision)) === false) {
+      const state = await revisionState(adapter, row.revision);
+      if (state.known === false) {
         findings.push({
           kind: "citation-revision-unknown",
           path: row.page_path,
-          detail: `${label} cites revision ${row.revision}, which source "${adapter.id}" does not have`,
+          detail: state.ambiguous
+            ? `${label} cites ${row.revision}, which now names several commits of source "${adapter.id}"; cite the full revision again`
+            : `${label} cites revision ${row.revision}, which source "${adapter.id}" does not have`,
         });
-      } else {
-        const full = await fullRevision(adapter, row.revision);
-        if (full !== null && full !== row.revision) {
-          findings.push({
-            kind: "citation-revision-abbreviated",
-            path: row.page_path,
-            detail: `${label} cites ${row.revision}, an abbreviation that can turn ambiguous as source "${adapter.id}" grows; write ${full}`,
-          });
-        }
+      } else if (state.full !== null && state.full !== row.revision) {
+        findings.push({
+          kind: "citation-revision-abbreviated",
+          path: row.page_path,
+          detail: `${label} cites ${row.revision}, an abbreviation that can turn ambiguous as source "${adapter.id}" grows; write ${state.full}`,
+        });
       }
     }
   }

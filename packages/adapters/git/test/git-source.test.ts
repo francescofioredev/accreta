@@ -231,6 +231,45 @@ describe("GitSource", () => {
     }
   });
 
+  test("lint says a prefix that became ambiguous now names several commits", async () => {
+    const [a] = await collidingCommits();
+    write("a.md", "one\ntwo\n");
+    await commit("first");
+    const git = source();
+    const kb = mkdtempSync(join(tmpdir(), "accreta-git-kb-"));
+    try {
+      mkdirSync(join(kb, "knowledge"));
+      writeFileSync(
+        join(kb, "knowledge", "page.md"),
+        `---\ntype: note\n---\n\nA claim.[^a]\n\n[^a]: repo @ ${a.slice(0, 4)} · a.md#L1-L2\n`,
+      );
+      const indexPath = join(kb, "index.sqlite");
+      buildIndex({ root: kb, config: DEFAULT_CONFIG, indexPath });
+      const db = openIndex(indexPath);
+      try {
+        const { findings } = await lintCitations(db, new Map([["repo", git]]));
+        expect(findings).toHaveLength(1);
+        expect(findings[0]?.detail).toContain("names several commits");
+        expect(findings[0]?.detail).toContain("full revision");
+        expect(findings[0]?.detail).not.toContain("does not have");
+      } finally {
+        db.close();
+      }
+    } finally {
+      rmSync(kb, { recursive: true, force: true });
+    }
+  });
+
+  test("resolveRevision reads uppercase hex as the same commit", async () => {
+    write("a.md", "one");
+    await commit("first");
+    const git = source();
+    const head = await git.revision();
+    const resolved = { status: "resolved" as const, revision: head };
+    expect(await git.resolveRevision(head.toUpperCase())).toEqual(resolved);
+    expect(await git.resolveRevision(head.slice(0, 10).toUpperCase())).toEqual(resolved);
+  });
+
   test("locate answers from the working tree", async () => {
     write("docs/a.md", "hello");
     await commit("first");

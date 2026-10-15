@@ -132,7 +132,7 @@ async function abbreviating(
   const resolved =
     citation.revisionFrom === "source" ? await adapter.resolveRevision?.(expected) : undefined;
   if (resolved?.status === "resolved" && resolved.revision === revision) return expected;
-  // Not "it moved": nothing says the source did, and re-reading would not help.
+  // Not "it moved" for a prefix: nothing says the source did, and re-reading would not help.
   const again = `expect the full revision cite gave you before you read ${canonicalSource}.`;
   if (resolved?.status === "ambiguous") {
     throw new Error(
@@ -140,7 +140,9 @@ async function abbreviating(
     );
   }
   if (resolved?.status === "unknown") {
-    throw new Error(`Source "${sourceId}" has no revision ${expected}: ${again}`);
+    throw new Error(
+      `Source "${sourceId}" has no revision ${expected} (or its history was rewritten): ${again}`,
+    );
   }
   throw new Error(
     `Source "${sourceId}" is at ${revision}, not ${expected}: it moved since you read it, or ${expected} did not come from cite. Re-read ${canonicalSource}, then cite again.`,

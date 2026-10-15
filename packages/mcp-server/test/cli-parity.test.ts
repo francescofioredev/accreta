@@ -448,7 +448,7 @@ describe("cite", () => {
     {
       name: "a revision the source never had",
       args: { target: "repo:a.md#L1", expect_revision: "0000000" },
-      says: 'Source "repo" has no revision 0000000',
+      says: 'Source "repo" has no revision 0000000 (or its history was rewritten)',
       code: 1,
     },
     {

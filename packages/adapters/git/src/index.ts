@@ -130,13 +130,15 @@ export class GitSource implements SourceAdapter {
   }
 
   /** Only a commit id or a prefix of one: hex, so git never reads it as a ref, an expression or an option. */
-  async resolveRevision(revision: string): Promise<RevisionResolution> {
+  async resolveRevision(input: string): Promise<RevisionResolution> {
+    const revision = input.toLowerCase();
     if (!/^[0-9a-f]{4,64}$/.test(revision)) return { status: "unknown" };
     try {
       const commit = (
         await git(this.root, ["rev-parse", "--verify", "--quiet", `${revision}^{commit}`])
       ).trim();
       // A branch named like the prefix, or a tag object, resolves to a commit it does not abbreviate.
+      // git prefers a ref named like the prefix, so the answer is a real candidate but maybe not flagged ambiguous.
       if (commit.startsWith(revision)) return { status: "resolved", revision: commit };
     } catch {
       // --quiet fails ambiguous and unknown alike, so the candidates below tell them apart.

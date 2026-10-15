@@ -561,7 +561,9 @@ describe("an expected revision", () => {
 
   test("an unknown prefix says so and asks for the full revision", async () => {
     const message = await refusal(prefixed(), "abcdef0");
-    expect(message).toContain('Source "docs" has no revision abcdef0');
+    expect(message).toContain(
+      'Source "docs" has no revision abcdef0 (or its history was rewritten)',
+    );
     expect(message).toContain("full revision");
     expect(message).not.toContain("moved");
   });
