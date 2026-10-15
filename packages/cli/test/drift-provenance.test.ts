@@ -283,5 +283,16 @@ describe("drift's other formats, against the same pages", () => {
     expect(lines.join("\n")).toContain("dup\\u001b[2J");
     expect(lines.join("\n")).toContain("dup\\u200b-a.yaml");
     expect(lines.filter((line) => UNSAFE.test(line))).toEqual([]);
+
+    const errors: string[] = [];
+    const missing = await drift({ cwd: root, out: () => {}, err: (line) => errors.push(line) }, [
+      "--source",
+      "nope\u001b[2J",
+    ]);
+    expect(missing).toBe(2);
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors.flatMap((line) => line.split("\n")).filter((line) => UNSAFE.test(line))).toEqual(
+      [],
+    );
   });
 });

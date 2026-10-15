@@ -100,7 +100,7 @@ export async function drift(
       const known = loaded.sources.map((adapter) => adapter.id);
       loaded.sources = loaded.sources.filter((adapter) => adapter.id === id);
       if (loaded.sources.length === 0) {
-        ctx.err(noSourceNamed(id, known, loaded.unloaded));
+        ctx.err(printable(noSourceNamed(id, known, loaded.unloaded)));
         return 2;
       }
     }
@@ -465,7 +465,9 @@ export function readBase(path: string, only?: string): BaseKeys {
   // Every other source would read as newly in doubt.
   if (json.source !== undefined && json.source !== only) {
     throw new Error(
-      `--base ${path} checked only source "${json.source}"; add --source ${json.source}.`,
+      printable(
+        `--base ${path} checked only source "${json.source}"; add --source ${json.source}.`,
+      ),
     );
   }
   const unloaded: NonNullable<BaseKeys["unloaded"]> = new Map();
