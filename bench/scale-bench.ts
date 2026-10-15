@@ -189,7 +189,10 @@ function measure(size: number): Row {
     const build = buildIndex({ root: corpus.root, config, indexPath });
 
     const db: Database = openIndex(indexPath, { readonly: true });
-    const searchMs = timeMs(20, () => void searchPages(db, { query: "forcing OR feedback" }));
+    const searchMs = timeMs(
+      20,
+      () => void searchPages(db, { query: "forcing OR feedback", syntax: "fts5" }),
+    );
     const getPageMs = timeMs(20, () => void getPage(db, corpus.hubPath, config));
     const findRelatedMs = timeMs(20, () => void findRelated(db, corpus.hubPath, config, {}));
     const findCanonicalMs = timeMs(5, () => void findCanonical(db, corpus.aliasTerm, config));

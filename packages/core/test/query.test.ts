@@ -77,13 +77,12 @@ describe("searchPages", () => {
   });
 
   test("a type filter narrows the results", () => {
-    expect(searchPages(db, { query: "flux OR prose", types: ["note"] }).map((h) => h.type)).toEqual(
-      ["note"],
-    );
+    const hits = searchPages(db, { query: "flux OR prose", syntax: "fts5", types: ["note"] });
+    expect(hits.map((h) => h.type)).toEqual(["note"]);
   });
 
   test("a source filter narrows the results", () => {
-    const hits = searchPages(db, { query: "flux OR prose", source: "ipcc" });
+    const hits = searchPages(db, { query: "flux OR prose", syntax: "fts5", source: "ipcc" });
     expect(hits.map((h) => h.source)).toEqual(["ipcc"]);
   });
 
@@ -107,7 +106,109 @@ describe("searchPages", () => {
   });
 
   test("the limit is honoured and capped", () => {
-    expect(searchPages(db, { query: "flux OR prose", limit: 1 })).toHaveLength(1);
+    expect(searchPages(db, { query: "flux OR prose", syntax: "fts5", limit: 1 })).toHaveLength(1);
+  });
+});
+
+describe("searchPages on a plain query", () => {
+  const paths = (query: string, syntax?: "plain" | "fts5") =>
+    searchPages(db, { query, syntax })
+      .map((h) => h.path.replace("knowledge/notes/", ""))
+      .toSorted();
+
+  beforeEach(() => {
+    const note = (name: string, body: string) =>
+      writePage(`notes/${name}.md`, `---\ntype: note\n---\n\n# ${name}\n\n${body}\n`);
+    note("fired", "Fired pieces are not porous.");
+    note("raw", "Unfired pieces absorb water.");
+    note("finish", "Use glaze or slip on the rim.");
+    note("rim", "The rim takes glaze.");
+    note("wedge", "Wedge and knead the clay.");
+    note("knead", "Knead the clay, then wedge it.");
+    reindex();
+  });
+
+  test("an uppercase NOT is a word, not a negation", () => {
+    expect(paths("pieces NOT porous")).toEqual(["fired.md"]);
+  });
+
+  test("an uppercase OR is a word, not a union", () => {
+    expect(paths("glaze OR slip")).toEqual(["finish.md"]);
+  });
+
+  test("an uppercase AND is a word, not a conjunction", () => {
+    expect(paths("wedge AND knead")).toEqual(["wedge.md"]);
+  });
+
+  test("lowercase operators are words too", () => {
+    expect(paths("pieces not porous")).toEqual(["fired.md"]);
+    expect(paths("glaze or slip")).toEqual(["finish.md"]);
+    expect(paths("wedge and knead")).toEqual(["wedge.md"]);
+  });
+
+  test("a query that is only an operator searches for that word", () => {
+    expect(paths("NOT")).toEqual(["fired.md"]);
+    expect(paths("OR")).toEqual(["finish.md"]);
+    expect(paths("AND")).toEqual(["wedge.md"]);
+    expect(paths("NEAR")).toEqual([]);
+  });
+
+  test("a double-quoted phrase stays a phrase", () => {
+    expect(paths('"not porous"')).toEqual(["fired.md"]);
+    expect(paths('"porous not"')).toEqual([]);
+    expect(paths('fired "NOT porous"')).toEqual(["fired.md"]);
+  });
+
+  test("FTS5 syntax characters never reach the caller as a syntax error", () => {
+    const queries = [
+      '"',
+      '""',
+      'glaze"',
+      '"takes glaze',
+      "*",
+      "**",
+      "glaze*",
+      "glaze**",
+      '"rim"*',
+      "-*",
+      "glaze\0",
+      "a\0b",
+      '"a\0b"',
+      "-",
+      "-porous",
+      ":",
+      "title:glaze",
+      "(",
+      "(slip",
+      "slip)",
+      "^rim",
+      "+",
+      "NEAR(glaze slip)",
+      "{title}: glaze",
+      "   ",
+    ];
+    for (const query of queries) {
+      expect(() => searchPages(db, { query })).not.toThrow();
+    }
+    expect(paths("-porous")).toEqual(["fired.md"]);
+    expect(paths("(slip")).toEqual(["finish.md"]);
+    expect(paths('"takes glaze')).toEqual(["rim.md"]);
+    expect(paths("glaze\0")).toEqual(["finish.md", "rim.md"]);
+    expect(paths("   ")).toEqual([]);
+  });
+
+  test("a trailing * is still a prefix search, and a bare * matches nothing", () => {
+    expect(paths("glaz*")).toEqual(["finish.md", "rim.md"]);
+    expect(paths("tak* glaz**")).toEqual(["rim.md"]);
+    expect(paths("NO*")).toEqual(["fired.md"]);
+    expect(paths("*")).toEqual([]);
+    expect(paths("**")).toEqual([]);
+  });
+
+  test("operators are still there for a caller that opts in", () => {
+    expect(paths("pieces NOT porous", "fts5")).toEqual(["raw.md"]);
+    expect(paths("glaze OR slip", "fts5")).toEqual(["finish.md", "rim.md"]);
+    expect(paths("wedge AND knead", "fts5")).toEqual(["knead.md", "wedge.md"]);
   });
 });
 
@@ -299,6 +400,11 @@ describe("an index built before a table existed", () => {
     );
   });
 
+  test("lint says to reindex when aliases is missing", () => {
+    dropTable("aliases");
+    expect(() => lint(db, config)).toThrow(StaleIndexError);
+  });
+
   test("citation readers say to reindex when citations is missing", async () => {
     dropTable("citations");
     expect(() => countPagesCiting(db, "s")).toThrow(
@@ -323,6 +429,28 @@ describe("lint", () => {
     const dangling = lint(db, config).findings.filter((f) => f.kind === "dangling-link");
     expect(dangling).toHaveLength(1);
     expect(dangling[0]?.detail).toContain("knowledge/missing.md");
+  });
+
+  test("a missing target linked from a field and the body is one finding naming both (#274)", () => {
+    writePage("a.md", "---\ntype: note\nrelated: [[missing]]\n---\n\n# A\n\nSee [[missing]].\n");
+    reindex();
+    const dangling = lint(db, config).findings.filter((f) => f.kind === "dangling-link");
+    expect(dangling.map((f) => f.detail)).toEqual([
+      "knowledge/missing.md (related, wikilink) is linked but no such page exists",
+    ]);
+  });
+
+  test("an unresolvable target linked from a field and the body is one finding naming both", () => {
+    writePage(
+      "a.md",
+      "---\ntype: note\nrelated: [[../../x]]\n---\n\n# A\n\nSee [[../../x]] and [[../../y]].\n",
+    );
+    reindex();
+    const broken = lint(db, config).findings.filter((f) => f.kind === "broken-link");
+    expect(broken.map((f) => f.detail)).toEqual([
+      "[[../../x]] (related, wikilink) does not resolve: escapes-knowledge-base",
+      "[[../../y]] (wikilink) does not resolve: escapes-knowledge-base",
+    ]);
   });
 
   test("a page type outside the configured vocabulary is reported", () => {
@@ -361,6 +489,58 @@ describe("lint", () => {
     const kinds = findings.map((f) => f.kind);
     expect(kinds).toContain("missing-provenance");
     expect(kinds).toContain("unverified-page");
+  });
+
+  test("an alias declared by two pages is one finding naming both (#263)", () => {
+    writePage("a.md", '---\ntype: note\naliases: ["tenant override"]\n---\n\n# A\n');
+    writePage("b.md", '---\ntype: note\naliases: ["Tenant Override "]\n---\n\n# B\n');
+    reindex();
+    expect(findCanonical(db, "tenant override", config)).toHaveLength(2);
+    const shared = lint(db, config).findings.filter((f) => f.kind === "shared-alias");
+    expect(shared).toHaveLength(1);
+    expect(shared[0]?.path).toBe("knowledge/a.md");
+    expect(shared[0]?.detail).toContain('"tenant override"');
+    expect(shared[0]?.detail).toContain("knowledge/a.md (alias)");
+    expect(shared[0]?.detail).toContain("knowledge/b.md (alias)");
+  });
+
+  test("a decomposed alias collides with a composed one, as canonical matches them", () => {
+    writePage("a.md", '---\ntype: note\naliases: ["\u00c9t\u00e9"]\n---\n\n# A\n');
+    writePage("b.md", '---\ntype: note\naliases: ["E\u0301te\u0301"]\n---\n\n# B\n');
+    reindex();
+    expect(lint(db, config).findings.filter((f) => f.kind === "shared-alias")).toHaveLength(1);
+  });
+
+  test("an alias equal to another page's title is shared, because canonical returns both", () => {
+    writePage("a.md", '---\ntype: note\naliases: ["Forcing"]\n---\n\n# A\n');
+    writePage("b.md", "---\ntype: note\n---\n\n# Forcing\n");
+    reindex();
+    expect(findCanonical(db, "forcing", config)).toHaveLength(2);
+    const shared = lint(db, config).findings.filter((f) => f.kind === "shared-alias");
+    expect(shared.map((f) => f.detail)).toEqual([
+      '"forcing" names 2 pages, so canonical has no single answer: knowledge/a.md (alias), knowledge/b.md (title)',
+    ]);
+  });
+
+  test("the finding points at the alias page, not an alphabetically earlier title-only page", () => {
+    writePage("b.md", "---\ntype: note\n---\n\n# Forcing\n");
+    writePage("z.md", '---\ntype: note\naliases: ["forcing"]\n---\n\n# Z\n');
+    reindex();
+    const shared = lint(db, config).findings.filter((f) => f.kind === "shared-alias");
+    expect(shared.map((f) => f.path)).toEqual(["knowledge/z.md"]);
+  });
+
+  test("an alias equal to its own page's title, or repeated on one page, is not shared", () => {
+    writePage("a.md", '---\ntype: note\naliases: ["Forcing", "forcing"]\n---\n\n# Forcing\n');
+    reindex();
+    expect(lint(db, config).findings.filter((f) => f.kind === "shared-alias")).toEqual([]);
+  });
+
+  test("two pages sharing only a title are left alone: no alias is involved", () => {
+    writePage("a.md", "---\ntype: note\n---\n\n# Overview\n");
+    writePage("b.md", "---\ntype: note\n---\n\n# Overview\n");
+    reindex();
+    expect(lint(db, config).findings.filter((f) => f.kind === "shared-alias")).toEqual([]);
   });
 
   test("a well-formed page produces no findings", () => {

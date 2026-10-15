@@ -1,8 +1,10 @@
 import type { Database } from "../index-db/db.ts";
 
 export interface SearchOptions {
-  /** FTS5 query. Supports phrases, AND/OR/NOT. */
+  /** Words that must all match; a double-quoted run is a phrase, a trailing `*` a prefix. Under `syntax: "fts5"`, an FTS5 query. */
   query: string;
+  /** `plain` (default) searches NOT, OR and AND as words; `fts5` applies operators and throws on bad syntax. */
+  syntax?: "plain" | "fts5";
   /** Restrict to these page types. Empty means every type. */
   types?: readonly string[];
   /** Restrict to one source. */
@@ -23,18 +25,16 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
 
 /**
- * Full-text search over titles, declared aliases, and bodies.
- *
- * Page types are not validated against the configured vocabulary here. A filter
- * naming a type no page uses returns nothing, which is the same answer
- * validation would give, and leaves the core free of any list of what types
- * exist.
+ * Full-text search over titles, declared aliases, and bodies. A type filter is not checked
+ * against the vocabulary: an unused type returns nothing, as validation would, without a type list.
  */
 export function searchPages(db: Database, options: SearchOptions): SearchHit[] {
   const limit = Math.min(Math.max(options.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
+  const match = options.syntax === "fts5" ? options.query : plainMatch(options.query);
+  if (match === "") return [];
 
   const filters = ["pages_fts MATCH ?"];
-  const params: (string | number)[] = [options.query];
+  const params: (string | number)[] = [match];
 
   if (options.types && options.types.length > 0) {
     filters.push(`p.type IN (${options.types.map(() => "?").join(",")})`);
@@ -63,4 +63,20 @@ export function searchPages(db: Database, options: SearchOptions): SearchHit[] {
     .all(...params, limit) as SearchHit[];
 
   return rows;
+}
+
+// Bare, `NULLS NOT DISTINCT` is `nulls AND NOT distinct`: the inverse, silently. Quoted, it has no operators.
+function plainMatch(query: string): string {
+  // FTS5 ends a string at NUL and then throws "unterminated string".
+  const terms = [...query.replaceAll("\0", " ").matchAll(/"([^"]*)"|[^\s"]+|"/g)].flatMap(
+    ([whole, phrase]) => {
+      if (phrase !== undefined) return [`"${phrase}"`];
+      if (whole === '"') return [];
+      // `"word"*` keeps prefix search without letting any operator through.
+      const stem = whole.replace(/\*+$/, "");
+      if (stem === whole) return [`"${whole}"`];
+      return stem === "" ? [] : [`"${stem}"*`];
+    },
+  );
+  return terms.join(" ");
 }
