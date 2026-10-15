@@ -327,6 +327,9 @@ describe("drift --base exits 1 only on what the change put in doubt", () => {
     const base = await baseReport();
 
     expect(await drift("--base", base)).toBe(0);
+    // The rows alone would read as a failure; the first line says the base had it.
+    expect(output[0]).toBe("0 page(s) newly in doubt; 1 already in doubt on the base branch");
+    expect(output.join("\n")).toContain("1 page(s) in doubt:");
     expect(await drift()).toBe(1);
   });
 
@@ -337,6 +340,28 @@ describe("drift --base exits 1 only on what the change put in doubt", () => {
     git("commit", "-qam", "second");
 
     expect(await drift("--json", "--base", base)).toBe(1);
+    expect(JSON.parse(output.join("\n")).pages_newly_in_doubt).toBe(1);
+    expect(await drift("--base", base)).toBe(1);
+    expect(output[0]).toBe("1 page(s) newly in doubt; 0 already in doubt on the base branch");
+  });
+
+  test("an empty base, as the action passes with none, fails on doubt but not on moved lines", async () => {
+    citing("moved", "L10-L12");
+    const empty = join(root, "empty.json");
+    writeFileSync(empty, JSON.stringify({ sources: [] }), "utf-8");
+    writeFileSync(join(docs(), "a.md"), `inserted\n${twentyLines()}`, "utf-8");
+    git("commit", "-qam", "moved");
+
+    expect(await drift("--json", "--base", empty)).toBe(0);
+    const { sources } = JSON.parse(output.join("\n")) as { sources: { source_id: string }[] };
+    expect(sources.find((s) => s.source_id === "docs")).toMatchObject({
+      repin: [{ page: "knowledge/moved.md" }],
+    });
+    expect(await drift()).toBe(1);
+
+    writeFileSync(join(docs(), "a.md"), `inserted\n${twentyLines({ 11: "rewritten" })}`, "utf-8");
+    git("commit", "-qam", "changed");
+    expect(await drift("--json", "--base", empty)).toBe(1);
     expect(JSON.parse(output.join("\n")).pages_newly_in_doubt).toBe(1);
   });
 
@@ -366,12 +391,16 @@ describe("drift --base exits 1 only on what the change put in doubt", () => {
 
   test("under --strict, a delegated page already pending passes; a new one fails", async () => {
     delegated("design", "2026-08-01T10:22:00Z");
+    page("unrecorded", "source: design-docs\n");
     const base = await baseReport();
 
     expect(await drift("--strict", "--base", base)).toBe(0);
     expect(await drift("--strict")).toBe(1);
     // Re-verified through the connector: the same page, so no new work is left undone.
     delegated("design", "2026-09-01T08:00:00Z");
+    expect(await drift("--strict", "--base", base)).toBe(0);
+    // From unverifiable to pending is the same page left unchecked, not a new one.
+    delegated("unrecorded", "2026-09-01T08:00:00Z");
     expect(await drift("--strict", "--base", base)).toBe(0);
 
     delegated("another", "2026-09-01T08:00:00Z");

@@ -110,9 +110,14 @@ Run the same comparison locally with `accreta drift --format github --base base.
 
 `accreta drift --base base.json` exits 1 only on what the change put in doubt: a page newly in
 doubt, a page newly at a revision nobody can place, or a source declaration newly not loading.
-Under `--strict` it also fails on a page that newly records no revision, or newly waits on the
-agent for a delegated source. Those two are compared by page, so a delegated page re-verified at
-a new revision is not new. Without `--base`, drift exits 1 on anything in doubt, as before.
+Pages behind their source whose cited lines only moved or stayed untouched are still reported
+(`repin`, `other_stale_pages`) but no longer fail. Under `--strict` it also fails on a page that
+newly records no revision, or newly waits on the agent for a delegated source. Those are compared
+by page, so a page that gains a revision, or is re-verified at a new one, is not new. In text,
+a first line says how many pages are newly in doubt and how many the base branch already had.
+
+Without `--base`, nothing changes: drift exits 1 on every page behind its source, moved and
+untouched ones included, and on every unplaceable revision and unloaded declaration.
 
 With no base to compare with, the action passes an empty report, so every page counts as new and
 the exit code agrees with the counts.

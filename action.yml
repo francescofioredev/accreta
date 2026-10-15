@@ -109,8 +109,8 @@ runs:
         fi
         status=0
         "${cli[@]}" drift --json "${compare[@]}" >"$RUNNER_TEMP/accreta-drift.json" || status=$?
-        if [ "$status" -gt 1 ]; then
-          echo "::error::accreta drift --json failed before writing a report."
+        if [ "$status" -gt 1 ] || [ ! -s "$RUNNER_TEMP/accreta-drift.json" ]; then
+          echo "::error::accreta drift failed before writing a report."
           exit 1
         fi
         echo "attention=$status" >>"$GITHUB_OUTPUT"
