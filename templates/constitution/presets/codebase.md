@@ -17,10 +17,10 @@ page_types:
   - synthesis # a page that reads across several of the above
 
 link_fields:
-  - consumers # who calls this
-  - consumed_by # what this calls
-  - delegates_to # what this hands work to
-  - implements # the interface or contract this realizes
+  - consumers # what calls this page's subject
+  - consumed_by # what this page's subject calls (the name reads backwards); the inverse of `consumers`
+  - delegates_to # what this page's subject hands work to
+  - implements # the interface or contract this page's subject realizes
   - supersedes
   - superseded_by
   - related
