@@ -264,6 +264,7 @@ export function createServer(ctx: ToolContext): McpServer {
         expect_revision: z
           .string()
           .min(1)
+          .max(128)
           .optional()
           .describe(
             "The `revision` cite returned before you read. Fails if the source differs now; for an fs source that is any change anywhere in it, but not an edit that keeps mtimes.",

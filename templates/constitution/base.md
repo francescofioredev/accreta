@@ -271,6 +271,7 @@ an interruption to work around.
   source does not have, or a locator the source cannot place
 - **citations that name no revision, or one the source never had** — `unknown` where a
   revision belongs, or a commit that is not in the history
+- **abbreviated revisions** — a footnote naming a short revision; lint gives the full one to write
 - **footnotes that do not read as the configured format**, and footnote ids defined twice
 - **inconsistent supersession** — pages that supersede one another in a loop, or a replacement
   only one of its two pages records. Resolve it by checking the source; never add the missing

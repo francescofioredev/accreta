@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -40,6 +41,41 @@ function write(relativePath: string, contents: string): void {
 async function commit(message: string): Promise<void> {
   await run(["add", "-A"]);
   await run(["commit", "-q", "-m", message]);
+}
+
+async function output(args: string[]): Promise<string> {
+  const proc = Bun.spawn(["git", ...args], { cwd: root, stdout: "pipe", stderr: "pipe" });
+  if ((await proc.exited) !== 0) throw new Error(`git ${args.join(" ")} failed`);
+  return (await new Response(proc.stdout).text()).trim();
+}
+
+/** Two commits whose ids share their first four hex digits, written straight into the object store. */
+async function collidingCommits(): Promise<[string, string]> {
+  const algorithm = await output(["rev-parse", "--show-object-format"]);
+  const tree = await output(["hash-object", "-t", "tree", "/dev/null"]);
+  const body = (i: number) =>
+    `tree ${tree}\nauthor T <t@example.com> 1700000000 +0000\ncommitter T <t@example.com> 1700000000 +0000\n\n${i}\n`;
+  const id = (text: string) =>
+    createHash(algorithm)
+      .update(`commit ${Buffer.byteLength(text)}\0${text}`)
+      .digest("hex");
+  const seen = new Map<string, number>();
+  for (let i = 0; ; i++) {
+    const prefix = id(body(i)).slice(0, 4);
+    const first = seen.get(prefix);
+    if (first === undefined) {
+      seen.set(prefix, i);
+      continue;
+    }
+    const written: string[] = [];
+    for (const n of [first, i]) {
+      const file = join(root, `commit-${n}`);
+      writeFileSync(file, body(n));
+      written.push(await output(["hash-object", "-t", "commit", "-w", file]));
+      rmSync(file);
+    }
+    return [written[0]!, written[1]!];
+  }
 }
 
 function source() {
@@ -128,6 +164,144 @@ describe("GitSource", () => {
     expect(await git.knowsRevision(head.slice(0, 7))).toBe(true);
     expect(await git.knowsRevision("0".repeat(40))).toBe(false);
     expect(await git.knowsRevision("not-a-revision")).toBe(false);
+  });
+
+  test("resolveRevision names the commit a unique prefix abbreviates", async () => {
+    write("a.md", "one");
+    await commit("first");
+    const git = source();
+    const head = await git.revision();
+    expect(await git.resolveRevision(head.slice(0, 7))).toEqual({
+      status: "resolved",
+      revision: head,
+    });
+    expect(await git.resolveRevision(head)).toEqual({ status: "resolved", revision: head });
+  });
+
+  test("resolveRevision says a prefix two commits share is ambiguous", async () => {
+    const [a, b] = await collidingCommits();
+    const git = source();
+    expect(await git.resolveRevision(a.slice(0, 4))).toEqual({ status: "ambiguous" });
+    expect(await git.resolveRevision(b.slice(0, 12))).toEqual({ status: "resolved", revision: b });
+  });
+
+  test("resolveRevision knows nothing of a prefix no commit has", async () => {
+    write("a.md", "one");
+    await commit("first");
+    const head = await source().revision();
+    const absent = head.startsWith("0000") ? "ffffffff" : "0000000";
+    expect(await source().resolveRevision(absent)).toEqual({ status: "unknown" });
+    expect(await source().resolveRevision("0".repeat(40))).toEqual({ status: "unknown" });
+  });
+
+  test("resolveRevision takes only hex, never a ref, an expression or an option", async () => {
+    write("a.md", "one");
+    await commit("first");
+    await run(["branch", "deadbeef"]);
+    const git = source();
+    for (const input of ["HEAD", "main", "HEAD~0", "-h", "--all", "", "5B8", "deadbeef"]) {
+      expect(await git.resolveRevision(input)).toEqual({ status: "unknown" });
+    }
+  });
+
+  test("lint names the full revision for a footnote's abbreviated one", async () => {
+    write("a.md", "one\ntwo\n");
+    await commit("first");
+    const git = source();
+    const head = await git.revision();
+    const kb = mkdtempSync(join(tmpdir(), "accreta-git-kb-"));
+    try {
+      mkdirSync(join(kb, "knowledge"));
+      writeFileSync(
+        join(kb, "knowledge", "page.md"),
+        `---\ntype: note\n---\n\nA claim.[^a]\n\n[^a]: repo @ ${head.slice(0, 7)} · a.md#L1-L2\n`,
+      );
+      const indexPath = join(kb, "index.sqlite");
+      buildIndex({ root: kb, config: DEFAULT_CONFIG, indexPath });
+      const db = openIndex(indexPath);
+      try {
+        const { findings } = await lintCitations(db, new Map([["repo", git]]));
+        expect(findings.map((f) => f.kind)).toEqual(["citation-revision-abbreviated"]);
+        expect(findings[0]?.detail).toContain(`write ${head}`);
+      } finally {
+        db.close();
+      }
+    } finally {
+      rmSync(kb, { recursive: true, force: true });
+    }
+  });
+
+  for (const [name, cut, expected, unexpected] of [
+    ["a full uppercase revision as written in uppercase", 40, "uppercase", "abbreviation"],
+    ["an uppercase prefix as an abbreviation", 10, "abbreviation", "uppercase"],
+  ] as const) {
+    test(`lint reports ${name}`, async () => {
+      write("a.md", "one\ntwo\n");
+      await commit("first");
+      const git = source();
+      const head = await git.revision();
+      const kb = mkdtempSync(join(tmpdir(), "accreta-git-kb-"));
+      try {
+        mkdirSync(join(kb, "knowledge"));
+        writeFileSync(
+          join(kb, "knowledge", "page.md"),
+          `---\ntype: note\n---\n\nA claim.[^a]\n\n[^a]: repo @ ${head.slice(0, cut).toUpperCase()} · a.md#L1-L2\n`,
+        );
+        const indexPath = join(kb, "index.sqlite");
+        buildIndex({ root: kb, config: DEFAULT_CONFIG, indexPath });
+        const db = openIndex(indexPath);
+        try {
+          const { findings } = await lintCitations(db, new Map([["repo", git]]));
+          expect(findings.map((f) => f.kind)).toEqual(["citation-revision-abbreviated"]);
+          expect(findings[0]?.detail).toContain(expected);
+          expect(findings[0]?.detail).not.toContain(unexpected);
+          expect(findings[0]?.detail).toContain(head);
+        } finally {
+          db.close();
+        }
+      } finally {
+        rmSync(kb, { recursive: true, force: true });
+      }
+    });
+  }
+
+  test("lint says a prefix that became ambiguous now names several commits", async () => {
+    const [a] = await collidingCommits();
+    write("a.md", "one\ntwo\n");
+    await commit("first");
+    const git = source();
+    const kb = mkdtempSync(join(tmpdir(), "accreta-git-kb-"));
+    try {
+      mkdirSync(join(kb, "knowledge"));
+      writeFileSync(
+        join(kb, "knowledge", "page.md"),
+        `---\ntype: note\n---\n\nA claim.[^a]\n\n[^a]: repo @ ${a.slice(0, 4)} · a.md#L1-L2\n`,
+      );
+      const indexPath = join(kb, "index.sqlite");
+      buildIndex({ root: kb, config: DEFAULT_CONFIG, indexPath });
+      const db = openIndex(indexPath);
+      try {
+        const { findings } = await lintCitations(db, new Map([["repo", git]]));
+        expect(findings).toHaveLength(1);
+        expect(findings[0]?.detail).toContain("names several commits");
+        expect(findings[0]?.detail).toContain("full revision");
+        expect(findings[0]?.detail).not.toContain("does not have");
+      } finally {
+        db.close();
+      }
+    } finally {
+      rmSync(kb, { recursive: true, force: true });
+    }
+  });
+
+  test("resolveRevision reads uppercase hex as the same commit", async () => {
+    write("a.md", "one");
+    await commit("first");
+    const git = source();
+    const head = await git.revision();
+    const resolved = { status: "resolved" as const, revision: head };
+    expect(await git.resolveRevision(head.toUpperCase())).toEqual(resolved);
+    expect(await git.resolveRevision(head.slice(0, 10).toUpperCase())).toEqual(resolved);
   });
 
   test("locate answers from the working tree", async () => {
