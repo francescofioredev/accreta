@@ -1,6 +1,4 @@
-import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { constants } from "node:os";
 import { relative, resolve, sep } from "node:path";
 import {
   countLines,
@@ -13,6 +11,9 @@ import {
   type LocatorChange,
   type SourceAdapter,
 } from "@accreta/core";
+import { executable, run } from "./spawn.ts";
+
+export { TimeoutError } from "./spawn.ts";
 
 export interface GitSourceOptions {
   id: string;
@@ -27,27 +28,52 @@ export interface GitSourceOptions {
   paths?: readonly string[];
 }
 
+/** 40x the slowest call measured (1.5 s, `status` in a 50,000-file repo); a hung filter must not hang `drift`. */
+const DEFAULT_TIMEOUT_MS = 60_000;
+
+function timeoutMs(): number {
+  const raw = process.env.ACCRETA_GIT_TIMEOUT_MS;
+  if (raw === undefined || raw === "") return DEFAULT_TIMEOUT_MS;
+  const ms = Number(raw);
+  if (!Number.isInteger(ms) || ms <= 0) {
+    throw new Error(`ACCRETA_GIT_TIMEOUT_MS must be a whole number of milliseconds, not "${raw}"`);
+  }
+  return ms;
+}
+
+// Each points git at another repository, or another repository's objects; a hook sets the first three.
+// GIT_NAMESPACE stays: it scopes only transfer commands, and changed none of these calls' output.
+const FOREIGN_REPOSITORY = [
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_INDEX_FILE",
+  "GIT_COMMON_DIR",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+];
+
 /** Run a git command in the repository, returning stdout. */
-function git(root: string, args: string[]): Promise<string> {
+async function git(root: string, args: string[]): Promise<string> {
   // accreta only reads; without this `status` rewrites .git/index and a user's commit can hit index.lock.
   const env: NodeJS.ProcessEnv = { ...process.env, GIT_OPTIONAL_LOCKS: "0" };
   // GIT_DIFF_OPTS would override the -U0 that hunk parsing depends on.
   delete env.GIT_DIFF_OPTS;
+  for (const name of FOREIGN_REPOSITORY) delete env[name];
 
-  return new Promise((resolveOutput, reject) => {
-    // Streamed, not execFile: its maxBuffer turns a large diff into an error.
-    const child = spawn("git", args, { cwd: root, env, stdio: ["ignore", "pipe", "pipe"] });
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
-    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
-    child.on("error", reject);
-    child.on("close", (code, signal) => {
-      if (code === 0) return resolveOutput(Buffer.concat(stdout).toString("utf-8"));
-      const exitCode = code ?? 128 + (signal ? constants.signals[signal] : 0);
-      reject(new GitCommandError(args, exitCode, Buffer.concat(stderr).toString("utf-8").trim()));
-    });
+  const file = executable("git");
+  if (file === undefined) {
+    throw Object.assign(new Error("spawn git ENOENT"), { code: "ENOENT", path: "git" });
+  }
+  // core.fsmonitor from env or repo config is a command status, ls-files and check-attr run; it only saves time.
+  // A clean filter also runs in status, but stays on: it decides what is on disk; the timeout bounds it.
+  const { exitCode, stdout, stderr } = await run(file, ["-c", "core.fsmonitor=false", ...args], {
+    cwd: root,
+    env,
+    timeoutMs: timeoutMs(),
+    command: `git ${args.join(" ")}`,
   });
+  if (exitCode === 0) return stdout.toString("utf-8");
+  throw new GitCommandError(args, exitCode, stderr.toString("utf-8").trim());
 }
 
 export class GitCommandError extends Error {
@@ -137,7 +163,17 @@ export class GitSource implements SourceAdapter {
 
     // Citations name a renamed file's old path; -z stops git quoting a non-ASCII one.
     // --relative: citations name paths from the root, not the repository top.
-    const args = ["diff", "--name-only", "-z", "--no-renames", "--relative", revision, "HEAD"];
+    // --end-of-options: the revision comes from page frontmatter, so it must never read as a flag.
+    const args = [
+      "diff",
+      "--name-only",
+      "-z",
+      "--no-renames",
+      "--relative",
+      "--end-of-options",
+      revision,
+      "HEAD",
+    ];
     if (this.paths.length > 0) args.push("--", ...this.paths);
     const out = await git(this.root, args);
     return out.split("\0").filter(Boolean).toSorted();
@@ -175,6 +211,7 @@ export class GitSource implements SourceAdapter {
       "--no-textconv",
       // A `-diff` attribute or a NUL byte would print "Binary files differ" and no hunks.
       "--text",
+      "--end-of-options",
       revision,
       "HEAD",
       "--",

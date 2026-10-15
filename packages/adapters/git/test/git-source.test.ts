@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -20,7 +22,7 @@ import {
   pageChanges,
   UnknownRevisionError,
 } from "@accreta/core";
-import { GitCommandError, GitSource } from "../src/index.ts";
+import { GitCommandError, GitSource, TimeoutError } from "../src/index.ts";
 
 let root = "";
 
@@ -872,5 +874,147 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
   test("at the top level the revision is still HEAD, even when HEAD changed nothing", async () => {
     await run(["commit", "-q", "--allow-empty", "-m", "empty"]);
     expect(await source().revision()).toBe(await head());
+  });
+});
+
+describe("GitSource spawn hardening", () => {
+  const saved = { ...process.env };
+  let outside = "";
+
+  beforeEach(async () => {
+    outside = mkdtempSync(join(tmpdir(), "accreta-git-outside-"));
+    write("a.md", lines(3));
+    await commit("first");
+  });
+
+  afterEach(() => {
+    for (const name of Object.keys(process.env)) if (!(name in saved)) delete process.env[name];
+    Object.assign(process.env, saved);
+    rmSync(outside, { recursive: true, force: true });
+  });
+
+  /** An executable that leaves `marker` behind when run. */
+  function plant(name: string, body = ""): { script: string; marker: string } {
+    const script = join(outside, name);
+    const marker = join(outside, `${name}.ran`);
+    // The PATH under test may hold nothing but this script.
+    const header = `#!/bin/sh\nPATH=/usr/bin:/bin\ntouch "${marker}"\n`;
+    writeFileSync(script, header + body, { mode: 0o755 });
+    return { script, marker };
+  }
+
+  /** Every kind of call the adapter makes, with a diff that is not empty, after `configure`. */
+  async function everyCall(configure: () => Promise<void> | void): Promise<void> {
+    const git = source();
+    const from = await git.revision();
+    write("a.md", lines(3, { 2: "changed" }));
+    await commit("second");
+    // The test's own `git commit` honours the config; only the adapter's calls are under test.
+    await configure();
+    await git.changedSince(from);
+    await git.touchedSince(from, "a.md", ["L1-L2"]);
+    await git.locate("a.md", "L1");
+    await new GitSource({ id: "s", root, citationFormat: "x", paths: ["*.md"] }).locate("a.md");
+  }
+
+  test("core.fsmonitor from the environment never runs", async () => {
+    const { script, marker } = plant("fsmonitor");
+    await everyCall(() => {
+      Object.assign(process.env, {
+        GIT_CONFIG_COUNT: "1",
+        GIT_CONFIG_KEY_0: "core.fsmonitor",
+        GIT_CONFIG_VALUE_0: script,
+      });
+    });
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  test("core.fsmonitor from the repository's own config never runs", async () => {
+    const { script, marker } = plant("fsmonitor");
+    await everyCall(() => run(["config", "core.fsmonitor", script]));
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  test("GIT_DIR and friends from a hook do not point the adapter at another repository", async () => {
+    const other = join(outside, "other");
+    mkdirSync(other);
+    for (const args of [
+      ["init", "-q", "-b", "main"],
+      ["-c", "user.email=t@e", "-c", "user.name=T", "commit", "-q", "--allow-empty", "-m", "x"],
+    ])
+      Bun.spawnSync(["git", ...args], { cwd: other });
+    const own = await source().revision();
+    Object.assign(process.env, {
+      GIT_DIR: join(other, ".git"),
+      GIT_WORK_TREE: other,
+      GIT_INDEX_FILE: join(other, ".git", "index"),
+      GIT_OBJECT_DIRECTORY: join(other, ".git", "objects"),
+    });
+
+    expect(await source().revision()).toBe(own);
+    expect(await source().locate("a.md", "L1")).toEqual({ verdict: "found" });
+  });
+
+  test("a git call that hangs is killed with its helpers, and the error names it", async () => {
+    const pidFile = join(outside, "helper.pid");
+    plant("git", `sleep 30 &\necho $! > "${pidFile}"\nwait\n`);
+    Object.assign(process.env, { PATH: outside, ACCRETA_GIT_TIMEOUT_MS: "1500" });
+
+    const started = performance.now();
+    const failure = await source()
+      .revision()
+      .catch((error: unknown) => error);
+    expect(performance.now() - started).toBeLessThan(4_000);
+    expect(failure).toBeInstanceOf(TimeoutError);
+    expect((failure as Error).message).toBe(
+      "git rev-parse --show-prefix did not finish within 1500 ms",
+    );
+
+    const helper = Number(readFileSync(pidFile, "utf-8"));
+    const alive = () => {
+      try {
+        process.kill(helper, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    for (let i = 0; i < 50 && alive(); i++) await Bun.sleep(20);
+    expect(alive()).toBe(false);
+  });
+
+  test("a timeout that is not a whole number of milliseconds is refused", async () => {
+    process.env.ACCRETA_GIT_TIMEOUT_MS = "soon";
+    await expect(source().revision()).rejects.toThrow(
+      "ACCRETA_GIT_TIMEOUT_MS must be a whole number",
+    );
+  });
+
+  test("a revision shaped like an option is never read as one by diff", async () => {
+    // A second layer behind knowsRevision, which already refuses this revision.
+    class Trusting extends GitSource {
+      override knowsRevision(): Promise<boolean> {
+        return Promise.resolve(true);
+      }
+    }
+    const git = new Trusting({ id: "repo", root, citationFormat: "x" });
+    const written = join(outside, "written");
+
+    await expect(git.changedSince(`--output=${written}`)).rejects.toThrow(GitCommandError);
+    await expect(git.touchedSince(`--output=${written}`, "a.md", ["L1"])).rejects.toThrow(
+      GitCommandError,
+    );
+    await Bun.sleep(100);
+    expect(existsSync(written)).toBe(false);
+  });
+
+  test("a git in the source root never runs, even with the cwd on PATH", async () => {
+    const marker = join(outside, "planted.ran");
+    write("git", `#!/bin/sh\ntouch "${marker}"\necho ${"f".repeat(40)}\n`);
+    chmodSync(join(root, "git"), 0o755);
+    process.env.PATH = `.:${process.env.PATH}`;
+
+    expect(await source().revision()).not.toBe("f".repeat(40));
+    expect(existsSync(marker)).toBe(false);
   });
 });
