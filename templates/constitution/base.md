@@ -66,10 +66,10 @@ A knowledge base that presents contested things as settled is worse than one tha
 nothing, because it is confidently wrong and reads as authoritative.
 
 Record it inline, in the page whose claim is contested; that page's writer does. It gets a
-page of its own only if the vocabulary has a type for disagreements, like research's
+page of its own only if the vocabulary has a type for disagreements, such as
 `contradiction`, and it spans pages or matters in its own right. Search for one first; if none
 exists, the first writer to find the disagreement writes it, and the contested pages link to
-it.
+it instead of repeating it.
 
 ---
 
