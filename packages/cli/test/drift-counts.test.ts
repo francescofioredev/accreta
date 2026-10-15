@@ -170,3 +170,57 @@ describe("a page that only cites the source", () => {
     );
   });
 });
+
+describe("a citation the source refuses (#303)", () => {
+  const WHY =
+    'docs/link.md is reached through a symlink in source "noaa": cite "docs/real.md" instead';
+  const rowOf = (r: DriftReport) =>
+    toGithub([r])
+      .split("\n")
+      .find((line) => line.startsWith(`| \`${PAGE}\``));
+
+  test("says why, not that its lines changed", () => {
+    const refused: CitedChange = {
+      ...touched("b1", "b"),
+      path: "docs/link.md",
+      change: { status: "unknown" },
+      refused: WHY,
+    };
+    const noaa = report("noaa", [{ ...stale("b1", "b", false), citations: [refused] }]);
+    expect(toJson([noaa]).sources[0]!.in_doubt[0]!.citations).toEqual([
+      {
+        footnote: "b",
+        path: "docs/link.md",
+        locator: "L5-L7",
+        cited_at: "b1",
+        change: "unknown",
+        refused: WHY,
+      },
+    ]);
+    expect(rowOf(noaa)).toBe(
+      `| \`${PAGE}\` | \`docs/link.md#L5-L7\` \`[^b]\` | \`b1\` | refused: \`${WHY}\` |`,
+    );
+    expect(text(noaa)).toContain(`${PAGE} (verified at b1) — the source refuses ${WHY}`);
+  });
+
+  test("a per-file source names the refused citation, not the changed files", () => {
+    const noaa = report("noaa", [
+      {
+        revision: "b1",
+        changedPaths: ["docs/real.md"],
+        pages: [PAGE],
+        citedOnly: [PAGE],
+        refused: {
+          [PAGE]: [{ footnote: "b", path: "docs/link.md", locator: "L5", refused: WHY }],
+        },
+      },
+    ]);
+    const page = toJson([noaa]).sources[0]!.in_doubt[0]!;
+    expect(page.changed_paths).toBeUndefined();
+    expect(page.refused?.[0]?.refused).toBe(WHY);
+    expect(rowOf(noaa)).toBe(
+      `| \`${PAGE}\` | \`docs/link.md#L5\` \`[^b]\` | \`b1\` | refused: \`${WHY}\` |`,
+    );
+    expect(text(noaa)).toContain(`${PAGE} (cited at b1) — the source refuses ${WHY}`);
+  });
+});

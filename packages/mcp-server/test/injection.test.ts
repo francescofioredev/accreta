@@ -2,7 +2,13 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { buildIndex, DelegatedSourceError, parseConfig, type SourceAdapter } from "@accreta/core";
+import {
+  buildIndex,
+  DelegatedSourceError,
+  parseConfig,
+  type LocationVerdict,
+  type SourceAdapter,
+} from "@accreta/core";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createContext, createServer, type ToolContext } from "../src/index.ts";
@@ -75,6 +81,8 @@ const SUBTREE_FIELDS = [
   "page.frontmatter",
   "reports[].stale[].pages_by_change",
   "reports[].stale[].cited_paths",
+  // Keyed by page path, like cited_paths.
+  "reports[].stale[].refused",
 ];
 
 // Page-derived text unmarked today, as "tool path CHANNEL". The fix belongs in src/tools.ts, not here.
@@ -83,6 +91,12 @@ const KNOWN_UNMARKED: string[] = [];
 // Surfaced but not page-authored, as "tool path CHANNEL" with why. Empty: a page's path is marked wherever it is not the caller's echo.
 const ACCEPTED_IDENTIFIERS: Record<string, string> = {};
 
+// Refuses one page's own path, naming it back as a symlink refusal does, so check_drift carries the reason.
+const refuses = (path: string): LocationVerdict | undefined =>
+  path.endsWith("-refused.md")
+    ? { verdict: "missing", part: "path", detail: `${path} is reached through a symlink` }
+    : undefined;
+
 // check_drift reports per citation only for a source that diffs contents, and the fixture's fs source does not.
 const DIFFING_SOURCE: SourceAdapter = {
   id: "lines",
@@ -90,7 +104,8 @@ const DIFFING_SOURCE: SourceAdapter = {
   // A page file, as any source whose root encloses the knowledge base reports; the notes cite it.
   changedSince: async () => ["knowledge/notes/CANARY-FILENAME.md"],
   // Unknown, with the cited path in its detail as an adapter's may be, so lint's unchecked_reasons carry it.
-  locate: async (path) => ({ verdict: "unknown", detail: `${path} cannot be checked here` }),
+  locate: async (path) =>
+    refuses(path) ?? { verdict: "unknown", detail: `${path} cannot be checked here` },
   citation: () => "",
   pinRevision: () => {},
   touchedSince: async (_revision, _path, locators) =>
@@ -102,7 +117,7 @@ const PLAIN_SOURCE: SourceAdapter = {
   id: "plain",
   revision: async () => "rev2",
   changedSince: async () => ["knowledge/notes/CANARY-FILENAME.md"],
-  locate: async () => ({ verdict: "found" }),
+  locate: async (path) => refuses(path) ?? { verdict: "found" },
   citation: () => "",
   pinRevision: () => {},
 };
@@ -273,6 +288,7 @@ describe("every tool response, against pages that try to give instructions", () 
   const seenBy = new Map<string, Set<string>>();
   const declaredBy = new Map<string, Set<string>>();
   const markedFieldsSeen = new Set<string>();
+  const leakPaths = new Set<string>();
   const shapesBy = new Map<string, Map<string, Set<string>>>();
   const tools: string[] = [];
   const readErrors: string[] = [];
@@ -315,6 +331,7 @@ describe("every tool response, against pages that try to give instructions", () 
           for (const field of audited.declared) declared.add(field);
           for (const leak of audited.leaks) {
             seen.add(leak.channel);
+            leakPaths.add(`${tool.name} ${leak.path}`);
             if (leak.field) markedFieldsSeen.add(`${tool.name} ${leak.field}`);
             else unmarked.add(`${tool.name} ${leak.path} ${leak.channel}`);
           }
@@ -354,6 +371,15 @@ describe("every tool response, against pages that try to give instructions", () 
 
   test("the write probes reach a confirmed write, so the write's reply is swept too", () => {
     expect(lastWrite).toMatchObject({ ok: true });
+  });
+
+  // Only `lines` diffs contents and only `plain` cannot, so each path names one source (#303).
+  test("check_drift carries why a source refused a citation, per citation and per page", () => {
+    const drift = [...leakPaths].filter((path) => path.startsWith("check_drift "));
+    expect(drift).toContain("check_drift reports[].stale[].citations[].refused");
+    expect(drift.some((path) => path.startsWith("check_drift reports[].stale[].refused."))).toBe(
+      true,
+    );
   });
 
   test("no read probe returns an error, so each one swept a real reply", () => {

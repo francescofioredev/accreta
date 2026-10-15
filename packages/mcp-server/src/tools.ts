@@ -268,6 +268,9 @@ const DRIFT_FIELDS = [
   "reports[].stale[].citations[].footnote",
   "reports[].stale[].citations[].path",
   "reports[].stale[].citations[].locator",
+  // locate's reason names the cited path back; the per-page record is also keyed by page path.
+  "reports[].stale[].citations[].refused",
+  "reports[].stale[].refused",
   "reports[].unverifiable",
   "reports[].unpinned[].page",
   "reports[].unpinned[].footnote",
@@ -377,6 +380,7 @@ async function checkDrift(ctx: ToolContext, db: Database, input: { source?: stri
             pages: entry.pages,
             cited_only: entry.citedOnly,
             cited_paths: entry.citedPaths,
+            refused: entry.refused,
           };
         }
         const byChange = (change: PageChange) => entry.pages.filter((p) => doubt.get(p) === change);
@@ -403,6 +407,7 @@ async function checkDrift(ctx: ToolContext, db: Database, input: { source?: stri
               locator: c.locator,
               status: c.change.status,
               ...(c.change.status === "moved" ? { now: c.change.locator } : {}),
+              ...(c.refused === undefined ? {} : { refused: c.refused }),
             })),
           citations_untouched: cited.filter((c) => c.change.status === "untouched").length,
         };

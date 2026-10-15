@@ -58,6 +58,7 @@ export type {
   DelegatedWork,
   PageChange,
   DriftReport,
+  RefusedCitation,
   StaleRevision,
   UnpinnedCitation,
   UnresolvableRevision,
