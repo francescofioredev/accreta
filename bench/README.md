@@ -229,6 +229,8 @@ every git report takes this path. Without diffs, the report lists only pages and
 | with diffs, cited-only, 2 revisions            | 51,568  | 517      | 76       |
 | without diffs, cited-only, 1 revision          | 14,193  | 176      | 38       |
 | without diffs, cited-only, 2 revisions         | 18,299  | 216      | 76       |
+| with diffs, cited-only, pinned twice           | 57,692  | 639      | 76       |
+| without diffs, cited-only, pinned twice        | 25,099  | 352      | 76       |
 
 Bytes of the text block, darwin arm64, Bun 1.4.2. One revision is what a git ingest leaves:
 every page verified in one run records the same HEAD. The two-revision cases, which also cite
@@ -244,6 +246,17 @@ gate counts each changed path once per stale revision, once per listed citation 
 cited-only page that cites it. A field added to every cited-only page fails once it costs more
 than 10% of its per-page figure: 18 B and 22 B without diffs, 36 B and 52 B with diffs, at one
 and two revisions.
+
+In the pinned-twice rows, every cited-only page pins its second footnote at the other
+revision, so it sits in both groups. `check_drift` lists it once per pin: in `pages`,
+`cited_only` and `pages_by_change` or `cited_paths` of each group, with only the citations
+pinned there. Against the same pages pinned once, that adds 136 B per page without diffs and
+122 B with diffs, past the two-revision cited-only budgets, so these rows have their own; their
+10% thresholds are 35 B and 64 B per page. The cost grows per pin, not per revision: at three
+revisions with two pins it stays at 352 B and 638.72 B per page. The probe checks each distinct
+group's pages, `cited_only` and `cited_paths` against the pins that put them there, and
+`repetition` checks that the corpus really pins pages twice. Which group each citation lands in
+is covered by core's `drift-cross-source.test.ts`, not here.
 
 Each of these was reproduced by rewriting the response at run time, and each fails the gate:
 

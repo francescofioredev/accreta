@@ -418,6 +418,8 @@ export interface DriftMode {
   citesPerPage: 1 | 2;
   /** Odd pages below MIXED_PAGES, and all from it on, only cite this source; half by canonical_source too. */
   citedOnly?: boolean;
+  /** Cited-only pages pin their second footnote at the next revision, so each sits in two groups. */
+  pinnedTwice?: boolean;
 }
 
 // Pages past this are all cited-only, so the gate's extra pages measure cited-only pages alone.
@@ -431,12 +433,21 @@ export interface DriftRow {
   listedCitations: Map<string, number>;
   /** Cited-only pages whose `cited_paths` entry names the path, by path. */
   citedPaths: Map<string, number>;
+  /** The most stale groups any one page is listed in. */
+  repetition: number;
 }
 
 /** The changed paths a cited-only page cites, as `cited_paths` should name them. */
 type CitedPaths = Record<string, string[]>;
 
-// Entries, not one merged object, so a page listed in two groups counts twice.
+/** What one stale group should list, as the generator wrote it. */
+interface WantGroup {
+  pages: string[];
+  citedOnly: string[];
+  citedPaths: [string, string[]][];
+}
+
+// Order-free, so only what a group lists is compared, not the order it lists it in.
 const normalized = (entries: [string, string[]][]) =>
   JSON.stringify(
     entries
@@ -450,11 +461,19 @@ export async function measureDrift(
   changed: number,
   mode: DriftMode,
 ): Promise<DriftRow> {
+  if (mode.pinnedTwice && !(mode.citedOnly && mode.citesPerPage === 2 && mode.revisions >= 2)) {
+    throw new Error("pinnedTwice: needs citedOnly, citesPerPage 2 and at least 2 revisions");
+  }
   const root = mkdtempSync(join(tmpdir(), "accreta-mcp-drift-"));
   try {
     mkdirSync(join(root, "knowledge"), { recursive: true });
     writeFileSync(join(root, "accreta.config.yaml"), CONFIG_YAML);
-    const wantCitedPaths: CitedPaths = {};
+    const wantGroups = new Map<string, WantGroup>();
+    const wantGroup = (revision: string) => {
+      const group = wantGroups.get(revision) ?? { pages: [], citedOnly: [], citedPaths: [] };
+      wantGroups.set(revision, group);
+      return group;
+    };
     let wantCitations = 0;
     for (let i = 0; i < pages; i++) {
       const mixed = mode.citedOnly === true && i < MIXED_PAGES;
@@ -462,13 +481,18 @@ export async function measureDrift(
       const rank = mixed ? Math.floor(i / 2) : i;
       const revision = `rev-old-${rank % mode.revisions}`;
       const cite = `${changedPath(i % CITED_PATHS)}#${locatorOf(i)}`;
+      const page = `knowledge/${pageId(i)}.md`;
+      const ownPage = !mode.citedOnly || (mixed && i % 2 === 0);
+      const secondPin =
+        mode.pinnedTwice && !ownPage ? `rev-old-${(rank + 1) % mode.revisions}` : revision;
       const footnote =
         mode.citesPerPage === 2
-          ? `\nA claim.[^a]\n\n[^a]: synthetic @ ${revision} · ${changedPath((i + 1) % CITED_PATHS)}#${locatorOf(i + 1)}\n`
+          ? `\nA claim.[^a]\n\n[^a]: synthetic @ ${secondPin} · ${changedPath((i + 1) % CITED_PATHS)}#${locatorOf(i + 1)}\n`
           : "";
       const path = join(root, "knowledge", `${pageId(i)}.md`);
-      if (!mode.citedOnly || (mixed && i % 2 === 0)) {
+      if (ownPage) {
         wantCitations += mode.citesPerPage;
+        wantGroup(revision).pages.push(page);
         writeFileSync(
           path,
           `---\ntype: concept\ntitle: Page ${i}\nsource: synthetic\ncanonical_source: "synthetic:${cite}"\nlast_verified_revision: ${revision}\n---\n\nPage ${i}.\n${footnote}`,
@@ -479,12 +503,17 @@ export async function measureDrift(
       const canonical =
         Math.floor(rank / 2) % 2 === 1 ? `canonical_source: "synthetic:${cite}"\n` : "";
       wantCitations += mode.citesPerPage + (canonical ? 1 : 0);
-      wantCitedPaths[`knowledge/${pageId(i)}.md`] = [
-        ...new Set([
-          changedPath(i % CITED_PATHS),
-          ...(footnote ? [changedPath((i + 1) % CITED_PATHS)] : []),
-        ]),
-      ];
+      // One entry per pin: a page pinned at two revisions is in both groups, each with its own paths.
+      const pins = new Map<string, number[]>([[revision, [i % CITED_PATHS]]]);
+      if (footnote) pins.set(secondPin, [...(pins.get(secondPin) ?? []), (i + 1) % CITED_PATHS]);
+      for (const [pin, cited] of pins) {
+        const hit = [...new Set(cited)].filter((n) => n < changed).map(changedPath);
+        if (hit.length === 0) continue;
+        const group = wantGroup(pin);
+        group.pages.push(page);
+        group.citedOnly.push(page);
+        if (!mode.diffing) group.citedPaths.push([page, hit]);
+      }
       writeFileSync(
         path,
         `---\ntype: concept\ntitle: Page ${i}\nsource: other\n${canonical}last_verified_revision: other-rev\n---\n\nPage ${i}.[^c]\n\n[^c]: synthetic @ ${revision} · ${cite}\n${footnote}`,
@@ -505,18 +534,39 @@ export async function measureDrift(
     try {
       const drift = await call(client, "check_drift", {});
       const stale: {
-        pages: unknown[];
+        revision: string;
+        pages: string[];
         cited_only?: string[];
         cited_paths?: CitedPaths;
         citations?: { path: string }[];
         citations_untouched?: number;
       }[] = drift.value.reports[0]?.stale ?? [];
-      const stalePages = stale.reduce((n, s) => n + s.pages.length, 0);
       expectProbe(
         "check_drift",
-        stale.length === mode.revisions && stalePages === pages,
-        `${stale.length} stale revisions with ${stalePages} pages, want ${mode.revisions} with ${pages}`,
+        stale.length === wantGroups.size &&
+          new Set(stale.map((s) => s.revision)).size === wantGroups.size,
+        `${stale.length} stale revisions (${new Set(stale.map((s) => s.revision)).size} distinct), want ${wantGroups.size}`,
       );
+      // Per group, so a page listed in a group it has no pin in fails, and so does a missing one.
+      const sorted = (list: string[]) => JSON.stringify(list.toSorted());
+      for (const s of stale) {
+        const want = wantGroups.get(s.revision);
+        expectProbe(
+          "check_drift",
+          want !== undefined &&
+            sorted(s.pages) === sorted(want.pages) &&
+            sorted(s.cited_only ?? []) === sorted(want.citedOnly),
+          `${s.revision}: ${s.pages.length} pages, ${s.cited_only?.length ?? 0} cited-only, want ${want?.pages.length ?? 0} and ${want?.citedOnly.length ?? 0}`,
+        );
+        // Checked against the generator, so a path repeated inside cited_paths cannot set its own budget.
+        const got = normalized(Object.entries(s.cited_paths ?? {}));
+        const wantPaths = normalized(want!.citedPaths);
+        expectProbe(
+          "check_drift",
+          got === wantPaths,
+          `${s.revision}: cited_paths ${got.slice(0, 200)}, want ${wantPaths.slice(0, 200)}`,
+        );
+      }
       const citations = stale.reduce(
         (n, s) => n + (s.citations?.length ?? 0) + (s.citations_untouched ?? 0),
         0,
@@ -526,21 +576,11 @@ export async function measureDrift(
         citations === (mode.diffing ? wantCitations : 0),
         `${citations} citations, want ${mode.diffing ? wantCitations : 0}`,
       );
-      const citedOnly = stale.flatMap((s) => s.cited_only ?? []).toSorted();
-      const wantCitedOnly = Object.keys(wantCitedPaths).toSorted();
-      expectProbe(
-        "check_drift",
-        JSON.stringify(citedOnly) === JSON.stringify(wantCitedOnly),
-        `${citedOnly.length} cited-only pages, want ${wantCitedOnly.length}`,
-      );
-      // Checked against the generator, so a path repeated inside cited_paths cannot set its own budget.
       const citedPaths = stale.flatMap((s) => Object.entries(s.cited_paths ?? {}));
-      const wantPaths = mode.diffing ? [] : Object.entries(wantCitedPaths);
-      expectProbe(
-        "check_drift",
-        normalized(citedPaths) === normalized(wantPaths),
-        `cited_paths ${normalized(citedPaths).slice(0, 200)}, want ${normalized(wantPaths).slice(0, 200)}`,
-      );
+      const groupsOf = new Map<string, number>();
+      for (const page of stale.flatMap((s) => s.pages)) {
+        groupsOf.set(page, (groupsOf.get(page) ?? 0) + 1);
+      }
       const listedCitations = new Map<string, number>();
       for (const c of stale.flatMap((s) => s.citations ?? [])) {
         listedCitations.set(c.path, (listedCitations.get(c.path) ?? 0) + 1);
@@ -555,6 +595,7 @@ export async function measureDrift(
         staleRevisions: stale.length,
         listedCitations,
         citedPaths: citedPathCounts,
+        repetition: Math.max(0, ...groupsOf.values()),
       };
     } finally {
       await client.close();
