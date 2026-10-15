@@ -314,6 +314,22 @@ describe("stateDirFor", () => {
   });
 });
 
+describe("git preflight", () => {
+  test("git that cannot run is not reported as a root that is no repository", async () => {
+    mkdirSync(join(root, "repo"));
+    const path = process.env.PATH;
+    process.env.PATH = join(root, "no-git-here");
+    try {
+      const declaration = { id: "repo", type: "git", options: { root: "repo" } };
+      const preflight = await kindFor("git")!.preflight(declaration, ctx());
+      expect(preflight.reachable).toBe("no");
+      expect(preflight.detail).toStartWith("git could not run: ");
+    } finally {
+      process.env.PATH = path;
+    }
+  });
+});
+
 describe("fs preflight", () => {
   test("says when snapshots cannot persist, and why", async () => {
     mkdirSync(join(root, "corpus"));

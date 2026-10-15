@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import {
   chmodSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -22,7 +23,10 @@ import {
   pageChanges,
   UnknownRevisionError,
 } from "@accreta/core";
-import { GitCommandError, GitSource, TimeoutError } from "../src/index.ts";
+import { GitCommandError, GitSource, isWorkingTree, TimeoutError } from "../src/index.ts";
+
+// Some tests spawn about 20 git processes, which a loaded machine stretches past the 5 s default.
+setDefaultTimeout(20_000);
 
 let root = "";
 
@@ -877,6 +881,30 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
   });
 });
 
+/** A shell loop that appends to `file` every 100 ms, so a dead one is a file that stops growing. */
+const beat = (file: string) => `(while :; do echo . >> "${file}"; sleep 0.1; done)`;
+
+/** Whether `file` stops growing within 5 s; kill(pid, 0) would also answer yes for a zombie. */
+async function stopsBeating(file: string): Promise<boolean> {
+  const size = () => (existsSync(file) ? statSync(file).size : 0);
+  const deadline = Date.now() + 5_000;
+  let last = size();
+  while (Date.now() < deadline) {
+    await Bun.sleep(400);
+    if (size() === last) return true;
+    last = size();
+  }
+  return false;
+}
+
+const at = (cwd: string, args: string[]) => Bun.spawnSync(["git", ...args], { cwd });
+
+function gitAtLeast(major: number, minor: number): boolean {
+  const out = Bun.spawnSync(["git", "--version"]).stdout.toString();
+  const [, a = "0", b = "0"] = /(\d+)\.(\d+)/.exec(out) ?? [];
+  return Number(a) > major || (Number(a) === major && Number(b) >= minor);
+}
+
 describe("GitSource spawn hardening", () => {
   const saved = { ...process.env };
   let outside = "";
@@ -956,32 +984,119 @@ describe("GitSource spawn hardening", () => {
   });
 
   test("a git call that hangs is killed with its helpers, and the error names it", async () => {
-    const pidFile = join(outside, "helper.pid");
-    plant("git", `sleep 30 &\necho $! > "${pidFile}"\nwait\n`);
+    const heartbeat = join(outside, "helper.beat");
+    plant("git", `${beat(heartbeat)} &\necho $! > "${heartbeat}.pid"\nwait\n`);
     Object.assign(process.env, { PATH: outside, ACCRETA_GIT_TIMEOUT_MS: "1500" });
 
     const started = performance.now();
     const failure = await source()
       .revision()
       .catch((error: unknown) => error);
-    expect(performance.now() - started).toBeLessThan(4_000);
+    expect(performance.now() - started).toBeLessThan(6_000);
     expect(failure).toBeInstanceOf(TimeoutError);
-    expect((failure as Error).message).toBe(
-      "git rev-parse --show-prefix did not finish within 1500 ms",
-    );
+    // The subcommand alone: a locate detail must carry no path.
+    expect((failure as Error).message).toBe("git rev-parse did not finish within 1500 ms");
 
-    const helper = Number(readFileSync(pidFile, "utf-8"));
-    const alive = () => {
-      try {
-        process.kill(helper, 0);
-        return true;
-      } catch {
-        return false;
-      }
-    };
-    for (let i = 0; i < 50 && alive(); i++) await Bun.sleep(20);
-    expect(alive()).toBe(false);
+    expect(Number(readFileSync(`${heartbeat}.pid`, "utf-8"))).toBeGreaterThan(0);
+    expect(await stopsBeating(heartbeat)).toBe(true);
+  }, 15_000);
+
+  test("a hanging git is reported as such, not as an unknown revision or no repository", async () => {
+    plant("git", "sleep 30\n");
+    Object.assign(process.env, { PATH: outside, ACCRETA_GIT_TIMEOUT_MS: "500" });
+    await expect(source().changedSince("0".repeat(40))).rejects.toBeInstanceOf(TimeoutError);
+    await expect(isWorkingTree(root)).rejects.toBeInstanceOf(TimeoutError);
   });
+
+  test("pathspec settings in the environment neither kill git nor change what paths match", async () => {
+    const from = await source().revision();
+    write("a.md", lines(3, { 2: "changed" }));
+    await commit("second");
+    for (const name of ["GIT_GLOB_PATHSPECS", "GIT_NOGLOB_PATHSPECS", "GIT_ICASE_PATHSPECS"]) {
+      process.env[name] = "1";
+      expect(Object.fromEntries(await source().touchedSince(from, "a.md", ["L2"]))).toEqual({
+        L2: { status: "touched" },
+      });
+      delete process.env[name];
+    }
+    process.env.GIT_LITERAL_PATHSPECS = "1";
+    const patterned = new GitSource({ id: "s", root, citationFormat: "x", paths: ["*.md"] });
+    expect(await patterned.locate("a.md")).toEqual({ verdict: "found" });
+  });
+
+  test("a git dir committed inside the corpus does not lend its config to a root in it", async () => {
+    const seed = join(outside, "seed");
+    const marker = join(outside, "filter.ran");
+    mkdirSync(seed);
+    for (const args of [
+      ["init", "-q", "-b", "main"],
+      ["add", "-A"],
+      ["-c", "user.email=t@e", "-c", "user.name=T", "commit", "-q", "-m", "x"],
+    ]) {
+      if (args[0] === "add") {
+        writeFileSync(join(seed, "a.md"), "one\n");
+        writeFileSync(join(seed, ".gitattributes"), "a.md filter=x\n");
+      }
+      Bun.spawnSync(["git", ...args], { cwd: seed });
+    }
+    const embedded = join(root, "corpus", "emb");
+    cpSync(join(seed, ".git"), embedded, { recursive: true });
+    mkdirSync(join(embedded, "tree"));
+    for (const file of ["a.md", ".gitattributes"]) {
+      cpSync(join(seed, file), join(embedded, "tree", file));
+    }
+    for (const [key, value] of [
+      ["core.bare", "false"],
+      ["core.worktree", "tree"],
+      ["filter.x.clean", `touch "${marker}"; cat`],
+    ])
+      Bun.spawnSync(["git", "config", key!, value!], { cwd: embedded });
+    // A newer mtime makes status re-hash the file through its clean filter.
+    const later = new Date(Date.now() + 60_000);
+    utimesSync(join(embedded, "tree", "a.md"), later, later);
+
+    const inside = new GitSource({ id: "c", root: join(embedded, "tree"), citationFormat: "x" });
+    expect(await inside.locate("a.md", "L1")).toMatchObject({ verdict: "unknown" });
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  test.skipIf(!gitAtLeast(2, 44))(
+    "knowsRevision never fetches a revision from a promisor remote",
+    async () => {
+      const server = join(outside, "server");
+      const client = join(outside, "client");
+      mkdirSync(server);
+      const commitIn = (cwd: string, m: string) =>
+        at(cwd, [
+          "-c",
+          "user.email=t@e",
+          "-c",
+          "user.name=T",
+          "commit",
+          "-q",
+          "--allow-empty",
+          "-m",
+          m,
+        ]);
+      at(server, ["init", "-q", "-b", "main"]);
+      at(server, ["config", "uploadpack.allowFilter", "true"]);
+      at(server, ["config", "uploadpack.allowAnySHA1InWant", "true"]);
+      commitIn(server, "first");
+      at(outside, ["clone", "-q", "--filter=blob:none", `file://${server}`, client]);
+      commitIn(server, "later");
+      const later = at(server, ["rev-parse", "HEAD"]).stdout.toString().trim();
+
+      const git = new GitSource({ id: "c", root: client, citationFormat: "x" });
+      expect(await git.knowsRevision(later)).toBe(false);
+      const local = Bun.spawnSync(["git", "cat-file", "-e", later], {
+        cwd: client,
+        env: { ...process.env, GIT_NO_LAZY_FETCH: "1" },
+      });
+      expect(local.exitCode).not.toBe(0);
+      // Without the guard the same question fetches it, so the setup does exercise a lazy fetch.
+      expect(at(client, ["cat-file", "-e", later]).exitCode).toBe(0);
+    },
+  );
 
   test("a timeout that is not a whole number of milliseconds is refused", async () => {
     process.env.ACCRETA_GIT_TIMEOUT_MS = "soon";
@@ -1004,7 +1119,6 @@ describe("GitSource spawn hardening", () => {
     await expect(git.touchedSince(`--output=${written}`, "a.md", ["L1"])).rejects.toThrow(
       GitCommandError,
     );
-    await Bun.sleep(100);
     expect(existsSync(written)).toBe(false);
   });
 

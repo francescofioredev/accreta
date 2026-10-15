@@ -34,10 +34,8 @@ export function findOnPath(
   platform: NodeJS.Platform = process.platform,
 ): string | undefined {
   const entries = (envValue(env, "PATH", platform) ?? "").split(platform === "win32" ? ";" : ":");
-  const extensions =
-    platform === "win32"
-      ? (envValue(env, "PATHEXT", platform) ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean)
-      : [""];
+  // Not PATHEXT: spawn refuses .bat and .cmd without a shell (CVE-2024-27980), and libuv tries only these.
+  const extensions = platform === "win32" ? [".COM", ".EXE"] : [""];
   for (const entry of entries) {
     // Windows allows a quoted entry, and libuv's own search honours it.
     const dir = platform === "win32" ? entry.replace(/^"(.*)"$/, "$1") : entry;
@@ -52,15 +50,61 @@ export function findOnPath(
 
 const resolved = new Map<string, { path: string | undefined; file: string | undefined }>();
 
-/** `findOnPath` once per process, again only if PATH itself changes. */
+/** `findOnPath` once per process, again if PATH changes; a miss is not kept, so installing git mends it. */
 export function executable(name: string): string | undefined {
   const path = envValue(process.env, "PATH", process.platform);
-  let entry = resolved.get(name);
-  if (entry === undefined || entry.path !== path) {
-    entry = { path, file: findOnPath(name, process.env) };
-    resolved.set(name, entry);
+  const entry = resolved.get(name);
+  if (entry !== undefined && entry.path === path) return entry.file;
+  const file = findOnPath(name, process.env);
+  if (file === undefined) resolved.delete(name);
+  else resolved.set(name, { path, file });
+  return file;
+}
+
+// Process groups still running, so accreta dying from a signal does not orphan git and its filters.
+const live = new Set<number>();
+const SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+
+function killLive(): void {
+  for (const pid of live) {
+    try {
+      // Safe after the leader is reaped: the group id stays reserved while any member lives.
+      process.kill(-pid, "SIGKILL");
+    } catch {
+      // The whole group is gone.
+    }
   }
-  return entry.file;
+  live.clear();
+}
+
+const onSignal = Object.fromEntries(
+  SIGNALS.map((signal) => [
+    signal,
+    () => {
+      killLive();
+      unguard();
+      // Re-raised for the default exit, unless the host handles this signal itself.
+      if (process.listenerCount(signal) === 0) process.kill(process.pid, signal);
+    },
+  ]),
+) as Record<(typeof SIGNALS)[number], () => void>;
+
+function guard(pid: number): void {
+  if (live.size === 0) {
+    for (const signal of SIGNALS) process.once(signal, onSignal[signal]);
+    process.once("exit", killLive);
+  }
+  live.add(pid);
+}
+
+function unguard(): void {
+  for (const signal of SIGNALS) process.off(signal, onSignal[signal]);
+  process.off("exit", killLive);
+}
+
+function release(pid: number): void {
+  if (!live.delete(pid) || live.size > 0) return;
+  unguard();
 }
 
 export class TimeoutError extends Error {
@@ -98,17 +142,20 @@ export function run(
       stdio: ["ignore", "pipe", "pipe"],
       detached: group,
     });
+    const pid = group ? child.pid : undefined;
+    if (pid !== undefined) guard(pid);
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     let settled = false;
     const timer = setTimeout(() => {
       settled = true;
       try {
-        if (group && child.pid !== undefined) process.kill(-child.pid, "SIGKILL");
+        if (pid !== undefined) process.kill(-pid, "SIGKILL");
         else child.kill("SIGKILL");
       } catch {
         // Already gone.
       }
+      if (pid !== undefined) release(pid);
       // Not on close: a helper that outlived the kill would hold the pipes open.
       child.stdout.destroy();
       child.stderr.destroy();
@@ -118,12 +165,14 @@ export function run(
     child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
     child.on("error", (error) => {
       clearTimeout(timer);
+      if (pid !== undefined) release(pid);
       if (settled) return;
       settled = true;
       reject(error);
     });
     child.on("close", (code, signal) => {
       clearTimeout(timer);
+      if (pid !== undefined) release(pid);
       if (settled) return;
       settled = true;
       resolveResult({

@@ -28,7 +28,8 @@ export interface GitSourceOptions {
   paths?: readonly string[];
 }
 
-/** 40x the slowest call measured (1.5 s, `status` in a 50,000-file repo); a hung filter must not hang `drift`. */
+// 40x the slowest call measured in a 50,000-file, 5,000-commit repo (status, 1.5 s; rev-list 42 ms, warm).
+// A hung filter must not hang `drift`.
 const DEFAULT_TIMEOUT_MS = 60_000;
 
 function timeoutMs(): number {
@@ -50,12 +51,21 @@ const FOREIGN_REPOSITORY = [
   "GIT_COMMON_DIR",
   "GIT_OBJECT_DIRECTORY",
   "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  // These clash with --literal-pathspecs, or change what a declared `paths` pattern matches.
+  "GIT_GLOB_PATHSPECS",
+  "GIT_NOGLOB_PATHSPECS",
+  "GIT_ICASE_PATHSPECS",
+  "GIT_LITERAL_PATHSPECS",
 ];
 
 /** Run a git command in the repository, returning stdout. */
-async function git(root: string, args: string[]): Promise<string> {
+async function git(
+  root: string,
+  args: string[],
+  extraEnv: NodeJS.ProcessEnv = {},
+): Promise<string> {
   // accreta only reads; without this `status` rewrites .git/index and a user's commit can hit index.lock.
-  const env: NodeJS.ProcessEnv = { ...process.env, GIT_OPTIONAL_LOCKS: "0" };
+  const env: NodeJS.ProcessEnv = { ...process.env, GIT_OPTIONAL_LOCKS: "0", ...extraEnv };
   // GIT_DIFF_OPTS would override the -U0 that hunk parsing depends on.
   delete env.GIT_DIFF_OPTS;
   for (const name of FOREIGN_REPOSITORY) delete env[name];
@@ -64,13 +74,16 @@ async function git(root: string, args: string[]): Promise<string> {
   if (file === undefined) {
     throw Object.assign(new Error("spawn git ENOENT"), { code: "ENOENT", path: "git" });
   }
-  // core.fsmonitor from env or repo config is a command status, ls-files and check-attr run; it only saves time.
-  // A clean filter also runs in status, but stays on: it decides what is on disk; the timeout bounds it.
-  const { exitCode, stdout, stderr } = await run(file, ["-c", "core.fsmonitor=false", ...args], {
+  // Trust: the source's .git/config, and all it includes, runs as code; the timeout bounds a hang only.
+  // fsmonitor runs in status, ls-files and check-attr and only saves time; filters decide what is on disk.
+  // safe.bareRepository: a git dir committed inside the corpus must not lend its config to a root in it.
+  const hardened = ["-c", "core.fsmonitor=false", "-c", "safe.bareRepository=explicit"];
+  const { exitCode, stdout, stderr } = await run(file, [...hardened, ...args], {
     cwd: root,
     env,
     timeoutMs: timeoutMs(),
-    command: `git ${args.join(" ")}`,
+    // The subcommand only: locate's details must name no path.
+    command: `git ${args.find((arg) => !arg.startsWith("-")) ?? ""}`,
   });
   if (exitCode === 0) return stdout.toString("utf-8");
   throw new GitCommandError(args, exitCode, stderr.toString("utf-8").trim());
@@ -98,8 +111,10 @@ export async function isWorkingTree(root: string): Promise<boolean> {
   try {
     await git(root, ["rev-parse", "--git-dir"]);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    // Git that cannot start or times out has not said the root is no repository.
+    if (error instanceof GitCommandError) return false;
+    throw error;
   }
 }
 
@@ -147,10 +162,12 @@ export class GitSource implements SourceAdapter {
    */
   async knowsRevision(revision: string): Promise<boolean> {
     try {
-      await git(this.root, ["cat-file", "-e", `${revision}^{commit}`]);
+      // A promisor remote would fetch a revision taken from frontmatter; the env var, since the flag needs 2.44.
+      await git(this.root, ["cat-file", "-e", `${revision}^{commit}`], { GIT_NO_LAZY_FETCH: "1" });
       return true;
-    } catch {
-      return false;
+    } catch (error) {
+      if (error instanceof GitCommandError) return false;
+      throw error;
     }
   }
 
