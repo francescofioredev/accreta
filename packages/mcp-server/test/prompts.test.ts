@@ -182,6 +182,8 @@ describe("MCP prompts", () => {
         }
         // The page field and the footnote value the prompts name; the server declares neither.
         for (const extra of ["last_verified_revision", "unknown"]) known.add(extra);
+        // A check_drift field only a refused citation emits; injection.test.ts sees it emitted.
+        known.add("refused");
         for (const name of Object.keys(ARGS)) {
           const text = await render(client, name);
           const quoted = [...text.matchAll(/`([a-z][a-z_.]*)`/g)].map((m) => m[1]!);
