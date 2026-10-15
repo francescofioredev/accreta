@@ -6,15 +6,16 @@ saying what changed and why. Issue #137, launch gate #133.
 
 ## Corpus and order
 
-Hono, pinned at v4.12.34 and moved to v4.13.0 (maintainer decision on #136). The steps run in
-this order, and none of them starts before the one above it has finished:
+Hono, pinned at v4.12.34. The demo moves the pin one tag, to v4.13.0 (maintainer decision on
+#136); H2 is scored at v4.13.13 (see the 2026-10-15 revision below). The steps run in this
+order, and none of them starts before the one above it has finished:
 
 1. The questions, their reference answers and their evidence are written from the sources
    alone, at v4.12.34, before the knowledge base exists. They are committed as
    `docs/research/2026-10-eval/questions.json`, and their SHA-256 is recorded here. The same
    goes for the surfaces tasks (`tasks.json`), and for the SHA-256 of the answers grading seed.
    The seed's value stays private until grading is complete.
-   - questions.json SHA-256: _recorded when committed_
+   - questions.json SHA-256: `8a4586c42b7d7be848d17185fee4426127695f2a118e37bd8f66f692fccecf76`
    - tasks.json SHA-256: _recorded when committed_
    - seed SHA-256: _recorded before the answers run_
 2. The knowledge base is generated, with every source at v4.12.34.
