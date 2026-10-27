@@ -66,6 +66,20 @@ describe("drift counts each page once", () => {
     expect(lines.join("\n")).not.toContain("across");
   });
 
+  test("no total when nothing is in doubt, so a failing run does not end on all clear", () => {
+    const moved: StaleRevision = {
+      ...stale("a1", "a", false),
+      citations: [{ ...touched("a1", "a"), change: { status: "moved", locator: "L6-L8" } }],
+    };
+    const lines: string[] = [];
+    printReports({ out: (line: string) => lines.push(line) }, [
+      report("ipcc", [moved]),
+      report("noaa", []),
+    ]);
+    expect(lines.join("\n")).toContain("no page in doubt; 1 to re-pin or re-verify");
+    expect(lines.join("\n")).not.toContain("across");
+  });
+
   test("a page with footnotes pinned at two stale revisions", () => {
     const noaa = report("noaa", [stale("b0", "old", true), stale("b1", "new", true)]);
     expect(toJson([noaa]).pages_in_doubt).toBe(1);

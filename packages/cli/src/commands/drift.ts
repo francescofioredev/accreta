@@ -188,11 +188,11 @@ function printUnverifiable(ctx: Pick<CommandContext, "out">, report: DriftReport
 /** Each source's report, then, with several, the distinct total that `--json` reports. */
 export function printReports(ctx: Pick<CommandContext, "out">, reports: DriftReport[]): void {
   for (const report of reports) printText(ctx, report);
-  if (reports.length > 1) {
-    // A page in doubt under two sources is counted under each above, but once here.
-    const total = toJson(reports).pages_in_doubt;
-    ctx.out(`${total} page(s) in doubt across ${reports.length} sources`);
-  }
+  if (reports.length < 2) return;
+  // A page in doubt under two sources is counted under each above, but once here.
+  const total = toJson(reports).pages_in_doubt;
+  // A bare 0 would close a failing run on what reads as all clear.
+  if (total > 0) ctx.out(`${total} page(s) in doubt across ${reports.length} sources`);
 }
 
 export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport): void {
