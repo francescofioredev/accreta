@@ -98,6 +98,8 @@ describe("composeConstitution", () => {
         "unless\nthat source is delegated",
         "the revision of the page's own `source`",
         "A citation covers its whole sentence.",
+        "### Verifying citations",
+        "the prompt `verify_citations`",
         "re-open the source lines cited by each footnote you added",
       ]) {
         expect({ preset, has: text.includes(phrase) }).toEqual({ preset, has: true });
