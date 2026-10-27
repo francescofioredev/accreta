@@ -132,13 +132,16 @@ const escaped = (c: string) => {
 };
 
 // A terminal escape, newline or invisible character would let a page or a declaration rewrite
-// the output or pass for another path; variation selectors and Hangul fillers are not Cf.
-// The backslash is escaped so every `\u` is ours.
+// the output or pass for another path. The backslash is escaped so every `\u` is ours; an
+// emoji keeps its presentation selector, which cannot disguise a letter.
 export const printable = (value: string) =>
-  value.replaceAll(/[\\\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\u2028\u2029]/gu, escaped);
+  value.replaceAll(
+    /(?![\ufe0e\ufe0f])[\\\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\u2028\u2029]|(?<!\p{Extended_Pictographic})[\ufe0e\ufe0f]/gu,
+    escaped,
+  );
 
-// Prose keeps its lines, tabs, joiners and other non-bidi format characters. A terminal escape, a bidi control or a U+2028 line
-// no caller would indent still shows; CRLF is one line break, not a stray carriage return.
+// Prose keeps its lines, tabs, joiners and other non-bidi format characters. A terminal escape,
+// a bidi control or a U+2028 line no caller would indent still shows; CRLF is one line break.
 export const printableBlock = (value: string) =>
   value
     .replaceAll("\r\n", "\n")

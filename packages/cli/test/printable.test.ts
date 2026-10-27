@@ -13,6 +13,12 @@ describe("printable", () => {
       "a\\ufe0f\\u{e0100}\\u180b\\u034f\\u115f\\u3164\\uffa0b",
     );
   });
+
+  test("keeps an emoji's presentation selector", () => {
+    expect(printable("\u26a0\ufe0f Deprecated \u2705\ufe0e a\ufe0f")).toBe(
+      "\u26a0\ufe0f Deprecated \u2705\ufe0e a\\ufe0f",
+    );
+  });
 });
 
 describe("printableBlock", () => {

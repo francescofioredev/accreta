@@ -179,6 +179,15 @@ describe("cite's text output against a declaration that carries them", () => {
     expect(UNSAFE.test(message)).toBe(false);
   });
 
+  test("a source that moved is escaped in the target it names", async () => {
+    mkdirSync(join(root, "sources", "docs"), { recursive: true });
+    writeFileSync(join(root, "sources", "docs", "a.md"), "text\n");
+    writeFileSync(join(root, "sources", "docs.yaml"), "id: docs\ntype: fs\nroot: sources/docs\n");
+    const message = await thrown("cite", `docs:a${RAW}.md`, "--expect-revision", "bogus");
+    expect(message).toContain(`Re-read docs:a${SHOWN}.md,`);
+    expect(UNSAFE.test(message)).toBe(false);
+  });
+
   test("two sources named against one expected revision are escaped", async () => {
     expect(await cli("cite", `x${RAW}:a.md`, "wiki:b.md", "--expect-revision", "r")).toBe(2);
     expect(errors.join("\n")).toContain(`the targets name x${SHOWN}, wiki.`);
