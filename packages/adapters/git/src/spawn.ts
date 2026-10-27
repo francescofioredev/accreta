@@ -74,17 +74,22 @@ export function treeKill(
   };
 }
 
+// How long taskkill may block, shared by every pid one cleanup kills.
+const TREE_KILL_MS = 3_000;
+
 /** Ends `pid` with every helper it started; synchronous, since an `exit` handler cannot wait. */
-function kill(pid: number): void {
+function kill(pid: number, deadline = Date.now() + TREE_KILL_MS): void {
   if (process.platform !== "win32") {
     // Safe after the leader is reaped: the group id stays reserved while any member lives.
     process.kill(-pid, "SIGKILL");
     return;
   }
-  // No process groups on Windows. Any outcome, "not found" included, is ignored: git dies below anyway.
+  // No process groups on Windows. A failed taskkill, "not found" included, falls back to git alone.
   const command = treeKill(pid, process.env);
-  if (command !== undefined) {
-    spawnSync(command.file, command.args, { stdio: "ignore", windowsHide: true, timeout: 10_000 });
+  const left = deadline - Date.now();
+  if (command !== undefined && left > 0) {
+    const options = { stdio: "ignore", windowsHide: true, timeout: left } as const;
+    if (spawnSync(command.file, command.args, options).status === 0) return;
   }
   process.kill(pid, "SIGKILL");
 }
@@ -94,9 +99,10 @@ const live = new Set<number>();
 const SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
 
 function killLive(): void {
+  const deadline = Date.now() + TREE_KILL_MS;
   for (const pid of live) {
     try {
-      kill(pid);
+      kill(pid, deadline);
     } catch {
       // The whole group, or on Windows git, is gone.
     }
@@ -183,8 +189,9 @@ export function run(
     });
     const pid = child.pid;
     if (pid !== undefined) guard(pid);
-    // A Windows pid is free for reuse once git exits, though a helper may still hold the pipes.
+    // A Windows pid may be reused after git's exit event, though a helper may still hold the pipes.
     const exited = () => !group && (child.exitCode !== null || child.signalCode !== null);
+    // Deliberately, a helper that outlives git is then out of reach: taskkill on a recycled pid is worse.
     if (!group && pid !== undefined) child.once("exit", () => release(pid));
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
