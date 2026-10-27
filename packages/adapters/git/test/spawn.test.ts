@@ -191,14 +191,15 @@ describe("run", () => {
       let listening = -1;
       cp.spawn = (...args) => { listening = process.listenerCount("SIGINT"); return spawn(...args); };
       const { run } = await import(${JSON.stringify(join(import.meta.dir, "../src/spawn.ts"))});
+      const before = process.listenerCount("SIGINT");
       await run(process.execPath, ["-e", "0"], {
         cwd: ${JSON.stringify(base)}, env: process.env, timeoutMs: 10000, command: "probe",
       });
-      console.log(listening);`;
+      console.log(JSON.stringify({ before, listening }));`;
     const host = Bun.spawn([process.execPath, "-e", code], { stdout: "pipe", stderr: "pipe" });
     const out = await new Response(host.stdout).text();
     expect(await host.exited).toBe(0);
-    expect(Number(out.trim())).toBeGreaterThan(0);
+    expect(JSON.parse(out)).toEqual({ before: 0, listening: 1 });
   }, 15_000);
 
   test("a host's own graceful shutdown on SIGINT still runs to the end", async () => {
@@ -210,5 +211,21 @@ describe("run", () => {
       }, 300));`;
     expect(await signalHost("SIGINT", prelude)).toEqual({ beating: false });
     expect(existsSync(cleaned)).toBe(true);
+  }, 15_000);
+
+  test("a spawn that throws leaves no signal listener behind", async () => {
+    const code = `
+      const cp = require("node:child_process");
+      cp.spawn = () => { throw new Error("no spawn"); };
+      const { run } = await import(${JSON.stringify(join(import.meta.dir, "../src/spawn.ts"))});
+      const before = process.listenerCount("SIGINT");
+      const failed = await run("git", [], {
+        cwd: ${JSON.stringify(base)}, env: process.env, timeoutMs: 10000, command: "probe",
+      }).then(() => false, () => true);
+      console.log(JSON.stringify({ before, failed, after: process.listenerCount("SIGINT") }));`;
+    const host = Bun.spawn([process.execPath, "-e", code], { stdout: "pipe", stderr: "pipe" });
+    const out = await new Response(host.stdout).text();
+    expect(await host.exited).toBe(0);
+    expect(JSON.parse(out)).toEqual({ before: 0, failed: true, after: 0 });
   }, 15_000);
 });
