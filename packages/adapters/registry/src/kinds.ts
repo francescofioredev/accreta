@@ -142,9 +142,12 @@ const gitKind: SourceKind = {
   template: (id) => `# A git repository. The revision is a commit SHA and change detection is
 # \`diff --name-only\`.
 #
-# \`paths\` scopes the source to part of the repository. Without it, every commit
-# to anything — a README, a test — reports as drift for pages whose documents
-# never moved, and a report full of false positives is one people stop reading.
+# \`paths\`, relative to \`root\`, scopes the source to part of the repository.
+# With \`root\` at the repository top and no \`paths\`, every commit to anything — a
+# README, a test — reports as drift for pages whose documents never moved, and a
+# report full of false positives is one people stop reading. A \`root\` in a
+# subdirectory is already scoped to that subtree. Once \`paths\` is set, \`cite\`
+# reports a file outside it as missing.
 
 id: ${id}
 type: git
