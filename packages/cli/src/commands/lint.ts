@@ -4,6 +4,7 @@ import { countUnchecked, unloadedFindings } from "@accreta/adapters";
 import { findWorkspace } from "../workspace.ts";
 import {
   loadSources,
+  printable,
   printJson,
   provenance,
   readPage,
@@ -74,8 +75,8 @@ export async function runLint(
         ? [
             `${report.citationsUnchecked} citation(s) could not be checked:`,
             ...report.uncheckedReasons.flatMap((r) => [
-              `  ${r.citations}  ${r.detail}`,
-              `       ${r.paths.slice(0, 5).join(", ")}${r.paths.length > 5 ? `, +${r.paths.length - 5} more` : ""}`,
+              `  ${r.citations}  ${printable(r.detail)}`,
+              `       ${r.paths.slice(0, 5).map(printable).join(", ")}${r.paths.length > 5 ? `, +${r.paths.length - 5} more` : ""}`,
             ]),
           ].join("\n")
         : null;
@@ -98,7 +99,8 @@ export async function runLint(
     for (const [kind, group] of byKind) {
       // A page holds only some of each kind, so its count must not read as the kind's total.
       ctx.out(`\n${kind} (${group.length}${page ? " on this page" : ""})`);
-      for (const finding of group) ctx.out(`  ${finding.path}: ${finding.detail}`);
+      for (const finding of group)
+        ctx.out(`  ${printable(finding.path)}: ${printable(finding.detail)}`);
     }
     ctx.out(`\n${report.total} finding(s) across ${report.pagesChecked} page(s).`);
     ctx.out(checked);

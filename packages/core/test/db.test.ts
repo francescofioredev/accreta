@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openIndex, sqliteSupport } from "../src/index-db/db.ts";
+import {
+  openIndex,
+  sealForReading,
+  sqliteSupport,
+  UnsupportedRuntimeError,
+} from "../src/index-db/db.ts";
 import { INDEX_FORMAT, INDEX_FORMAT_KEY } from "../src/index-db/format.ts";
 
 let root = "";
@@ -16,6 +21,8 @@ beforeEach(() => {
   writer
     .prepare("INSERT INTO meta (key, value) VALUES ($key, $value)")
     .run({ $key: INDEX_FORMAT_KEY, $value: String(INDEX_FORMAT) });
+  // Sealed as the build seals it: a reader cannot open a WAL index once its `-shm` is gone.
+  sealForReading(writer);
   writer.close();
 });
 
@@ -50,6 +57,20 @@ test("no row is undefined, not null", () => {
   } finally {
     db.close();
   }
+});
+
+test("a reader that cannot open the file gets SQLite's reason and the remedy, not a missing FTS5", () => {
+  // Portable stand-in for an unsealed WAL index on Bun 1.4.4/macOS: the open succeeds, the first read fails.
+  writeFileSync(indexPath, "not a database, but long enough to have a header to reject".repeat(4));
+  let failure: unknown;
+  try {
+    openIndex(indexPath, { readonly: true }).close();
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).not.toBeInstanceOf(UnsupportedRuntimeError);
+  expect((failure as Error).message).toContain("file is not a database");
+  expect((failure as Error).message).toContain("run `accreta reindex`");
 });
 
 test("the runtime running this suite has FTS5", () => {
