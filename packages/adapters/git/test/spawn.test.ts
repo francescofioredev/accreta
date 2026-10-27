@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { executable, findOnPath } from "../src/spawn.ts";
+import { executable, findOnPath, treeKill } from "../src/spawn.ts";
 
 let base = "";
 
@@ -77,6 +77,31 @@ describe("findOnPath", () => {
     const exe = dir("with space", { "git.EXE": 0o644 });
     const env = { Path: [bare, scripts, `"${exe}"`].join(";"), PATHEXT: ".CMD;.BAT;.EXE" };
     expect(findOnPath("git", env, "win32")).toBe(join(exe, "git.EXE"));
+  });
+});
+
+describe("treeKill", () => {
+  test("names taskkill under SystemRoot, read in any case, and the whole tree of the pid", () => {
+    const expected = {
+      file: "C:\\Windows\\System32\\taskkill.exe",
+      args: ["/T", "/F", "/PID", "4242"],
+    };
+    expect(treeKill(4242, { SystemRoot: "C:\\Windows" })).toEqual(expected);
+    expect(treeKill(4242, { SYSTEMROOT: "C:\\Windows\\" })).toEqual(expected);
+    expect(treeKill(4242, { systemroot: "C:/Windows" })).toEqual(expected);
+  });
+
+  test("never searches PATH or the cwd", () => {
+    const planted = dir("planted", { "taskkill.exe": 0o755 });
+    const env = { Path: planted, SystemRoot: "D:\\Win" };
+    expect(treeKill(1, env)?.file).toBe("D:\\Win\\System32\\taskkill.exe");
+  });
+
+  test("answers nothing without a SystemRoot rooted at a drive", () => {
+    for (const root of ["", "Windows", ".\\Windows", "\\Windows", "\\\\host\\share\\Windows"]) {
+      expect(treeKill(1, { SystemRoot: root })).toBeUndefined();
+    }
+    expect(treeKill(1, {})).toBeUndefined();
   });
 });
 
