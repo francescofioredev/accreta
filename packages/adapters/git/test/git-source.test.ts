@@ -1454,6 +1454,18 @@ describe("a revision that names a ref, not a commit", () => {
     });
   }
 
+  test("drift cannot place one footnote at HEAD on a page verified at a full revision", async () => {
+    const report = await withPage(
+      `source: repo\nlast_verified_revision: ${first}\n`,
+      `repo @ HEAD · a.md#L2`,
+      (db) => detectDrift(db, source()),
+    );
+    expect(report.unresolvable).toEqual([
+      { revision: "HEAD", pages: ["knowledge/page.md"], citedOnly: ["knowledge/page.md"] },
+    ]);
+    expect(report.stale.map((entry) => entry.revision)).toEqual([first]);
+  });
+
   test("changedSince and touchedSince refuse a ref", async () => {
     const git = source();
     for (const ref of ["HEAD", "HEAD~0", "main", await hexBranch()]) {

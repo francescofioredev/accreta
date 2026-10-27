@@ -146,11 +146,17 @@ Answers `resolved` with the full revision, `ambiguous` when the input prefixes s
 `unknown`. `cite` uses it to accept a unique prefix as the expected revision, and `lint` uses
 it to flag an abbreviated or now-ambiguous revision, in a footnote or in
 `last_verified_revision`, and to tell known from unknown in one call. Without it the core
-compares revisions exactly. Take hex only and never resolve a ref, an expression or an option:
-`git` rejects `main` and `HEAD~1`, because a branch moves and would pin a claim to nothing.
+compares revisions exactly.
+
+**Every revision `revision()` gives must resolve to itself**, in whatever form your source uses:
+a timestamp, an ETag, a version id. Never resolve a name that moves, an expression or an option.
+For `git` that means hex only: it rejects `main` and `HEAD~1`, because a branch moves and would
+pin a claim to nothing. Hex is git's form, not the rule.
 
 `knowsRevision()` may still say yes to a ref; `git`'s does. `lint` and `cite` read that pair,
-known but `unknown` here, as a ref and say so, rather than calling the revision missing.
+known but `unknown` here, as a ref and say so, rather than calling the revision missing. That is
+why the rule above matters: a real revision your resolver misses would be reported as a ref. The
+conformance suite in `packages/adapters/test/interchangeable.test.ts` checks it.
 
 ## `touchedSince()`, if your source can diff contents
 

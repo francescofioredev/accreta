@@ -304,6 +304,19 @@ for (const [name, makeFixture] of QUESTIONABLE) {
       expect(report.stale[0]?.changedPaths).toEqual(["chapter-07.md"]);
     });
 
+    // Lint reads "known but unresolved" as a ref, so every revision the source gives must resolve to itself.
+    test("a revision the source gives resolves to itself, where the source resolves at all", async () => {
+      const { adapter, advance, reopen } = await makeFixture();
+      const before = await adapter.revision();
+      await advance();
+      const fresh = reopen();
+      if (!fresh.resolveRevision || !fresh.knowsRevision) return;
+      for (const revision of [before, await fresh.revision()]) {
+        expect(await fresh.knowsRevision(revision)).toBe(true);
+        expect(await fresh.resolveRevision(revision)).toEqual({ status: "resolved", revision });
+      }
+    });
+
     test("a page recording no revision is unverifiable", async () => {
       const { adapter } = await makeFixture();
       addPage("knowledge/a.md", "src", null);

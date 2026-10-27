@@ -53,8 +53,9 @@ export interface SourceAdapter {
 
   /**
    * The full revision an abbreviated one names. Absent, revisions are compared exactly.
-   * A `resolved` answer implies the source has that revision; lint relies on it. A ref is
-   * `unknown` even when `knowsRevision` says yes, and lint reports that pair as a ref.
+   * A `resolved` answer implies the source has that revision; lint relies on it. Every revision
+   * `revision()` gives, in whatever form the source uses, must resolve to itself: lint reports a
+   * revision `knowsRevision` accepts but this leaves `unknown` as a ref, a name that moves.
    */
   resolveRevision?(revision: string): Promise<RevisionResolution>;
 
@@ -97,6 +98,14 @@ export interface SourceAdapter {
 /** What a possibly abbreviated revision names: exactly one revision, several, or none. */
 export type RevisionResolution =
   { status: "resolved"; revision: string } | { status: "ambiguous" } | { status: "unknown" };
+
+/** Whether the source knows `revision` but cannot resolve it to one: a ref, a name that moves. */
+export async function namesRef(adapter: SourceAdapter, revision: string): Promise<boolean> {
+  if (!adapter.resolveRevision || !adapter.knowsRevision) return false;
+  const resolved = await adapter.resolveRevision(revision).catch(() => undefined);
+  if (resolved?.status !== "unknown") return false;
+  return adapter.knowsRevision(revision).catch(() => false);
+}
 
 /**
  * What a change did to one cited place. `moved` means the lines are intact but renumbered, so
