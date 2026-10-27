@@ -16,7 +16,7 @@ import {
   type CommandContext,
 } from "./shared.ts";
 
-const CITE_FIELDS = ["location.detail"] as const;
+const CITE_FIELDS = ["location.detail", "delegated.via", "delegated.scope"] as const;
 
 const USAGE =
   "Usage: accreta cite <source>:<path>[#locator]... [--expect-revision <rev>] [--json | --format text|footnote|json]";
@@ -162,7 +162,7 @@ function moved(target: ParsedCitation, citation: Citation, expected: string): st
   return citation.revision !== null
     ? `Source "${id}" is at ${printable(citation.revision)}, not ${at}: it moved since you read it, or ${at} did not come from cite. Re-read ${printable(citation.canonicalSource)}, then cite again.`
     : citation.delegated
-      ? `Cannot confirm source "${id}" is still at ${at}: it is read through ${printable(citation.delegated.via)}, and accreta cannot tell its revision.`
+      ? `Cannot confirm source "${id}" is still at ${at}: it is delegated, and accreta cannot tell its revision.`
       : `Cannot confirm source "${id}" is still at ${at}: accreta could not check this place. Cite it without an expected revision to see why.`;
 }
 

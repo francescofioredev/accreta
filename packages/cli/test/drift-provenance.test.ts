@@ -65,7 +65,7 @@ const refusing = (adapter: SourceAdapter): SourceAdapter => ({
 const DELEGATED: SourceAdapter = {
   id: "agent",
   revision: async () => {
-    throw new DelegatedSourceError("agent", "a connector", "every ticket the notes cite");
+    throw new DelegatedSourceError("agent", "a CANARY-VIA connector", "every ticket");
   },
   changedSince: async () => [],
   locate: async () => ({ verdict: "unknown", detail: "only the agent can read this source" }),
