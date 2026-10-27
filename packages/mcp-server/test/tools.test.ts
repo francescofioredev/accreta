@@ -346,6 +346,37 @@ describe("source-backed tools", () => {
     const result = await listRecentChangesTool(ctx, { source: "nope", since: "x" });
     expect(result.message).toContain("No source named");
   });
+
+  // One source git cannot read must not take every other source's report with it (#362).
+  test("check_drift reports a source whose revision fails beside the unloaded, and checks the rest", async () => {
+    const stderr =
+      "git rev-list -1 HEAD -- :(nomagic)a failed (128): fatal: Invalid pathspec magic";
+    ctx.sources.set("broken", {
+      ...lines(),
+      id: "broken",
+      revision: async () => {
+        throw new Error(`${stderr}\nsecond line`);
+      },
+    });
+    for (const input of [{}, { source: "broken" }]) {
+      const result = await checkDriftTool(ctx, input);
+      expect(result.reports.map((r) => r.source_id)).toEqual("source" in input ? [] : ["docs"]);
+      expect(result.unloaded_sources).toEqual([
+        {
+          file: "sources",
+          id: "broken",
+          reason: `its revision could not be read: ${stderr}`,
+          pages: 0,
+        },
+      ]);
+      expect(result._provenance?.page_derived_fields).toContain("unloaded_sources[].reason");
+    }
+  });
+
+  test("list_recent_changes labels a failing source's error, which may quote its declaration", async () => {
+    const result = await listRecentChangesTool(ctx, { source: "docs", since: "unknownrev" });
+    expect(result._provenance?.page_derived_fields).toEqual(["message"]);
+  });
 });
 
 function lines(options: { diffing?: boolean; placeable?: boolean } = {}): SourceAdapter {
@@ -756,6 +787,8 @@ describe("page-derived fields are named as such", () => {
     // detail must stay actionable while being named for what it is.
     expect(broken?.detail).toContain("escapes");
     expect(result._provenance.page_derived_fields).toContain("findings[].detail");
+    // An unloaded-source finding quotes sources/*.yaml, so the notice names its author too.
+    expect(result._provenance.notice).toContain("the page or the source declaration");
   });
 
   test("lint names the reasons and paths of unchecked citations, which an author wrote", async () => {

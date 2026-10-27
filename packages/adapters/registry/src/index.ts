@@ -2,10 +2,13 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   countPagesCiting,
+  DelegatedSourceError,
+  detectDrift,
   parseSourceDeclaration,
   SourceDeclarationError,
   SourceRegistry,
   type Database,
+  type DriftReport,
   type SourceAdapter,
   type SourceDeclaration,
 } from "@accreta/core";
@@ -166,6 +169,46 @@ export function noSourceNamed(
   const loose = broken.length > 0 ? ` Did not load: ${broken.join(", ")}.` : "";
   return `No source named "${id}". Known: ${known.join(", ") || "none"}.${loose}`;
 }
+
+/** Each source's drift report; one whose revision fails is returned as unloaded, failing no other. */
+export async function detectDriftEach(
+  db: Database,
+  adapters: readonly SourceAdapter[],
+  root: string,
+): Promise<{ reports: DriftReport[]; unreadable: UnloadedSource[] }> {
+  const reports: DriftReport[] = [];
+  const unreadable: UnloadedSource[] = [];
+  for (const adapter of adapters) {
+    // Asked out here, so an index error inside detectDrift still fails the call.
+    const revision = (async () => adapter.revision())();
+    try {
+      await revision;
+    } catch (error) {
+      if (!(error instanceof DelegatedSourceError)) {
+        const declared = readDeclarationFiles(root).find((e) => declaredId(e) === adapter.id);
+        unreadable.push({
+          file: declared?.file ?? "sources",
+          id: adapter.id,
+          reason: `its revision could not be read: ${firstLine(error)}`,
+        });
+        continue;
+      }
+    }
+    const answered = new Proxy(adapter, {
+      get(target, prop) {
+        if (prop === "revision") return () => revision;
+        const value: unknown = Reflect.get(target, prop);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    reports.push(await detectDrift(db, answered));
+  }
+  return { reports, unreadable };
+}
+
+/** cite's refusal of a source that did not load. Its reason is declaration text, which an error cannot label. */
+export const notLoadedError = (id: string) =>
+  `Source "${id}" is declared but did not load; drift and lint report why.`;
 
 /** The same finding for the CLI and the MCP server, so they cannot word it differently. */
 export function unloadedFindings(unchecked: readonly UncheckedSource[]) {

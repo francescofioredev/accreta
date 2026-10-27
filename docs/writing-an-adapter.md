@@ -214,7 +214,10 @@ validate them — validating them would require knowing what your adapter needs 
 `create` and your `preflight` are where a bad option is caught. When `create` throws, the other
 sources still load: `lint` reports the declaration's file as an `unloaded-source` finding with
 the first line of your message, and `drift` prints it and fails, as it does for a revision it
-cannot place. So make that first line name the option that is wrong.
+cannot place. So make that first line name the option that is wrong. A `revision()` that
+throws, other than to delegate, is reported by `drift` the same way, so one unreachable source
+does not stop the others being checked. An `id` with whitespace, a colon or a control
+character never reaches `create`: no citation could name it.
 
 `template` is what `accreta source add` writes. Put the adapter's sharp edges in its comments;
 that file is where somebody meets them.

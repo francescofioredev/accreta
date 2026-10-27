@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
-  detectDrift,
   openIndex,
   pageChanges,
   type CitedChange,
@@ -13,6 +12,7 @@ import {
 } from "@accreta/core";
 import {
   countUnchecked,
+  detectDriftEach,
   noSourceNamed,
   uncheckedPages,
   type UncheckedSource,
@@ -111,8 +111,9 @@ export async function drift(
   if (loaded.sources.length > 0 || loaded.unloaded.length > 0) {
     const db = openIndex(workspace.indexPath, { readonly: true });
     try {
-      for (const adapter of loaded.sources) reports.push(await detectDrift(db, adapter));
-      unloaded = markUnloaded(countUnchecked(db, loaded.unloaded), base);
+      const each = await detectDriftEach(db, loaded.sources, workspace.root);
+      reports.push(...each.reports);
+      unloaded = markUnloaded(countUnchecked(db, [...loaded.unloaded, ...each.unreadable]), base);
     } finally {
       db.close();
     }
@@ -457,8 +458,7 @@ interface DriftJson {
   _provenance: ReturnType<typeof provenance>;
 }
 
-// check_drift's DRIFT_FIELDS in this shape. `now` is the adapter's; `unloaded_sources` quotes
-// sources/*.yaml and is left out there too, a known gap (#362).
+// check_drift's DRIFT_FIELDS in this shape. `now` is the adapter's.
 const DRIFT_FIELDS = [
   "sources[].in_doubt[].page",
   "sources[].in_doubt[].verified_at",
@@ -491,6 +491,9 @@ const DRIFT_FIELDS = [
   "sources[].delegated.pending[].pages",
   "sources[].delegated.pending[].cited_only",
   "sources[].delegated.via",
+  "unloaded_sources[].file",
+  "unloaded_sources[].id",
+  "unloaded_sources[].reason",
 ] as const;
 
 /** With `--base`, `on_base` says the base branch already failed to load the same declaration. */

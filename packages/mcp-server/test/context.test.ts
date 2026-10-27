@@ -158,12 +158,16 @@ function gate(): { opened: Promise<void>; open: () => void } {
 
 function adapter(
   id: string,
-  hooks: { revision?: () => Promise<string>; locate?: () => Promise<LocationVerdict> } = {},
+  hooks: {
+    revision?: () => Promise<string>;
+    changedSince?: () => Promise<string[]>;
+    locate?: () => Promise<LocationVerdict>;
+  } = {},
 ): SourceAdapter {
   return {
     id,
     revision: hooks.revision ?? (async () => "r1"),
-    changedSince: async () => ["x.md"],
+    changedSince: hooks.changedSince ?? (async () => ["x.md"]),
     locate: hooks.locate ?? (async () => ({ verdict: "found" })),
     citation: (path) => `${id}:${path}`,
     pinRevision: () => {},
@@ -301,7 +305,11 @@ test("a rebuild closes every old handle that no call still holds", () => {
 });
 
 test("a call that throws still releases the index it pinned", async () => {
-  writePage("a.md", "---\ntype: note\n---\n\n# A\n\nalpha\n");
+  // A failing revision is reported, not thrown (#362), so the diff fails instead.
+  writePage(
+    "a.md",
+    "---\ntype: note\nsource: held\nlast_verified_revision: r0\n---\n\n# A\n\nalpha\n",
+  );
   reindex();
 
   const ctx = createContext(root);
@@ -314,12 +322,12 @@ test("a call that throws still releases the index it pinned", async () => {
   };
   const entered = gate();
   const blocked = gate();
-  const down = async (): Promise<string> => {
+  const down = async (): Promise<string[]> => {
     entered.open();
     await blocked.opened;
     throw new Error("source down");
   };
-  ctx.sources.set("held", adapter("held", { revision: down }));
+  ctx.sources.set("held", adapter("held", { changedSince: down }));
 
   const call = checkDriftTool(ctx, {});
   await entered.opened;

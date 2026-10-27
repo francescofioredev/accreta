@@ -163,13 +163,14 @@ describe("cite's text output against a declaration that carries them", () => {
     expect(unsafe()).toEqual([]);
   });
 
+  // A control character keeps an id from loading (#362); format characters still load.
   test("an unknown source escapes every configured id", async () => {
     writeFileSync(
       join(root, "sources", "evil.yaml"),
-      `id: "evil${YAML}"\ntype: delegated\nvia: notion\nscope: "x"\n`,
+      `id: "evil\\u202e\\u200b\\U000E0041"\ntype: delegated\nvia: notion\nscope: "x"\n`,
     );
     expect(await cli("cite", "nosuch:a.md")).toBe(2);
-    expect(errors.join("\n")).toContain(`Configured sources: evil${SHOWN}, wiki.`);
+    expect(errors.join("\n")).toContain("Configured sources: evil\\u202e\\u200b\\u{e0041}, wiki.");
     expect(unsafeErrors()).toEqual([]);
   });
 

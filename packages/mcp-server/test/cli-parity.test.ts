@@ -422,6 +422,14 @@ describe("drift --source checks what check_drift {source} checks", () => {
     const fromMcp = JSON.parse((await mcp("check_drift", {})).text)._provenance;
     expect(fromCli.notice).toBe(fromMcp.notice);
     expect(fromMcp.notice).toContain("the page or the source declaration");
+    const unloaded = ["file", "id", "reason"].map((field) => `unloaded_sources[].${field}`);
+    expect(fromCli.page_derived_fields).toEqual(expect.arrayContaining(unloaded));
+    expect(fromMcp.page_derived_fields).toEqual(expect.arrayContaining(unloaded));
+    // lint quotes the same declarations in its unloaded-source findings (#362).
+    const lintCli = JSON.parse((await cli(["lint", "--json"])).stdout)._provenance;
+    const lintMcp = JSON.parse((await mcp("lint_knowledge_base", {})).text)._provenance;
+    expect(lintCli).toStrictEqual(lintMcp);
+    expect(lintMcp.notice).toBe(fromMcp.notice);
   });
 
   // Fixture guard: the comparison above must have a page in doubt and a cross-source page to differ on.
@@ -616,7 +624,7 @@ describe("cite", () => {
     {
       name: "a declared source that did not load",
       args: { target: "typo:a.md" },
-      says: 'Source "typo" is declared in',
+      says: 'Source "typo" is declared but did not load',
       code: 1,
     },
     {
@@ -643,8 +651,9 @@ describe("cite", () => {
       expect(fromCli.stdout).toBe("");
       expect(fromCli.stderr).toBe(fromMcp.text);
       expect(fromMcp.text).toContain(r.says);
-      // `via` is declaration text, and an error carries no label.
+      // `via` and a load failure's reason are declaration text, and an error carries no label.
       expect(fromMcp.text).not.toContain("notion");
+      expect(fromMcp.text).not.toContain("fss");
     });
   }
 });

@@ -15,6 +15,8 @@ export interface SourceDeclaration {
   options: Record<string, unknown>;
 }
 
+const SOURCE_ID = /^[^\s:\p{Cc}]+$/u;
+
 export type SourceFactory = (declaration: SourceDeclaration) => SourceAdapter;
 
 /** A declaration that names its id but is unusable, so a loader can still tell what it claims. */
@@ -49,6 +51,12 @@ export function parseSourceDeclaration(source: string): SourceDeclaration {
 
   if (typeof id !== "string" || id.length === 0) {
     throw new Error("A source declaration needs a non-empty `id`");
+  }
+  // Not quoted: no citation can name such an id, so it would reach an agent only as prose.
+  if (!SOURCE_ID.test(id)) {
+    throw new Error(
+      "A source declaration's `id` has whitespace, a colon or a control character, so no citation can name it",
+    );
   }
   if (typeof type !== "string" || type.length === 0) {
     throw new SourceDeclarationError(`Source "${id}" needs a non-empty \`type\``, id);

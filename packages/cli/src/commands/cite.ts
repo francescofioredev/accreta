@@ -5,6 +5,7 @@ import {
   type ParsedCitation,
   type SourceAdapter,
 } from "@accreta/core";
+import { notLoadedError } from "@accreta/adapters";
 import { findWorkspace } from "../workspace.ts";
 import {
   loadSources,
@@ -96,11 +97,8 @@ export async function cite(
   const sources = new Map(loaded.sources.map((adapter) => [adapter.id, revisionOnce(adapter)]));
   // Every target is checked before any is cited, so bad input prints no partial answer.
   for (const target of targets) {
-    const broken = loaded.unloaded.find((u) => u.id === target.sourceId);
-    if (broken) {
-      throw new Error(
-        `Source "${printable(target.sourceId)}" is declared in ${printable(broken.file)} but did not load: ${printable(broken.reason)}`,
-      );
+    if (loaded.unloaded.some((u) => u.id === target.sourceId)) {
+      throw new Error(notLoadedError(printable(target.sourceId)));
     }
     // Input errors exit 2, not 1 like a refusal; the sentences are core's, which MCP returns.
     if (!sources.has(target.sourceId)) {

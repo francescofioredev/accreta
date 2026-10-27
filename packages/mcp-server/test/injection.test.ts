@@ -36,11 +36,14 @@ const PROBES: Record<string, Probe[]> = {
     { target: "concepts/injected", include_inline: true },
   ],
   find_canonical: [{ term: "concepts/injected" }, { term: "filename probe" }],
-  check_drift: [{}],
+  // `broken` is declared with a hostile `type`; `nope` is declared nowhere.
+  check_drift: [{}, { source: "broken" }, { source: "nope" }],
   list_recent_changes: [
     { source: "docs", since: "0" },
     { source: "lines", since: "rev1" },
     { source: "agent", since: "rev1" },
+    { source: "broken", since: "0" },
+    { source: "failing", since: "rev1" },
   ],
   lint_knowledge_base: [{}],
   cite: [
@@ -48,6 +51,7 @@ const PROBES: Record<string, Probe[]> = {
     { target: "docs:ch01.md#L999" },
     { target: "quoting:p#b1" },
     { target: "agent:ticket-1" },
+    { target: "broken:a.md" },
   ],
   [WRITE_TOOL]: [
     // Refused: the page's own source is page text, echoed back.
@@ -68,6 +72,9 @@ const PROBES: Record<string, Probe[]> = {
     }),
   ],
 };
+
+// Read probes refused by design; the error text is still swept, as an unmarked string.
+const EXPECTED_ERRORS = ['cite {"target":"broken:a.md"}'];
 
 // Prompts carry no page or source text, so any canary in one is a leak; each argument names injected text.
 const PROMPT_PROBES: Record<string, Record<string, string>> = {
@@ -146,6 +153,22 @@ const QUOTING_SOURCE: SourceAdapter = {
   revision: async () => "rev1",
   changedSince: async () => [],
   locate: async () => ({ verdict: "missing", part: "locator", detail: "no CANARY-QUOTED block" }),
+  citation: () => "",
+  pinRevision: () => {},
+};
+
+// Fails as git does on a pathspec it cannot read, quoting the declaration's `paths` back.
+const gitFailure = () =>
+  new Error("git rev-list -1 HEAD -- :(CANARY-PATHS)x failed (128): fatal: Invalid pathspec magic");
+const FAILING_SOURCE: SourceAdapter = {
+  id: "failing",
+  revision: async () => {
+    throw gitFailure();
+  },
+  changedSince: async () => {
+    throw gitFailure();
+  },
+  locate: async () => ({ verdict: "found" }),
   citation: () => "",
   pinRevision: () => {},
 };
@@ -310,6 +333,7 @@ describe("every tool response, against pages that try to give instructions", () 
     ctx.sources.set("agent", DELEGATED_SOURCE);
     ctx.sources.set("quoting", QUOTING_SOURCE);
     ctx.sources.set("plain", PLAIN_SOURCE);
+    ctx.sources.set("failing", FAILING_SOURCE);
     const client = await connect(ctx);
     try {
       capabilities = client.getServerCapabilities() ?? {};
@@ -327,8 +351,12 @@ describe("every tool response, against pages that try to give instructions", () 
         for (const probe of PROBES[tool.name] ?? []) {
           const args = typeof probe === "function" ? probe(previous) : probe;
           const result = await client.callTool({ name: tool.name, arguments: args });
-          if (tool.name !== WRITE_TOOL && result.isError) {
-            readErrors.push(`${tool.name} ${JSON.stringify(args)}`);
+          const call = `${tool.name} ${JSON.stringify(args)}`;
+          if (
+            tool.name !== WRITE_TOOL &&
+            Boolean(result.isError) !== EXPECTED_ERRORS.includes(call)
+          ) {
+            readErrors.push(call);
           }
           const audited = auditResult(result);
           previous = audited.payloads[0];
@@ -388,7 +416,7 @@ describe("every tool response, against pages that try to give instructions", () 
     );
   });
 
-  test("no read probe returns an error, so each one swept a real reply", () => {
+  test("no read probe errs unless it is refused by design, so each one swept a real reply", () => {
     expect(readErrors).toEqual([]);
   });
 
@@ -443,6 +471,23 @@ describe("every tool response, against pages that try to give instructions", () 
     const seen = new Set([...seenBy.values()].flatMap((channels) => [...channels]));
     expect(planted).toEqual(expect.arrayContaining(REQUIRED_CHANNELS));
     expect([...new Set(planted)].filter((channel) => !seen.has(channel))).toEqual([]);
+  });
+
+  // A declaration's text reaches a reply only labelled; an id the grammar refuses reaches none (#362).
+  test("every canary in sources/*.yaml reaches some response, except a prose id", () => {
+    const dir = join(FIXTURE, "sources");
+    const planted = readdirSync(dir)
+      .filter((name) => name.endsWith(".yaml"))
+      .flatMap((name) => [
+        ...canariesIn(name),
+        ...canariesIn(readFileSync(join(dir, name), "utf-8")),
+      ]);
+    const seen = new Set([...seenBy.values()].flatMap((channels) => [...channels]));
+    expect(planted).toEqual(expect.arrayContaining(["DECLFILE", "DECLID", "TYPE", "PROSEID"]));
+    expect([...new Set(planted)].filter((c) => c !== "PROSEID" && !seen.has(c))).toEqual([]);
+    expect(seen.has("PROSEID")).toBe(false);
+    // A source whose revision fails is reported, not an error that ends the call.
+    expect(seen.has("PATHS")).toBe(true);
   });
 
   test("no page-derived string reaches the model outside a field _provenance names", () => {
