@@ -31,7 +31,7 @@ source: docs
 Cites the diffing and the per-file source at a revision the page names.[^CANARY-FOOTNOTE-a][^CANARY-FOOTNOTE-b]
 
 [^CANARY-FOOTNOTE-a]: lines @ CANARY-REVISION-pin · knowledge/notes/CANARY-FILENAME.md#CANARY-LOCATOR
-[^CANARY-FOOTNOTE-b]: plain @ CANARY-REVISION-pin · knowledge/notes/CANARY-FILENAME.md#L1
+[^CANARY-FOOTNOTE-b]: plain @ CANARY-REVISION-pin · knowledge/notes/CANARY-FILENAME.md#CANARY-LOCATOR-plain
 `;
 
 /** A source that diffs contents and answers every cited place with `change`. */
@@ -54,6 +54,13 @@ const PLAIN: SourceAdapter = {
   citation: () => "",
   pinRevision: () => {},
 };
+
+/** Refuses every place it is asked about, naming the cited path back as git's error does. */
+const refusing = (adapter: SourceAdapter): SourceAdapter => ({
+  ...adapter,
+  changedSince: async () => ["elsewhere.md"],
+  locate: async (path) => ({ verdict: "missing", part: "path", detail: `${path} is a symlink` }),
+});
 
 const DELEGATED: SourceAdapter = {
   id: "agent",
@@ -125,6 +132,11 @@ beforeAll(async () => {
       }
       runs.push(run);
     }
+    // A refusal lands in `citations[]` with a diff and in the page's `refused[]` without one.
+    runs.push([
+      await detectDrift(db, refusing(diffing({ status: "untouched" }))),
+      await detectDrift(db, refusing(PLAIN)),
+    ]);
   } finally {
     db.close();
   }

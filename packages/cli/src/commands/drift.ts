@@ -438,6 +438,12 @@ const DRIFT_FIELDS = [
   "sources[].in_doubt[].citations[].path",
   "sources[].in_doubt[].citations[].locator",
   "sources[].in_doubt[].citations[].cited_at",
+  // locate's reason names the cited path back.
+  "sources[].in_doubt[].citations[].refused",
+  "sources[].in_doubt[].refused[].footnote",
+  "sources[].in_doubt[].refused[].path",
+  "sources[].in_doubt[].refused[].locator",
+  "sources[].in_doubt[].refused[].refused",
   "sources[].repin[].page",
   "sources[].repin[].verified_at",
   "sources[].repin[].cited_at",
