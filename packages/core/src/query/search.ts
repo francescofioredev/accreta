@@ -39,13 +39,26 @@ export function searchPages(db: Database, options: SearchOptions): SearchHit[] {
   const match = terms ? terms.map(quoted).join(" ") : options.query;
   if (match === "") return [];
 
+  // pages_fts reads `stale_served` as `stale served` stemmed, so an identifier is matched whole first.
+  const identifiers = terms ? identifierMatch(terms) : "";
+  if (identifiers === "") return run(db, options, match, "", limit);
+  requireTable(db, "pages_identifiers");
+  const exact = run(db, options, match, identifiers, limit);
+  // A near miss such as `stale_serve` holds no identifier; an empty answer invites a duplicate page.
+  return exact.length > 0 ? exact : run(db, options, match, "", limit);
+}
+
+function run(
+  db: Database,
+  options: SearchOptions,
+  match: string,
+  identifiers: string,
+  limit: number,
+): SearchHit[] {
   const filters = ["pages_fts MATCH ?"];
   const params: (string | number)[] = [match];
 
-  // pages_fts reads `stale_served` as `stale served` stemmed, so an identifier must also match whole.
-  const identifiers = terms ? identifierMatch(terms) : "";
   if (identifiers !== "") {
-    requireTable(db, "pages_identifiers");
     // The `+` keeps the IN off pages_fts' index: there FTS5 re-ran the MATCH per rowid, 30-100x slower.
     filters.push(
       "+pages_fts.rowid IN (SELECT rowid FROM pages_identifiers WHERE pages_identifiers MATCH ?)",
@@ -62,7 +75,7 @@ export function searchPages(db: Database, options: SearchOptions): SearchHit[] {
     params.push(options.source);
   }
 
-  const rows = db
+  return db
     .prepare(
       `SELECT
          p.path AS path,
@@ -78,8 +91,6 @@ export function searchPages(db: Database, options: SearchOptions): SearchHit[] {
        LIMIT ?`,
     )
     .all(...params, limit) as SearchHit[];
-
-  return rows;
 }
 
 interface Term {

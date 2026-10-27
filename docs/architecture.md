@@ -107,12 +107,12 @@ They are a preset precisely because they are not universal.
 Search is SQLite FTS5 over each page's title, aliases and body, with Porter stemming. It needs
 no dependencies, no keys and no network, and there is no `search` configuration key.
 
-A word joined by underscores is an identifier: `stale_served` matches only pages that contain
-that whole identifier, never `stale serves` or `stale_served_total`, while `stale` alone still
-finds it. Identifiers sit in a second FTS5 table, unstemmed and with `_` as a token character.
-An identifier query therefore misses a page that spells it another way: `stale-served`,
-`stale served` in prose, `_stale_served`, or a near miss such as `stale_serve`. When it returns
-nothing, search again with the words spaced, as `stale served`.
+A word joined by underscores is an identifier. Identifiers sit in a second FTS5 table, unstemmed
+and with `_` as a token character, and `stale` alone still finds `stale_served`. When some page
+holds the exact identifier, `stale_served` returns those pages only: not `stale serves`, not
+`stale_served_total`, and not a page that spells it `stale-served` or `stale served`. When no
+page holds it, as for a near miss like `stale_serve`, search falls back to the ordinary stemmed
+ranking, so a near miss such as `stale_serves` can still rank the `stale_served` pages first.
 
 Semantic search is **not built**. [ADR-0001](adr/0001-lexical-search-first.md) measured 85%
 recall@1 without it and keeps it optional and unbuilt until a benchmark says otherwise.

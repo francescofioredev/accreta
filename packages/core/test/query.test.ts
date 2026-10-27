@@ -241,8 +241,20 @@ describe("searchPages on an underscore identifier", () => {
     expect(ranked("Stale_Served")).toEqual(["metrics/stale-served.md"]);
   });
 
-  test("a near-miss identifier does not match across the underscore", () => {
-    expect(ranked("stale_serves")).toEqual([]);
+  test("an identifier no page holds falls back to the ordinary ranking", () => {
+    expect(ranked("stale_serve")).toContain("metrics/stale-served.md");
+    expect(ranked("stale_")).toContain("metrics/stale-served.md");
+    expect(ranked("stale_serves")).toContain("notes/replica-reads.md");
+  });
+
+  test("an identifier written with a leading underscore is still found without it", () => {
+    writePage(
+      "code/signing.md",
+      "---\ntype: note\n---\n\n# Signing\n\n`_private_helper` builds the signature.\n",
+    );
+    db.close();
+    reindex();
+    expect(ranked("private_helper")).toEqual(["code/signing.md"]);
   });
 
   test("a word inside an identifier still finds it", () => {
@@ -260,7 +272,6 @@ describe("searchPages on an underscore identifier", () => {
       "metrics/stale-served.md",
     ]);
     expect(ranked('"stale_served counts"')).toEqual(["metrics/stale-served.md"]);
-    expect(ranked('"stale_serves counts"')).toEqual([]);
     expect(ranked("stale_served cache")).toEqual(["metrics/stale-served.md"]);
     expect(ranked("stale_*").toSorted()).toEqual([
       "metrics/stale-served-total.md",
