@@ -1,0 +1,288 @@
+[
+  {
+    "id": "q01",
+    "question": "In a Hono app with a middleware followed by a route handler, what response does the client get if the middleware calls `await next()` twice?",
+    "reference": "The second call makes the dispatcher throw Error('next() called multiple times'). The error propagates out of the middleware, the compose layer passes it to the app's error handler, and the default handler logs it and returns a 500 'Internal Server Error' text response.",
+    "evidence": [
+      "hono:src/compose.ts#L32-L36",
+      "hono:src/compose.ts#L49-L60",
+      "hono:src/hono-base.ts#L35-L42"
+    ],
+    "category": "cross-module"
+  },
+  {
+    "id": "q02",
+    "question": "A client sends a HEAD request to a path that only has a GET handler registered. How does Hono produce the response?",
+    "reference": "Hono re-dispatches the request internally as a GET, so the GET handler (and middleware) run. It then wraps the result in a new Response with a null body, keeping the GET response's status and headers.",
+    "evidence": ["hono:src/hono-base.ts#L412-L416"],
+    "category": "behaviour"
+  },
+  {
+    "id": "q03",
+    "question": "A sub-app that defines its own `onError` handler is attached to a parent app with `app.route('/api', sub)`. If a route handler inside the sub-app throws an Error, which error handler produces the response?",
+    "reference": "The sub-app's own onError handler. When route() copies the sub-app's routes and the sub-app's error handler is not the default one, it wraps each handler in compose([], sub.errorHandler), which catches the Error, stores it in c.error and calls that handler. The sub-app's handler must be set before route() is called, and with no custom handler the parent's applies.",
+    "evidence": ["hono:src/hono-base.ts#L219-L230", "hono:src/compose.ts#L49-L60"],
+    "category": "cross-module"
+  },
+  {
+    "id": "q04",
+    "question": "For a request to `/search?tag=a&tag=b`, what do `c.req.query('tag')` and `c.req.queries('tag')` return?",
+    "reference": "c.req.query('tag') returns the first value, 'a'. c.req.queries('tag') returns every value in order, ['a', 'b'].",
+    "evidence": [
+      "hono:src/request.ts#L150-L152",
+      "hono:src/request.ts#L169-L171",
+      "hono:src/utils/url.ts#L229-L241",
+      "hono:src/utils/url.ts#L289-L296"
+    ],
+    "category": "cross-module"
+  },
+  {
+    "id": "q05",
+    "question": "In the Cloudflare Pages adapter, how can a Hono handler get at the original Pages event context, and what does the adapter pass as the execution context?",
+    "reference": "The adapter calls app.fetch with env set to the Pages env plus an `eventContext` property, so handlers read it as c.env.eventContext. The execution context it passes has waitUntil and passThroughOnException taken from the event context, and an empty props object.",
+    "evidence": ["hono:src/adapter/cloudflare-pages/handler.ts#L37-L45"],
+    "category": "lookup"
+  },
+  {
+    "id": "q06",
+    "question": "Which routers does a plain `new Hono()` use by default, and how does it decide which one to keep?",
+    "reference": "It uses a SmartRouter over [RegExpRouter, TrieRouter], tried in that order. On the first match call it adds all registered routes to each router in turn and keeps the first one that does not throw UnsupportedPathError, then uses that router directly from then on.",
+    "evidence": ["hono:src/hono.ts#L28-L32", "hono:src/router/smart-router/router.ts#L32-L50"],
+    "category": "cross-module"
+  },
+  {
+    "id": "q07",
+    "question": "Which routers does the `hono/quick` entry point combine, and in what order are they tried?",
+    "reference": "It uses a SmartRouter over [LinearRouter, TrieRouter], tried in that order. RegExpRouter is not part of it.",
+    "evidence": ["hono:src/preset/quick.ts#L20-L22"],
+    "category": "lookup"
+  },
+  {
+    "id": "q08",
+    "question": "With the smallest router that Hono ships (the one used by `hono/tiny`), what does a route registered as `/api/animals/:type?` match?",
+    "reference": "That router (PatternRouter) registers two patterns: the path without the optional last segment, `/api/animals`, and `/api/animals/:type`. So it matches both `/api/animals` and `/api/animals/cat`, each with an optional trailing slash.",
+    "evidence": [
+      "hono:src/router/pattern-router/router.ts#L12-L38",
+      "hono:src/preset/tiny.ts#L16-L19"
+    ],
+    "category": "behaviour"
+  },
+  {
+    "id": "q09",
+    "question": "With the default router, what happens if you register a new route after the app has already handled its first request?",
+    "reference": "It throws an Error with the message 'Can not add a route since the matcher is already built.' (MESSAGE_MATCHER_IS_ALREADY_BUILT). SmartRouter clears its stored routes on the first match, so a later add() hits that check.",
+    "evidence": [
+      "hono:src/router/smart-router/router.ts#L13-L19",
+      "hono:src/router/smart-router/router.ts#L46-L49",
+      "hono:src/router.ts#L21-L22"
+    ],
+    "category": "cross-module"
+  },
+  {
+    "id": "q10",
+    "question": "Using `cors()` with default options, what does Hono send back for a preflight OPTIONS request that carries `Access-Control-Request-Headers: X-A, X-B`?",
+    "reference": "It returns a 204 'No Content' response directly, without calling next(), with Content-Length and Content-Type removed. The headers include Access-Control-Allow-Origin: *, Access-Control-Allow-Methods: GET,HEAD,PUT,POST,DELETE,PATCH, and Access-Control-Allow-Headers: X-A,X-B (echoed from the request), with Vary: Access-Control-Request-Headers appended.",
+    "evidence": [
+      "hono:src/middleware/cors/index.ts#L64-L70",
+      "hono:src/middleware/cors/index.ts#L101-L104",
+      "hono:src/middleware/cors/index.ts#L114-L126",
+      "hono:src/middleware/cors/index.ts#L128-L147"
+    ],
+    "category": "behaviour"
+  },
+  {
+    "id": "q11",
+    "question": "When the etag middleware answers a conditional request with a 304 Not Modified, which headers of the original response does the 304 keep by default?",
+    "reference": "Only ETag plus whichever of cache-control, content-location, date, expires and vary the original response had (RETAINED_304_HEADERS). Every other header, such as Content-Type, Content-Length or custom ones, is deleted, and the retainedHeaders option replaces that list.",
+    "evidence": [
+      "hono:src/middleware/etag/index.ts#L21-L28",
+      "hono:src/middleware/etag/index.ts#L112-L124",
+      "hono:src/context.ts#L414-L432"
+    ],
+    "category": "cross-module"
+  },
+  {
+    "id": "q12",
+    "question": "If the compress middleware compresses a response that has a strong ETag, what happens to that ETag?",
+    "reference": "It is turned into a weak ETag by prefixing it with `W/`, unless it already starts with `W/`. The same step deletes Content-Length and sets Content-Encoding.",
+    "evidence": ["hono:src/middleware/compress/index.ts#L110-L119"],
+    "category": "lookup"
+  },
+  {
+    "id": "q13",
+    "question": "What does the cache middleware do when it is used in a runtime where `globalThis.caches` is not defined?",
+    "reference": "It does not throw. It logs 'Cache Middleware is not enabled because caches is not defined.' with console.log, unless onCacheNotAvailable is set (a function is called instead, false suppresses the log), and returns a pass-through middleware that just calls next().",
+    "evidence": ["hono:src/middleware/cache/index.ts#L73-L82"],
+    "category": "behaviour"
+  },
+  {
+    "id": "q14",
+    "question": "With the bearer auth middleware configured with a `token`, what status code is returned for (a) a request with no Authorization header, (b) a request with `Authorization: Basic abc`, and (c) a request with a well-formed `Bearer` header whose token does not match?",
+    "reference": "(a) 401, (b) 400, (c) 401. A missing header is 401 with WWW-Authenticate `Bearer realm=\"\"`. A header that does not follow the `Bearer <token>` form is 400 'Bad Request' with `Bearer error=\"invalid_request\"`. A wrong token is 401 with `Bearer error=\"invalid_token\"`.",
+    "evidence": [
+      "hono:src/middleware/bearer-auth/index.ts#L156-L168",
+      "hono:src/middleware/bearer-auth/index.ts#L170-L192",
+      "hono:src/middleware/bearer-auth/index.ts#L207-L216"
+    ],
+    "category": "behaviour"
+  },
+  {
+    "id": "q15",
+    "question": "What happens if you call `setCookie(c, 'a', 'b', { maxAge: 40000000 })`?",
+    "reference": "It throws an Error saying 'Cookies Max-Age SHOULD NOT be greater than 400 days (34560000 seconds) in duration.' The serializer rejects any maxAge above 34560000 seconds, and 40000000 is above that.",
+    "evidence": [
+      "hono:src/helper/cookie/index.ts#L93-L95",
+      "hono:src/helper/cookie/index.ts#L99-L102",
+      "hono:src/utils/cookie.ts#L207-L214"
+    ],
+    "category": "cross-module"
+  },
+  {
+    "id": "q16",
+    "question": "In `streamSSE`, what happens if the stream callback throws an Error and an `onError` callback was passed?",
+    "reference": "onError(e, stream) is called first, then an SSE message with `event: error` and the error's message as data is written to the stream, and finally the stream is closed. Without onError, the error is only logged with console.error and no error event is sent, but the stream is still closed.",
+    "evidence": ["hono:src/helper/streaming/sse.ts#L48-L69"],
+    "category": "behaviour"
+  },
+  {
+    "id": "q17",
+    "question": "What does the `proxy()` helper do with the Content-Encoding and Content-Length headers of the upstream response?",
+    "reference": "If the upstream response has a Content-Encoding header, proxy() removes both Content-Encoding and Content-Length from the response it returns. Content-Length would describe the compressed size, not the body it returns.",
+    "evidence": ["hono:src/helper/proxy/index.ts#L191-L195"],
+    "category": "lookup"
+  },
+  {
+    "id": "q18",
+    "question": "When Hono's static site generator writes the output for a route that returns HTML, what file does it produce for `/` and for `/about`, and what output directory does it use by default?",
+    "reference": "The default output directory is ./static. A text/html response for `/` is written to index.html in it, and for `/about` to about.html (a path ending in `/` gets index.html inside that folder).",
+    "evidence": [
+      "hono:src/helper/ssg/ssg.ts#L27-L27",
+      "hono:src/helper/ssg/ssg.ts#L50-L67",
+      "hono:src/helper/ssg/ssg.ts#L90-L97",
+      "hono:src/helper/ssg/ssg.ts#L421-L421"
+    ],
+    "category": "lookup"
+  },
+  {
+    "id": "q19",
+    "question": "When Hono extracts the routing path from a request URL that contains a malformed percent-escape, such as `%A4%A2` (invalid UTF-8), does it throw?",
+    "reference": "No. The path decoder tries the whole string first, and on failure decodes each run of valid %XX sequences separately and leaves the undecodable ones as they were, e.g. 'Hello%20World/%A4%A2' becomes 'Hello World/%A4%A2'.",
+    "evidence": [
+      "hono:src/utils/url.ts#L81-L93",
+      "hono:src/utils/url.ts#L95-L104",
+      "hono:src/utils/url.ts#L126-L127"
+    ],
+    "category": "lookup"
+  },
+  {
+    "id": "q20",
+    "question": "With the AWS Lambda adapter handling an ALB event that has no `multiValueHeaders`, how are multiple Set-Cookie headers from the Hono response delivered?",
+    "reference": "Only the first cookie is returned: it is placed in headers['set-cookie'] and the rest are dropped. When the event carries multiValueHeaders, all cookies are returned in multiValueHeaders['set-cookie'].",
+    "evidence": [
+      "hono:src/adapter/aws-lambda/handler.ts#L361-L372",
+      "hono:src/adapter/aws-lambda/handler.ts#L388-L401",
+      "hono:src/adapter/aws-lambda/handler.ts#L572-L579"
+    ],
+    "category": "behaviour"
+  },
+  {
+    "id": "q21",
+    "question": "What does the `accepts` helper return when the request has no header to match, and how does it choose among the offered types when there is one?",
+    "reference": "With no matching header it returns the configured default. Otherwise it parses the header, sorts by q value from highest to lowest, and returns the first type that is in the supported list, falling back to the default if none is.",
+    "evidence": [
+      "hono:src/helper/accepts/accepts.ts#L21-L25",
+      "hono:src/helper/accepts/accepts.ts#L40-L48"
+    ],
+    "category": "lookup"
+  },
+  {
+    "id": "q22",
+    "question": "How does the AWS Lambda adapter decide whether to base64-encode the response body?",
+    "reference": "The body is base64-encoded when the Content-Type is not text/plain, html, css, javascript or csv and not a +json/+xml or json/xml type (defaultIsContentTypeBinary, replaceable via the isContentTypeBinary option), or when a Content-Encoding is present and is not `identity`. Otherwise the body is read as text.",
+    "evidence": [
+      "hono:src/adapter/aws-lambda/handler.ts#L349-L359",
+      "hono:src/adapter/aws-lambda/handler.ts#L666-L674"
+    ],
+    "category": "behaviour"
+  },
+  {
+    "id": "q23",
+    "question": "How does the AWS Lambda adapter tell an ALB event apart from an API Gateway v2 event, and what is the fallback when neither matches?",
+    "reference": "It checks in order: an ALB event has an own `elb` property on requestContext; a v2 event has `rawPath` and a requestContext with an `http` object; a Lattice event has `serviceArn` on requestContext. If none match, it treats the event as an API Gateway v1 event.",
+    "evidence": [
+      "hono:src/adapter/aws-lambda/handler.ts#L625-L637",
+      "hono:src/adapter/aws-lambda/handler.ts#L639-L658"
+    ],
+    "category": "lookup"
+  },
+  {
+    "id": "q24",
+    "question": "In hono/jsx, which JSX prop names are renamed to different HTML attribute names when rendered to a string?",
+    "reference": "Eight are renamed: className to class, htmlFor to for, crossOrigin to crossorigin, httpEquiv to http-equiv, itemProp to itemprop, fetchPriority to fetchpriority, noModule to nomodule, and formAction to formaction. A correct answer must give the full list, not only className and htmlFor.",
+    "evidence": ["hono:src/jsx/utils.ts#L1-L12"],
+    "category": "lookup"
+  },
+  {
+    "id": "q25",
+    "question": "How does hono/jsx server-side rendering output `<button disabled={true}>`, `<button disabled={false}>`, and a boolean on a non-boolean attribute such as `<div data-x={false}>`?",
+    "reference": "For an attribute in its boolean-attributes list such as disabled, true renders `disabled=\"\"` and false omits the attribute. A boolean on any other attribute is rendered as a string, so data-x={false} gives data-x=\"false\".",
+    "evidence": [
+      "hono:src/jsx/base.ts#L79-L88",
+      "hono:src/jsx/base.ts#L212-L219",
+      "hono:src/jsx/base.ts#L234-L238"
+    ],
+    "category": "behaviour"
+  },
+  {
+    "id": "q26",
+    "question": "With the Hono RPC client (`hc`), what do calling `$url()` and `$path()` on an endpoint return?",
+    "reference": "$url() returns a URL object for the full endpoint address, with path params substituted and the query string appended when given. $path() returns a string with just the path (plus query), relative to the base URL and starting with '/'.",
+    "evidence": ["hono:src/client/client.ts#L171-L186"],
+    "category": "lookup"
+  },
+  {
+    "id": "q27",
+    "question": "With the Hono RPC client, what Cookie request header value is sent when a call is made with `cookie: { a: '1', b: 'x y' }`?",
+    "reference": "Each pair is serialized with the cookie serializer using path '/': the value is URI-encoded and `; Path=/` is appended. The serialized cookies are joined with a comma, giving `a=1; Path=/,b=x%20y; Path=/`.",
+    "evidence": [
+      "hono:src/client/client.ts#L98-L104",
+      "hono:src/utils/cookie.ts#L174-L179",
+      "hono:src/utils/cookie.ts#L221-L223",
+      "hono:src/utils/cookie.ts#L262-L269"
+    ],
+    "category": "cross-module"
+  },
+  {
+    "id": "q28",
+    "question": "With `const client = hc<AppType>('http://localhost:8787')`, what URL does a call to `client.index.$get()` request, and what about `client.api.index.$get()`?",
+    "reference": "A trailing `/index` segment is stripped from the URL. `client.index.$get()` requests `http://localhost:8787/` and `client.api.index.$get()` requests `http://localhost:8787/api`.",
+    "evidence": [
+      "hono:src/client/client.ts#L169-L170",
+      "hono:src/client/client.ts#L113-L113",
+      "hono:src/client/utils.ts#L11-L16",
+      "hono:src/client/utils.ts#L55-L60"
+    ],
+    "category": "cross-module"
+  },
+  {
+    "id": "q29",
+    "question": "On a route using `validator('json', fn)`, what does `fn` receive as its value when the request's Content-Type is `text/plain`?",
+    "reference": "An empty object, `{}`. The body is only parsed when the Content-Type matches the JSON pattern; otherwise the validation function is still called with the empty default and no error is raised.",
+    "evidence": [
+      "hono:src/validator/validator.ts#L89-L97",
+      "hono:src/validator/validator.ts#L162-L162"
+    ],
+    "category": "behaviour"
+  },
+  {
+    "id": "q30",
+    "question": "A urlencoded form posts the field `tag` twice (`tag=a&tag=b`). What value does a `validator('form', ...)` callback see for `tag`, and what does `c.req.parseBody()` with no options return for it?",
+    "reference": "The validator callback sees an array, ['a', 'b']. parseBody() with default options (all: false) keeps a single value, the last one, 'b'; it only collects arrays when called with { all: true } or for keys ending in `[]`.",
+    "evidence": [
+      "hono:src/validator/validator.ts#L129-L141",
+      "hono:src/utils/body.ts#L101-L101",
+      "hono:src/utils/body.ts#L163-L171"
+    ],
+    "category": "cross-module"
+  }
+]

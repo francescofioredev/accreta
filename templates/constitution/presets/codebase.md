@@ -17,12 +17,14 @@ page_types:
   - synthesis # a page that reads across several of the above
 
 link_fields:
-  - consumers # who calls this
-  - consumed_by # what this calls
-  - delegates_to # what this hands work to
-  - implements # the interface or contract this realizes
+  - consumers # what calls this page's subject
+  - consumed_by # what this page's subject calls (the name reads backwards); the inverse of `consumers`
+  - delegates_to # what this page's subject hands work to
+  - implements # the interface or contract this page's subject realizes
   - supersedes
   - superseded_by
+  - amends # the earlier decision this page's decision changes but does not replace
+  - amended_by # a later decision that changes this one
   - related
   - discussed_in
 
@@ -65,6 +67,19 @@ untouched by a hundred commits is not stale.
 **Beware the rename.** A moved or renamed file shows up as a change to both paths. The page
 is usually still correct and the citation is not; fix the path rather than re-verifying the
 whole page.
+
+## Decision records
+
+A decision record carries its status in frontmatter, as the record states it:
+`status: Accepted`, `Proposed`, `Deprecated`. Nothing indexes it yet, so a search cannot
+filter on it; state it in the body too, which search does index. A status that names another
+record, such as "Superseded by 0012", still needs the matching link field: `status` is not in
+the link graph.
+
+Decisions amend each other far more often than they replace each other. When a later record
+changes an earlier one that still holds in part, link them with `amends` / `amended_by`, on
+both pages; lint checks only the supersession pair, so nothing catches a missing half.
+Use `supersedes` / `superseded_by` only when the earlier decision no longer holds at all.
 
 ## Concepts are where the value is
 

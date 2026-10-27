@@ -129,10 +129,15 @@ export function createServer(ctx: ToolContext): McpServer {
     "search_pages",
     {
       description:
-        "Full-text search across the knowledge base (title, declared aliases, and body), with optional filters on page type and source. The primary discovery tool: use it when you do not already know a page's path. Supports FTS5 syntax — phrases in double quotes, AND/OR/NOT." +
+        "Full-text search across the knowledge base (title, declared aliases, and body), with optional filters on page type and source. The primary discovery tool: use it when you do not already know a page's path. Every word must match, and NOT, OR and AND are searched as words; double quotes make a phrase, and a trailing * matches a prefix." +
         PAGE_DERIVED,
       inputSchema: {
-        query: z.string().min(1).describe("Search query. Supports FTS5 syntax."),
+        query: z
+          .string()
+          .min(1)
+          .describe(
+            "Words that must all match. Double quotes make a phrase; a trailing * a prefix.",
+          ),
         types: z
           .array(z.string())
           .optional()
@@ -208,7 +213,7 @@ export function createServer(ctx: ToolContext): McpServer {
     "check_drift",
     {
       description:
-        "Report which pages their sources have moved out from under. Distinguishes three outcomes that must not be confused: `stale` (the source changed since the page was verified), `unverifiable` (no revision to compare against: the page records none, or it is another source's page with a citation here that pins none), and `unresolvable` (the source cannot place the revision the page names — history rewritten, or an `fs` source no longer holds the listing that revision was taken from). Only the absence of all three means 'current'. `unpinned` names each pinless citation by page and footnote id (null for `canonical_source`); it is per citation, so a page can also sit in an entry's `cited_only` through another footnote. `stale`, `unresolvable` and `delegated.pending` group by revision — each entry carries the revision and the pages at it — so a page appears inside an entry rather than as one. A page in `pages` was verified against that revision unless it is also in `cited_only`: those belong to another source and only cite this one at that revision. Re-check their cited lines and re-pin those footnotes, but never record this source's revision on them. `cited_paths`, when there are no per-line `citations`, names the changed paths each one cites. `unloaded_sources` names each declaration file that did not load, why, and how many pages cite it (null when it has no id); nothing citing it was checked." +
+        "Report which pages their sources have moved out from under. Distinguishes three outcomes that must not be confused: `stale` (the source changed since the page was verified), `unverifiable` (no revision to compare against: the page records none, or it is another source's page with a citation here that pins none), and `unresolvable` (the source cannot place the revision the page names — history rewritten, or an `fs` source no longer holds the listing that revision was taken from). Only the absence of all three means 'current'. `unpinned` names each pinless citation by page and footnote id (null for `canonical_source`); it is per citation, so a page can also sit in an entry's `cited_only` through another footnote. `stale`, `unresolvable` and `delegated.pending` group by revision — each entry carries the revision and the pages at it — so a page appears inside an entry rather than as one. A page in `pages` was verified against that revision unless it is also in `cited_only`: those belong to another source and only cite this one at that revision. Re-check their cited lines and re-pin those footnotes, but never record this source's revision on them. `cited_paths`, when there are no per-line `citations`, names the changed paths each one cites. `refused`, on a citation or per page, means the source will not vouch for that place (a symlink, a case variant, a path outside its scope): fix the citation, for example cite the path the reason names, rather than re-reading the page. `unloaded_sources` names each declaration file that did not load, why, and how many pages cite it (null when it has no id); nothing citing it was checked." +
         PAGE_DERIVED,
       inputSchema: {
         source: z.string().optional().describe("Check one source. Omit to check all of them."),

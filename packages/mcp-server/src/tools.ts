@@ -24,11 +24,26 @@ import {
   type SourceAdapter,
   type UnresolvableRevision,
 } from "@accreta/core";
-import { countUnchecked, unloadedFindings, type UnloadedSource } from "@accreta/adapters";
+import {
+  countUnchecked,
+  noSourceNamed,
+  unloadedFindings,
+  type UnloadedSource,
+} from "@accreta/adapters";
 import type { GetPageOutput, HitOutput, PageOutput, SearchPagesOutput } from "./schemas.ts";
+
+/** A handle a call holds across awaits; it stays open until `release`, even past a rebuild. */
+export interface PinnedIndex {
+  db: Database;
+  release(): void;
+  /** Whether a rebuild has replaced the index since this was pinned. */
+  replaced(): boolean;
+}
 
 export interface ToolContext {
   db: Database;
+  /** Absent on a context that never reopens its index, whose `db` is then pinned for free. */
+  pin?(): PinnedIndex;
   config: AccretaConfig;
   root: string;
   sources: Map<string, SourceAdapter>;
@@ -177,7 +192,7 @@ function matchedAliasesOf(query: string, frontmatter: Record<string, unknown>): 
     .toLowerCase()
     .replace(/["*()]/g, " ")
     .split(/\s+/)
-    .filter((term) => term.length > 0 && !["and", "or", "not", "near"].includes(term));
+    .filter((term) => term.length > 0);
 
   return aliases.filter((alias) => {
     const text = alias.toLowerCase();
@@ -189,9 +204,11 @@ export function searchPagesTool(
   ctx: ToolContext,
   input: { query: string; types?: string[]; source?: string; limit?: number },
 ): SearchPagesOutput {
-  const hits = searchPages(ctx.db, input);
+  const db = ctx.db;
+  const { query, types, source, limit } = input;
+  const hits = searchPages(db, { query, types, source, limit });
   const results = hits.map((hit) => {
-    const page = getPage(ctx.db, hit.path, ctx.config);
+    const page = getPage(db, hit.path, ctx.config);
     return hitOut(hit, page ? matchedAliasesOf(input.query, page.frontmatter) : []);
   });
   return { count: hits.length, results, _provenance: provenance(HIT_FIELDS) };
@@ -257,6 +274,9 @@ const DRIFT_FIELDS = [
   "reports[].stale[].citations[].footnote",
   "reports[].stale[].citations[].path",
   "reports[].stale[].citations[].locator",
+  // locate's reason names the cited path back; the per-page record is also keyed by page path.
+  "reports[].stale[].citations[].refused",
+  "reports[].stale[].refused",
   "reports[].unverifiable",
   "reports[].unpinned[].page",
   "reports[].unpinned[].footnote",
@@ -275,12 +295,48 @@ const groupOut = (group: UnresolvableRevision) => ({
   cited_only: group.citedOnly,
 });
 
+/** SQLITE_IOERR, the primary code under every extended one. */
+function isIoError(error: unknown): boolean {
+  const code = (error as { errcode?: unknown } | null)?.errcode;
+  return typeof code === "number" && (code & 0xff) === 10;
+}
+
+// One index per call, so a report spanning awaits cannot mix two. A rebuild mid-call reruns it
+// once: elsewhere the old index answers stale, and Apple's SQLite fails a handle renamed over.
+async function withPinnedIndex<T>(
+  ctx: ToolContext,
+  tool: string,
+  run: (db: Database) => Promise<T>,
+): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    const pin = ctx.pin?.() ?? { db: ctx.db, release() {}, replaced: () => false };
+    let outcome: { ok: true; value: T } | { ok: false; error: unknown };
+    try {
+      outcome = { ok: true, value: await run(pin.db) };
+    } catch (error) {
+      outcome = { ok: false, error };
+    } finally {
+      pin.release();
+    }
+    const stale = pin.replaced() && (outcome.ok || isIoError(outcome.error));
+    if (!stale) {
+      if (outcome.ok) return outcome.value;
+      throw outcome.error;
+    }
+    if (attempt === 2) {
+      throw new Error(`The index was rebuilt twice while ${tool} ran. Run ${tool} again.`, {
+        cause: outcome.ok ? undefined : outcome.error,
+      });
+    }
+  }
+}
+
 // The early returns carry no block: `unloaded_sources` quotes sources/*.yaml, not a page.
-export async function checkDriftTool(ctx: ToolContext, input: { source?: string }) {
-  // Pinned once: the context reopens the index when a rebuild swaps it, and
-  // this loop spans awaits. Re-reading it per adapter could draw one report
-  // from two different indexes.
-  const db = ctx.db;
+export function checkDriftTool(ctx: ToolContext, input: { source?: string }) {
+  return withPinnedIndex(ctx, "check_drift", (db) => checkDrift(ctx, db, input));
+}
+
+async function checkDrift(ctx: ToolContext, db: Database, input: { source?: string }) {
   const why = input.source === undefined ? undefined : notLoaded(ctx, input.source);
   if (why) {
     return {
@@ -301,7 +357,7 @@ export async function checkDriftTool(ctx: ToolContext, input: { source?: string 
   if (adapters.length === 0) {
     return {
       message: input.source
-        ? `No source named "${input.source}". Known: ${[...ctx.sources.keys()].join(", ") || "none"}.`
+        ? noSourceNamed(input.source, [...ctx.sources.keys()], ctx.unloadedSources)
         : unloaded_sources.length > 0
           ? "No declared source loaded; see unloaded_sources."
           : "No sources are declared.",
@@ -330,6 +386,7 @@ export async function checkDriftTool(ctx: ToolContext, input: { source?: string 
             pages: entry.pages,
             cited_only: entry.citedOnly,
             cited_paths: entry.citedPaths,
+            refused: entry.refused,
           };
         }
         const byChange = (change: PageChange) => entry.pages.filter((p) => doubt.get(p) === change);
@@ -356,6 +413,7 @@ export async function checkDriftTool(ctx: ToolContext, input: { source?: string 
               locator: c.locator,
               status: c.change.status,
               ...(c.change.status === "moved" ? { now: c.change.locator } : {}),
+              ...(c.refused === undefined ? {} : { refused: c.refused }),
             })),
           citations_untouched: cited.filter((c) => c.change.status === "untouched").length,
         };
@@ -471,13 +529,13 @@ export async function lintTool(
   ctx: ToolContext,
   input: { kinds?: LintFindingKind[] } & PageRequest = {},
 ) {
-  // Pinned once: the context reopens the index when a rebuild swaps it.
-  const db = ctx.db;
-  const report = await lintKnowledgeBase(db, ctx.config, ctx.sources, {
-    kinds: input.kinds,
-    page: { limit: input.limit, cursor: input.cursor },
-    sourceFindings: unloadedFindings(countUnchecked(db, ctx.unloadedSources)),
-  });
+  const report = await withPinnedIndex(ctx, "lint_knowledge_base", (db) =>
+    lintKnowledgeBase(db, ctx.config, ctx.sources, {
+      kinds: input.kinds,
+      page: { limit: input.limit, cursor: input.cursor },
+      sourceFindings: unloadedFindings(countUnchecked(db, ctx.unloadedSources)),
+    }),
+  );
   return {
     pages_checked: report.pagesChecked,
     count: report.total,

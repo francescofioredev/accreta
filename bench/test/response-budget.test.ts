@@ -3,6 +3,7 @@ import {
   changedPath,
   measure,
   measureDrift,
+  MIXED_PAGES,
   type DriftMode,
   type DriftRow,
   type ListTool,
@@ -99,26 +100,76 @@ const DRIFT: { name: string; mode: DriftMode; base: number; perPage: number; per
     perPage: 396.68,
     perPath: 76,
   },
+  // Mixed base, extra pages all cited-only: perPage is what one cited-only page costs.
+  {
+    name: "without diffs, cited-only pages",
+    mode: { diffing: false, revisions: 1, citesPerPage: 1, citedOnly: true },
+    base: 14_193,
+    perPage: 176,
+    perPath: 38,
+  },
+  {
+    name: "without diffs, cited-only pages, 2 revisions",
+    mode: { diffing: false, revisions: 2, citesPerPage: 2, citedOnly: true },
+    base: 18_299,
+    perPage: 216,
+    perPath: 76,
+  },
+  {
+    name: "with diffs, cited-only pages",
+    mode: { diffing: true, revisions: 1, citesPerPage: 1, citedOnly: true },
+    base: 33_439,
+    perPage: 360.83,
+    perPath: 38,
+  },
+  {
+    name: "with diffs, cited-only pages, 2 revisions and 2 citations per page",
+    mode: { diffing: true, revisions: 2, citesPerPage: 2, citedOnly: true },
+    base: 51_568,
+    perPage: 516.59,
+    perPath: 76,
+  },
+  // Each cited-only page is pinned at both revisions, so it is listed once per pin.
+  {
+    name: "without diffs, cited-only pages pinned at 2 revisions",
+    mode: { diffing: false, revisions: 2, citesPerPage: 2, citedOnly: true, pinnedTwice: true },
+    base: 25_099,
+    perPage: 352,
+    perPath: 76,
+  },
+  {
+    name: "with diffs, cited-only pages pinned at 2 revisions",
+    mode: { diffing: true, revisions: 2, citesPerPage: 2, citedOnly: true, pinnedTwice: true },
+    base: 57_692,
+    perPage: 638.59,
+    perPath: 76,
+  },
 ];
 
-/** Each changed path appears once per stale revision, plus once per citation that names it. */
+/** Each changed path appears once per stale revision, plus once per citation or cited-only page naming it. */
 function expectPathsOnce(drift: DriftRow, changed: number): void {
   for (let i = 0; i < changed; i++) {
     const path = changedPath(i);
-    const want = drift.staleRevisions + (drift.listedCitations.get(path) ?? 0);
+    const want =
+      drift.staleRevisions +
+      (drift.listedCitations.get(path) ?? 0) +
+      (drift.citedPaths.get(path) ?? 0);
     expect(drift.text.split(path).length - 1, path).toBe(want);
   }
 }
 
 test.each(DRIFT)("check_drift $name stays within its budgets", async (c) => {
   const [base, morePages, morePaths] = await Promise.all([
-    measureDrift(100, 50, c.mode),
-    measureDrift(200, 50, c.mode),
-    measureDrift(100, 100, c.mode),
+    measureDrift(MIXED_PAGES, 50, c.mode),
+    measureDrift(MIXED_PAGES + 100, 50, c.mode),
+    measureDrift(MIXED_PAGES, 100, c.mode),
   ]);
   expectPathsOnce(base, 50);
   expectPathsOnce(morePages, 50);
   expectPathsOnce(morePaths, 100);
+  for (const drift of [base, morePages, morePaths]) {
+    expect(drift.repetition).toBe(c.mode.pinnedTwice ? 2 : 1);
+  }
   expect(base.bytes).toBeLessThanOrEqual(c.base * DRIFT_TOLERANCE);
   expect((morePages.bytes - base.bytes) / 100).toBeLessThanOrEqual(c.perPage * DRIFT_TOLERANCE);
   expect((morePaths.bytes - base.bytes) / 50).toBeLessThanOrEqual(c.perPath * DRIFT_TOLERANCE);

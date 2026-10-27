@@ -85,7 +85,7 @@ function matchedAliasesOf(query: string, frontmatter: Record<string, unknown>): 
     .toLowerCase()
     .replace(/["*()]/g, " ")
     .split(/\s+/)
-    .filter((term) => term.length > 0 && !["and", "or", "not", "near"].includes(term));
+    .filter((term) => term.length > 0);
 
   return aliases.filter((alias) => {
     const text = alias.toLowerCase();

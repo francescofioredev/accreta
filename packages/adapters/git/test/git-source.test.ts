@@ -1,11 +1,21 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   buildIndex,
   DEFAULT_CONFIG,
   detectDrift,
+  lintCitations,
   openIndex,
   pageChanges,
   UnknownRevisionError,
@@ -336,6 +346,8 @@ describe("GitSource scoped to paths", () => {
   });
 
   test("locate reads a declared path however it is spelled", async () => {
+    write("doc/z.md", "z");
+    await commit("a sibling whose name is a prefix of docs");
     for (const paths of [["docs"], ["./docs/"], ["docs/a.md"], ["."]]) {
       expect(await scoped(paths).locate("docs/a.md")).toEqual({ verdict: "found" });
     }
@@ -373,8 +385,50 @@ describe("GitSource scoped to paths", () => {
   });
 
   test("paths that have no commits yet resolve to HEAD rather than failing", async () => {
+    write("nothing/here/new.md", "staged, not committed");
+    await run(["add", "-A"]);
     const scopedSource = scoped(["nothing/here"]);
     expect(await scopedSource.revision()).toMatch(/^[0-9a-f]{40}$/);
+  });
+
+  // A typo or a directory to be created later would drift nothing until somebody noticed.
+  test("an entry that matches no tracked file is refused", () => {
+    // Anchored: at the repository top there is no prefix to suggest dropping.
+    expect(() => scoped(["docs", "nothing/here"])).toThrow(
+      /^Source "repo": `paths` entry "nothing\/here" matches no tracked file\. `paths` are relative to `root`, not to the repository top\.$/,
+    );
+    write("untracked/u.md", "never added");
+    expect(() => scoped(["untracked", "gone"])).toThrow(
+      '`paths` entries "untracked", "gone" match no tracked file',
+    );
+  });
+
+  test("a dead pattern is refused even beside entries that match", () => {
+    expect(() => scoped(["docs", "*.txt"])).toThrow(
+      '`paths` entry "*.txt" matches no tracked file',
+    );
+    expect(() => scoped(["docs", "*/*.md"])).not.toThrow();
+  });
+
+  test("an entry inside a submodule says the submodule needs its own source", async () => {
+    const proc = Bun.spawn(["git", "rev-parse", "HEAD"], { cwd: root, stdout: "pipe" });
+    const sha = (await new Response(proc.stdout).text()).trim();
+    await run(["update-index", "--add", "--cacheinfo", `160000,${sha},vendor/lib`]);
+    await run(["commit", "-q", "-m", "a submodule"]);
+    expect(() => scoped(["docs", "vendor/lib/docs"])).toThrow(
+      '`paths` entry "vendor/lib/docs" (inside submodule "vendor/lib", which needs its own source)',
+    );
+  });
+
+  test("a root git cannot read is left to fail where git is called", () => {
+    const outside = mkdtempSync(join(tmpdir(), "accreta-not-git-"));
+    try {
+      expect(
+        () => new GitSource({ id: "repo", root: outside, citationFormat: "x", paths: ["docs"] }),
+      ).not.toThrow();
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 });
 
@@ -673,6 +727,153 @@ describe("drift over GitSource names the page whose cited lines changed", () => 
   });
 });
 
+// Git versions a link's text, so an edit behind it lists only the target and never drifts the page.
+describe("lint over GitSource asks a symlink citation to name its target", () => {
+  let kb = "";
+
+  beforeEach(async () => {
+    kb = mkdtempSync(join(tmpdir(), "accreta-git-kb-"));
+    write("docs/real.md", lines(12));
+    symlinkSync("real.md", join(root, "docs", "link.md"));
+    symlinkSync("docs", join(root, "alias"));
+    writeFileSync(join(kb, "outside.md"), lines(12));
+    symlinkSync(join(kb, "outside.md"), join(root, "docs", "away.md"));
+    await commit("first");
+  });
+
+  afterEach(() => {
+    rmSync(kb, { recursive: true, force: true });
+  });
+
+  async function lintCiting(path: string) {
+    const git = source();
+    const from = await git.revision();
+    mkdirSync(join(kb, "knowledge"), { recursive: true });
+    writeFileSync(
+      join(kb, "knowledge", "page.md"),
+      `---\ntype: note\nsource: repo\nlast_verified_revision: ${from}\n---\n\nA claim.[^a]\n\n[^a]: repo @ ${from} · ${path}#L5-L8\n`,
+    );
+    const indexPath = join(kb, "index.sqlite");
+    buildIndex({ root: kb, config: DEFAULT_CONFIG, indexPath });
+    const db = openIndex(indexPath);
+    try {
+      return (await lintCitations(db, new Map([["repo", git]]))).findings;
+    } finally {
+      db.close();
+    }
+  }
+
+  test("a symlinked file", async () => {
+    const [finding] = await lintCiting("docs/link.md");
+    expect(finding).toMatchObject({ kind: "citation-path-missing", path: "knowledge/page.md" });
+    expect(finding?.detail).toContain('"docs/real.md"');
+  });
+
+  test("a symlinked directory on the way", async () => {
+    const [finding] = await lintCiting("alias/real.md");
+    expect(finding).toMatchObject({ kind: "citation-path-missing", path: "knowledge/page.md" });
+    expect(finding?.detail).toContain('"docs/real.md"');
+  });
+
+  test("a symlink out of the source names no target", async () => {
+    const [finding] = await lintCiting("docs/away.md");
+    expect(finding).toMatchObject({ kind: "citation-path-missing", path: "knowledge/page.md" });
+    expect(finding?.detail).toContain("symlink to nothing");
+    expect(finding?.detail).not.toContain("outside.md");
+  });
+
+  test("a symlink to a directory is not told to cite the directory", async () => {
+    const [finding] = await lintCiting("alias");
+    expect(finding).toMatchObject({ kind: "citation-path-missing", path: "knowledge/page.md" });
+    expect(finding?.detail).toContain("symlink to a directory");
+    expect(finding?.detail).not.toContain('cite "docs"');
+  });
+
+  test("a name in another Unicode normalisation says so", async () => {
+    const [nfc, nfd] = ["docs/café.md".normalize("NFC"), "docs/café.md".normalize("NFD")];
+    write(nfc, lines(12));
+    await commit("add an accented name");
+    // Only a normalisation-insensitive disk (APFS) resolves the other form at all.
+    if (!existsSync(join(root, nfd))) return;
+    const [finding] = await lintCiting(nfd);
+    expect(finding?.detail).toContain("Unicode normalisation");
+  });
+
+  test("the target itself is found", async () => {
+    expect(await lintCiting("docs/real.md")).toEqual([]);
+  });
+});
+
+// #303: drift never ran lint, so a citation the diff could not see ranked its page "uncited".
+describe("drift over GitSource does not clear a citation locate refuses", () => {
+  let kb = "";
+
+  beforeEach(async () => {
+    kb = mkdtempSync(join(tmpdir(), "accreta-git-kb-"));
+    write("docs/real.md", lines(12));
+    write("other/b.md", lines(3));
+    symlinkSync("real.md", join(root, "docs", "link.md"));
+    await commit("first");
+  });
+
+  afterEach(() => {
+    rmSync(kb, { recursive: true, force: true });
+  });
+
+  /** Cite `cited` at HEAD, edit line 6 of docs/real.md, and rank the citing page as drift does. */
+  async function driftAfterEdit(cited: string, git = source()) {
+    const from = await git.revision();
+    mkdirSync(join(kb, "knowledge"), { recursive: true });
+    writeFileSync(
+      join(kb, "knowledge", "page.md"),
+      `---\ntype: note\nsource: repo\nlast_verified_revision: ${from}\n---\n\nA claim.[^a]\n\n[^a]: repo @ ${from} · ${cited}\n`,
+    );
+    write("docs/real.md", lines(12, { 6: "changed" }));
+    await commit("edit line 6");
+
+    const indexPath = join(kb, "index.sqlite");
+    buildIndex({ root: kb, config: DEFAULT_CONFIG, indexPath });
+    const db = openIndex(indexPath);
+    try {
+      const [entry] = (await detectDrift(db, git)).stale;
+      expect(entry?.changedPaths).toEqual(["docs/real.md"]);
+      return { rank: pageChanges(entry!)?.get("knowledge/page.md"), entry: entry! };
+    } finally {
+      db.close();
+    }
+  }
+
+  test("a symlink to the edited file", async () => {
+    const { rank, entry } = await driftAfterEdit("docs/link.md#L5-L8");
+    expect(rank).toBe("changed");
+    expect(entry.citations?.[0]?.refused).toContain('cite "docs/real.md" instead');
+  });
+
+  test("a case variant of the edited file", async () => {
+    expect((await driftAfterEdit("docs/REAL.md#L5-L8")).rank).toBe("changed");
+  });
+
+  test("a path outside the declared paths", async () => {
+    const scoped = new GitSource({
+      id: "repo",
+      root,
+      citationFormat: "{source} @ {rev} · {path}#{locator}",
+      paths: ["docs"],
+    });
+    const { rank, entry } = await driftAfterEdit("other/b.md#L1-L2", scoped);
+    expect(rank).toBe("changed");
+    expect(entry.citations?.[0]?.refused).toContain("outside the declared paths");
+  });
+
+  test("the target's unedited lines still rank untouched", async () => {
+    expect((await driftAfterEdit("docs/real.md#L1-L2")).rank).toBe("untouched");
+  });
+
+  test("a file the commit left alone still ranks uncited", async () => {
+    expect((await driftAfterEdit("other/b.md#L1-L2")).rank).toBe("uncited");
+  });
+});
+
 describe("GitSource rooted in a subdirectory of the repository", () => {
   let kb = "";
 
@@ -690,7 +891,7 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
   }
 
   /** Index a page citing `docs/a.md#L5-L8` as verified at `from`, and run drift over the source. */
-  async function drift(from: string) {
+  async function drift(from: string, paths?: string[]) {
     mkdirSync(join(kb, "knowledge"), { recursive: true });
     writeFileSync(
       join(kb, "knowledge", "page.md"),
@@ -700,7 +901,7 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
     buildIndex({ root: kb, config: DEFAULT_CONFIG, indexPath });
     const db = openIndex(indexPath);
     try {
-      const report = await detectDrift(db, sub());
+      const report = await detectDrift(db, sub(paths));
       const [entry] = report.stale;
       return { report, rank: entry && pageChanges(entry)?.get("knowledge/page.md") };
     } finally {
@@ -764,6 +965,8 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
   });
 
   test("a scope path that climbs back into the root still scopes locate", async () => {
+    write("sub/other/b.md", "b");
+    await commit("a second directory under the root");
     expect(await sub(["../sub/docs"]).locate("docs/a.md")).toEqual({ verdict: "found" });
     expect(await sub(["../sub/other"]).locate("docs/a.md")).toMatchObject({ verdict: "missing" });
   });
@@ -778,8 +981,53 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
   });
 
   test("a pattern in paths is matched from the root, as revision() matches it", async () => {
+    write("sub/notes.txt", "n");
+    await commit("a text file under the root");
     expect(await sub(["docs/*.md"]).locate("docs/a.md", "L12")).toEqual({ verdict: "found" });
     expect(await sub(["*.txt"]).locate("docs/a.md")).toMatchObject({ verdict: "missing" });
+  });
+
+  // #206: from the root `-- sub/docs` matches nothing, so drift reported the page current forever.
+  test("paths written from the repository top are refused, with the entry they meant", () => {
+    expect(() => sub(["sub/docs"])).toThrow(
+      'Source "repo": `paths` entry "sub/docs" (did you mean "docs"?) matches no tracked file. ' +
+        "`paths` are relative to `root`, not to the repository top.",
+    );
+    expect(() => sub(["./sub/docs/*.md"])).toThrow('(did you mean "docs/*.md"?)');
+    expect(() => sub(["sub"])).toThrow('(did you mean "."?)');
+    expect(() => sub(["docs", "../other.md"])).not.toThrow();
+  });
+
+  test("a suggestion is offered only when it matches", () => {
+    expect(() => sub(["sub/nope"])).toThrow(
+      /^Source "repo": `paths` entry "sub\/nope" matches no tracked file\. /,
+    );
+  });
+
+  // A dead entry was once refused, and removing it as told turned drift green over a deleted file.
+  test("an entry whose files were deleted still loads, and drift reports the deletion", async () => {
+    write("sub/keep.md", "k");
+    await commit("keep the root alive");
+    const from = await sub(["docs"]).revision();
+    await run(["rm", "-q", "-r", "sub/docs"]);
+    await commit("delete the cited directory");
+
+    expect(() => sub(["docs"])).not.toThrow();
+    const { report, rank } = await drift(from, ["docs"]);
+    expect(report.stale).toHaveLength(1);
+    expect(rank).toBe("changed");
+
+    write("sub/docs/a.md", lines(12));
+    await commit("re-add it");
+    expect(() => sub(["docs"])).not.toThrow();
+  });
+
+  test("a symlinked root is judged by git, which sees through the link", () => {
+    const alias = join(kb, "alias");
+    symlinkSync(join(root, "sub"), alias);
+    const linked = () =>
+      new GitSource({ id: "repo", root: alias, citationFormat: "x", paths: ["../sub/docs"] });
+    expect(linked).not.toThrow();
   });
 
   test("at the top level the revision is still HEAD, even when HEAD changed nothing", async () => {

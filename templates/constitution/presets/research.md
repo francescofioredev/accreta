@@ -17,9 +17,9 @@ page_types:
 link_fields:
   - cites # a source this draws on
   - cited_by
-  - supports # evidence that strengthens a finding
-  - contradicts # evidence that conflicts with it
-  - supersedes # a later result that replaces an earlier one
+  - supports # a finding this page's evidence strengthens
+  - contradicts # a finding this page's evidence conflicts with
+  - supersedes # an earlier result this page's result replaces
   - superseded_by
   - related
   - discussed_in
@@ -36,7 +36,7 @@ often the most valuable thing you can write, and it deserves to be findable on i
 ```markdown
 ---
 type: contradiction
-contradicts: [[findings/permafrost-feedback-strength]]
+related: ["[[findings/permafrost-feedback-gradual]]", "[[findings/permafrost-feedback-abrupt]]"]
 ---
 
 # Disagreement on permafrost feedback strength
@@ -49,6 +49,8 @@ Two assessments give values differing by a factor of three.
 The gap is not a measurement error: the assessments are modelling different processes. No
 resolution is attempted here.
 ```
+
+The findings it names link back to it with `discussed_in`.
 
 Note what the page does *not* do. It does not decide. It names the disagreement, cites both
 sides, and — where it can be established from the sources — says what the disagreement is

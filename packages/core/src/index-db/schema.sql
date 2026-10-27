@@ -33,7 +33,9 @@ CREATE TABLE IF NOT EXISTS pages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_pages_type ON pages(type);
-CREATE INDEX IF NOT EXISTS idx_pages_source ON pages(source);
+-- Covers drift's per-source read, which otherwise loads each page's body to take four columns.
+CREATE INDEX IF NOT EXISTS idx_pages_source
+  ON pages(source, path, last_verified_revision, canonical_source);
 CREATE INDEX IF NOT EXISTS idx_pages_title_key ON pages(title_key, path);
 
 -- `aliases` is indexed alongside title and body because the name a question
@@ -59,6 +61,16 @@ CREATE TABLE IF NOT EXISTS aliases (
   alias TEXT NOT NULL,
   path TEXT NOT NULL,
   PRIMARY KEY (alias, path)
+) WITHOUT ROWID;
+
+-- A canonical_source naming a source other than its page's, keyed by the source it names.
+-- Drift looks these up per source; an instr() over pages.canonical_source scans every page.
+-- Only a fresh staging file is opened for writing, so IF NOT EXISTS never meets an older shape.
+CREATE TABLE IF NOT EXISTS canonical_cites (
+  source TEXT NOT NULL,
+  page_path TEXT NOT NULL,
+  canonical_source TEXT NOT NULL,
+  PRIMARY KEY (source, page_path)
 ) WITHOUT ROWID;
 
 CREATE TABLE IF NOT EXISTS links (
@@ -98,7 +110,19 @@ CREATE TABLE IF NOT EXISTS citations (
   PRIMARY KEY (page_path, line)
 );
 
-CREATE INDEX IF NOT EXISTS idx_citations_source ON citations(source, path);
+-- Covers drift's per-source read in footnote order, so it neither visits rows nor sorts.
+CREATE INDEX IF NOT EXISTS idx_citations_source
+  ON citations(source, page_path, line, path, footnote, revision, locator);
+
+-- A footnote reference nothing defines, or a definition no claim leads to: role 'reference' or
+-- 'definition'. Kept like broken_links, since a reference with no definition reads as cited.
+CREATE TABLE IF NOT EXISTS footnote_orphans (
+  page_path TEXT NOT NULL,
+  footnote TEXT NOT NULL,
+  line INTEGER NOT NULL,
+  role TEXT NOT NULL,
+  PRIMARY KEY (page_path, line, footnote, role)
+);
 
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,

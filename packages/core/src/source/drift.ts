@@ -80,15 +80,26 @@ export interface StaleRevision {
   /** Those of `pages` here only because a citation is pinned at this revision: not verified at it. */
   citedOnly?: string[];
   /**
-   * Citations from these pages into paths changed since their revision, and what the change did
-   * to each. Absent when the source cannot diff contents: every page is in doubt per file.
+   * Citations from these pages into paths changed since their revision, or that the source
+   * refuses, and what the change did to each. Absent when the source cannot diff contents.
    */
   citations?: CitedChange[];
   /** Without `citations`: the paths among `changedPaths` each of `citedOnly` cites. */
   citedPaths?: Record<string, string[]>;
+  /** Without `citations`: the citations the source refuses, of each of `citedOnly` here only for them. */
+  refused?: Record<string, RefusedCitation[]>;
 }
 
-/** One citation into a changed path. */
+/** A citation `locate` refused, so no diff can say whether its place changed. */
+export interface RefusedCitation {
+  footnote: string | null;
+  path: string;
+  locator: string | null;
+  /** Why the source refused it. */
+  refused: string;
+}
+
+/** One citation into a changed path, or one the source refuses. */
 export interface CitedChange {
   page: string;
   /** The footnote id, or null for the page's `canonical_source`. */
@@ -98,6 +109,8 @@ export interface CitedChange {
   /** The revision the citation names, or the page's when it names none: its line numbers belong to it. */
   revision: string;
   change: LocatorChange;
+  /** Why `locate` refused the place; its change is then `unknown`, since no diff vouches for it. */
+  refused?: string;
 }
 
 /**
@@ -144,11 +157,11 @@ interface FootnoteRow {
 /**
  * Report which pages a source has moved out from under.
  *
- * This function is the reason `SourceAdapter` exists. It asks only
- * `revision()` and `changedSince()`, so it works identically for a git
- * repository, a directory of documents, or anything else that can answer those
- * two questions. It never learns what kind of source it is holding — and if it
- * ever needs to, the interface is missing something.
+ * This function is the reason `SourceAdapter` exists. It asks only what that
+ * interface declares, so it works identically for a git repository, a
+ * directory of documents, or anything else that can answer it. It never learns
+ * what kind of source it is holding — and if it ever needs to, the interface is
+ * missing something.
  */
 export async function detectDrift(db: Database, adapter: SourceAdapter): Promise<DriftReport> {
   const rows = db
@@ -228,6 +241,25 @@ export async function detectDrift(db: Database, adapter: SourceAdapter): Promise
     return changes.get(revision)!;
   };
 
+  // Asked together, so a source that batches its lookups answers them in one pass.
+  const verdicts = new Map<string, Promise<string | null>>();
+  const refusals: Refusals = (places) =>
+    Promise.all(
+      places.map(({ path, locator }) => {
+        const key = JSON.stringify([path, locator]);
+        let verdict = verdicts.get(key);
+        if (!verdict) {
+          verdict = adapter.locate(path, locator ?? undefined).then(
+            (answer) => (answer.verdict === "missing" ? answer.detail : null),
+            // A source that threw told us nothing, which is not a refusal.
+            () => null,
+          );
+          verdicts.set(key, verdict);
+        }
+        return verdict;
+      }),
+    );
+
   // A footnote pinned elsewhere is checked at its pin when its page's group will not check it,
   // or when the pin cannot be placed: that is the same answer whatever else the change touched.
   for (const [revision, pages] of byRevision) {
@@ -258,13 +290,34 @@ export async function detectDrift(db: Database, adapter: SourceAdapter): Promise
     // to ignore the report.
     if (changedPaths.length === 0) continue;
 
-    // A page here only through a pinned citation rests on the files it cites, not the whole source.
+    // A page here only through a pinned citation rests on the files it cites, not the whole source;
+    // one the source refuses no diff can clear, as a symlink's target changes under another name.
     const changed = new Set(changedPaths);
-    const touched = [...(lent.get(revision) ?? [])]
-      .filter(([, cites]) => cites.some((cite) => changed.has(cite.path)))
-      .map(([page]) => page);
+    const touched: string[] = [];
+    const quiet: [string, Cite[]][] = [];
+    for (const [page, cites] of lent.get(revision) ?? []) {
+      if (cites.some((cite) => changed.has(cite.path))) touched.push(page);
+      else quiet.push([page, cites]);
+    }
+    const answers = await refusals(quiet.flatMap(([, cites]) => cites));
+    const refused: Record<string, RefusedCitation[]> = {};
+    let at = 0;
+    for (const [page, cites] of quiet) {
+      const mine = cites.flatMap((cite, i) => {
+        const why = answers[at + i];
+        return why
+          ? [{ footnote: cite.footnote, path: cite.path, locator: cite.locator, refused: why }]
+          : [];
+      });
+      at += cites.length;
+      if (mine.length === 0) continue;
+      touched.push(page);
+      refused[page] = mine;
+    }
     const group = grouped(byRevision.get(revision) ?? [], touched);
-    if (group.pages.length > 0) stale.push({ revision, changedPaths, ...group });
+    // With a diff, each refusal is one of `citations` instead.
+    const perFile = !adapter.touchedSince && Object.keys(refused).length > 0 ? { refused } : {};
+    if (group.pages.length > 0) stale.push({ revision, changedPaths, ...group, ...perFile });
   }
 
   const touchedSince = adapter.touchedSince?.bind(adapter);
@@ -272,7 +325,7 @@ export async function detectDrift(db: Database, adapter: SourceAdapter): Promise
     const borrowed = lent.get(entry.revision);
     const citesOf = (page: string) => borrowed?.get(page) ?? cited.own.get(page) ?? [];
     if (touchedSince) {
-      entry.citations = await citedChanges(touchedSince, entry, citesOf, changedSince);
+      entry.citations = await citedChanges(touchedSince, entry, citesOf, changedSince, refusals);
       continue;
     }
     const changed = new Set(entry.changedPaths);
@@ -329,6 +382,9 @@ interface Cite {
 
 type Lent = Map<string, Map<string, Cite[]>>;
 
+/** Why the source refuses each place, or null where it finds it or cannot tell. */
+type Refusals = (places: readonly Pick<Cite, "path" | "locator">[]) => Promise<(string | null)[]>;
+
 function lend(lent: Lent, revision: string, page: string, cite: Cite): void {
   const pages = lent.get(revision) ?? new Map<string, Cite[]>();
   lent.set(revision, pages);
@@ -351,6 +407,7 @@ interface CitationsInto {
 /** Every citation into this source, whichever page holds it. */
 function citationsInto(db: Database, sourceId: string, ownRows: PageRow[]): CitationsInto {
   requireTable(db, "citations");
+  requireTable(db, "canonical_cites");
   const own = new Map<string, Cite[]>();
   const lent: Lent = new Map();
   const unpinnedCites: UnpinnedCitation[] = [];
@@ -372,18 +429,17 @@ function citationsInto(db: Database, sourceId: string, ownRows: PageRow[]): Cita
     });
   }
 
-  // SQL only narrows to values containing "id:"; parsing decides, so drift reads them as lint does.
+  // The build keeps only values parseCitation attributes to a source other than the page's.
   const canonicalRows = db
     .prepare(
-      `SELECT path, canonical_source FROM pages
-       WHERE (source IS NULL OR source <> $source) AND instr(canonical_source, $source || ':') > 0`,
+      `SELECT page_path AS path, canonical_source FROM canonical_cites WHERE source = $source`,
     )
     // Named, not ?1: Node 22.16's node:sqlite refuses numbered parameters with "column index out of range".
     .all({ $source: sourceId }) as { path: string; canonical_source: string }[];
   const canonical = new Map<string, Cite>();
   for (const row of canonicalRows) {
     const parsed = parseCitation(row.canonical_source);
-    if (ownPages.has(row.path) || parsed?.sourceId !== sourceId) continue;
+    if (parsed?.sourceId !== sourceId) continue;
     const locator = parsed.locator ?? null;
     canonical.set(row.path, { footnote: null, revision: null, path: parsed.path, locator });
   }
@@ -435,8 +491,10 @@ async function citedChanges(
   entry: StaleRevision,
   citesOf: (page: string) => Cite[],
   changedSince: (revision: string) => Promise<string[] | null>,
+  refusals: Refusals,
 ): Promise<CitedChange[]> {
   const cited: CitedChange[] = [];
+  const unlisted = new Set<CitedChange>();
   const asks = new Map<string, { revision: string; path: string; locators: Set<string> }>();
   const pending: { cited: CitedChange; key: string }[] = [];
   const changedFrom = new Map<string, Set<string> | null>();
@@ -450,17 +508,21 @@ async function citedChanges(
       }
       // A pin the source cannot place is reported as unresolvable at that pin, not here.
       const since = changedFrom.get(from);
-      if (!since?.has(cite.path)) continue;
-      // A whole-document citation into a changed document is touched by definition.
+      if (!since) continue;
       const change: CitedChange = {
         page,
         footnote: cite.footnote,
         path: cite.path,
         locator: cite.locator,
         revision: from,
-        change: { status: "touched" },
+        change: { status: since.has(cite.path) ? "touched" : "untouched" },
       };
       cited.push(change);
+      if (change.change.status === "untouched") {
+        unlisted.add(change);
+        continue;
+      }
+      // A whole-document citation into a changed document is touched by definition.
       if (cite.locator === null) continue;
 
       const key = `${from}\0${cite.path}`;
@@ -483,5 +545,22 @@ async function citedChanges(
   for (const { cited: change, key } of pending) {
     change.change = answers.get(key)?.get(change.locator!) ?? { status: "unknown" };
   }
-  return cited;
+
+  // Untouched only where the source vouches for the place: no diff lists a symlink's target.
+  const cleared = cited.filter(
+    (c) => c.change.status === "untouched" || c.change.status === "moved",
+  );
+  const refused = await refusals(
+    cleared.map(({ path, locator, change }) => ({
+      path,
+      locator: change.status === "moved" ? change.locator : locator,
+    })),
+  );
+  cleared.forEach((change, i) => {
+    if (!refused[i]) return;
+    change.change = { status: "unknown" };
+    change.refused = refused[i];
+  });
+  // Only a refused one is listed, as a citation into an unchanged path never was.
+  return cited.filter((change) => !unlisted.has(change) || change.refused);
 }

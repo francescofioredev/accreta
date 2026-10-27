@@ -66,6 +66,7 @@ extensions: [".md", ".txt"]
 id: billing-service
 type: git
 root: ../billing-service
+paths: ["src", "docs"]
 ```
 
 ```yaml
@@ -81,7 +82,12 @@ scope: |
 Choosing the adapter:
 
 - **`git`** when the corpus is a repository. Revisions are commit SHAs, so drift detection
-  can say exactly which files changed since a page was verified.
+  can say exactly which files changed since a page was verified. Set `paths`, relative to
+  `root`, to the part of the repository the pages are about: when `root` is the repository
+  top, without it every commit to anything — a README, a test — reports as drift for pages
+  whose documents never moved. A `root` in a subdirectory is already scoped to that subtree.
+  Once `paths` is set, `cite` refuses any file outside it, so with `["src", "docs"]` a
+  top-level `README.md` can no longer be cited.
 - **`fs`** for a directory of documents. Revisions are a hash of modification times.
 - **`delegated`** when only you can reach it — a wiki, a mailbox, a tracker behind a
   connector. accreta holds no credential and makes no call. It tracks which pages cite the
@@ -281,8 +287,13 @@ accreta lint
 ```
 
 Cite the file, then read it. Write the page, and paste the footnote `cite` returns for every
-claim; never compose one. `--expect-revision` fails if the source moved since you read it: re-read
-and cite again. With no revision (a delegated source, an uncommitted file), leave it out. On a
+claim; never compose one. `cite` labels each line, `footnote:` first; a missing place prints
+`footnote: none: location missing` and exits 1, so a script checks the exit code. It takes
+several targets in one call, one result each, in order; `--json` prints an array when there is
+more than one target. In a script, `accreta cite --format footnote` prints the footnotes alone,
+one per line, and nothing when any place is missing. `--expect-revision` fails if the source
+moved since you read it: re-read and cite again; it holds every target, so they must all name
+one source. With no revision (a delegated source, an uncommitted file), leave it out. On a
 new page, record that revision of its own `source` in `last_verified_revision`; on a page you
 extended, leave its revision alone unless you re-verified the whole page.
 

@@ -181,6 +181,29 @@ describe("buildIndex", () => {
     db.close();
   });
 
+  test("a recursive YAML alias costs one page its frontmatter, not the whole index", () => {
+    writePage("nested.md", "---\na: &x\n  b: *x\n---\n\n# Nested\n");
+    writePage("top.md", "---\n&top\ntype: note\nself: *top\n---\n\n# Top\n");
+    writePage("fine.md", "---\ntype: concept\n---\n\n# Fine\n");
+    expect(build().pages).toBe(3);
+
+    const db = openIndex(indexPath, { readonly: true });
+    const rows = db
+      .prepare("SELECT path, type, frontmatter_json, frontmatter_error FROM pages ORDER BY path")
+      .all() as Record<string, unknown>[];
+    db.close();
+    expect(rows.map((row) => [row.path, row.type])).toEqual([
+      ["knowledge/fine.md", "concept"],
+      ["knowledge/nested.md", "unknown"],
+      ["knowledge/top.md", "unknown"],
+    ]);
+    expect(rows[0]?.frontmatter_error).toBeNull();
+    for (const row of rows.slice(1)) {
+      expect(row.frontmatter_json).toBe("{}");
+      expect(row.frontmatter_error).toContain("cannot be stored as JSON");
+    }
+  });
+
   test("which frontmatter fields are links is decided by configuration", () => {
     writePage("a.md", "---\ncites: [[b]]\n---\n\n# A\n");
     writePage("b.md", "# B\n");
@@ -365,6 +388,21 @@ describe("buildIndex", () => {
         locator: "L3-L9",
         claim: "Retries default to two.",
       },
+    ]);
+  });
+
+  test("a canonical_source into another source is indexed under the source it names", () => {
+    writePage("own.md", "---\ntype: note\nsource: noaa\ncanonical_source: noaa:a.md#L1\n---\n");
+    writePage("other.md", "---\ntype: note\nsource: ipcc\ncanonical_source: noaa:b.md#L2\n---\n");
+    writePage("loose.md", "---\ntype: note\nsource: ipcc\ncanonical_source: not one\n---\n");
+    writePage("sourceless.md", "---\ntype: note\ncanonical_source: noaa:c.md#L3\n---\n");
+    build();
+    const db = openIndex(indexPath, { readonly: true });
+    const rows = db.prepare("SELECT * FROM canonical_cites").all();
+    db.close();
+    expect(rows).toEqual([
+      { source: "noaa", page_path: "knowledge/other.md", canonical_source: "noaa:b.md#L2" },
+      { source: "noaa", page_path: "knowledge/sourceless.md", canonical_source: "noaa:c.md#L3" },
     ]);
   });
 });

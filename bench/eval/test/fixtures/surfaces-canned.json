@@ -1,0 +1,66 @@
+{
+  "cli-only": {
+    "t1": {
+      "result": "knowledge/routing.md",
+      "num_turns": 3,
+      "usage": {
+        "input_tokens": 10,
+        "cache_creation_input_tokens": 2000,
+        "cache_read_input_tokens": 6000,
+        "output_tokens": 300
+      }
+    },
+    "t2": {
+      "result": "etag and cache pages",
+      "num_turns": 4,
+      "usage": {
+        "input_tokens": 10,
+        "cache_creation_input_tokens": 2500,
+        "cache_read_input_tokens": 9000,
+        "output_tokens": 400
+      }
+    },
+    "t3": {
+      "result": "no citation found",
+      "num_turns": 5,
+      "usage": {
+        "input_tokens": 10,
+        "cache_creation_input_tokens": 3000,
+        "cache_read_input_tokens": 12000,
+        "output_tokens": 500
+      }
+    }
+  },
+  "mcp-only": {
+    "t1": {
+      "result": "knowledge/routing.md",
+      "num_turns": 2,
+      "usage": {
+        "input_tokens": 10,
+        "cache_creation_input_tokens": 3000,
+        "cache_read_input_tokens": 4000,
+        "output_tokens": 200
+      }
+    },
+    "t2": {
+      "result": "Etag, Cache",
+      "num_turns": 2,
+      "usage": {
+        "input_tokens": 10,
+        "cache_creation_input_tokens": 3500,
+        "cache_read_input_tokens": 5000,
+        "output_tokens": 250
+      }
+    },
+    "t3": {
+      "result": "app:src/middleware/cors.ts#L12-L30",
+      "num_turns": 3,
+      "usage": {
+        "input_tokens": 10,
+        "cache_creation_input_tokens": 4000,
+        "cache_read_input_tokens": 6000,
+        "output_tokens": 300
+      }
+    }
+  }
+}

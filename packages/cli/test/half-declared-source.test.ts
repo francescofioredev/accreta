@@ -81,7 +81,7 @@ describe("one delegated source still missing its scope, next to a git source", (
     await git(docs, "commit", "-qam", "second");
 
     expect(await cli("drift")).toBe(1);
-    expect(stdout()).toContain("1 page(s) may have drifted");
+    expect(stdout()).toContain("1 page(s) in doubt");
     expect(stdout()).toContain("sources/design-docs.yaml");
     expect(stdout()).toContain("`scope`");
   });
@@ -166,7 +166,7 @@ describe("two declarations sharing an id, next to a git source", () => {
     await git(docs, "commit", "-qam", "second");
 
     expect(await cli("drift")).toBe(1);
-    expect(stdout()).toContain("1 page(s) may have drifted");
+    expect(stdout()).toContain("1 page(s) in doubt");
     expect(stdout()).toContain(
       "sources/a.yaml — did not load, so 1 page(s) cite it and were not checked",
     );

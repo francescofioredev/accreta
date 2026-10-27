@@ -1,5 +1,5 @@
 import type { Database } from "../index-db/db.ts";
-import { compileCitationTemplate } from "../citations.ts";
+import { compileCitationTemplate, footnoteKey } from "../citations.ts";
 import type { AccretaConfig } from "../config.ts";
 import {
   formatCanonicalSource,
@@ -26,12 +26,16 @@ export const LINT_FINDING_KINDS = [
   "citation-locator-missing",
   "citation-unpinned",
   "citation-revision-unknown",
+  "verified-revision-unknown",
   "duplicate-footnote",
+  "undefined-footnote",
+  "unused-footnote",
   "unreadable-provenance-format",
   "unpinned-provenance-format",
   "unloaded-source",
   "inconsistent-supersession",
   "unreadable-supersession-fields",
+  "shared-alias",
 ] as const;
 
 export type LintFindingKind = (typeof LINT_FINDING_KINDS)[number];
@@ -106,6 +110,20 @@ function unsupportedFields(path: string, frontmatterJson: string): Map<string, L
   return findings;
 }
 
+/** One entry per (page, target), naming every kind it is linked as: a field and the body are one fault, not two. */
+function byTarget<T extends { src_path: string; target: string; kind: string; reason?: string }>(
+  rows: T[],
+): { row: T; kinds: string }[] {
+  const groups = new Map<string, { row: T; kinds: string[] }>();
+  for (const row of rows) {
+    const key = `${row.src_path}\0${row.target}\0${row.reason ?? ""}`;
+    const group = groups.get(key);
+    if (group) group.kinds.push(row.kind);
+    else groups.set(key, { row, kinds: [row.kind] });
+  }
+  return [...groups.values()].map(({ row, kinds }) => ({ row, kinds: kinds.join(", ") }));
+}
+
 /**
  * Report what is wrong with a knowledge base.
  *
@@ -116,6 +134,8 @@ function unsupportedFields(path: string, frontmatterJson: string): Map<string, L
  * short answer. Lint is where that becomes visible.
  */
 export function lint(db: Database, config: AccretaConfig): LintReport {
+  requireTable(db, "aliases");
+  requireTable(db, "footnote_orphans");
   const findings: LintFinding[] = [];
 
   // Links the indexer could not resolve to a path inside the knowledge base.
@@ -124,11 +144,11 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
       `SELECT src_path, target, kind, reason FROM broken_links ORDER BY src_path, target, kind`,
     )
     .all() as BrokenRow[];
-  for (const row of broken) {
+  for (const { row, kinds } of byTarget(broken)) {
     findings.push({
       kind: "broken-link",
       path: row.src_path,
-      detail: `[[${row.target}]] (${row.kind}) does not resolve: ${row.reason}`,
+      detail: `[[${row.target}]] (${kinds}) does not resolve: ${row.reason}`,
     });
   }
 
@@ -144,11 +164,11 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
        ORDER BY l.src_path, l.dst_path, l.kind`,
     )
     .all() as { src_path: string; target: string; kind: string }[];
-  for (const row of dangling) {
+  for (const { row, kinds } of byTarget(dangling)) {
     findings.push({
       kind: "dangling-link",
       path: row.src_path,
-      detail: `${row.target} (${row.kind}) is linked but no such page exists`,
+      detail: `${row.target} (${kinds}) is linked but no such page exists`,
     });
   }
 
@@ -225,7 +245,9 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
     }
   }
 
+  findings.push(...orphanFootnoteFindings(db));
   findings.push(...supersessionFindings(db, config));
+  findings.push(...sharedAliasFindings(db));
 
   return {
     findings,
@@ -236,9 +258,88 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
   };
 }
 
+// ADR-0007 pages cap the number of findings, not their size.
+const MAX_NAMED = 20;
+
+/** Names `findCanonical` resolves to several pages via an alias, compared by stored `nameKey` as it does. */
+function sharedAliasFindings(db: Database): LintFinding[] {
+  const rows = db
+    .prepare(
+      `WITH claims AS (
+         SELECT alias AS key, path, 'alias' AS via FROM aliases
+         UNION
+         SELECT title_key, path, 'title' FROM pages WHERE title_key IN (SELECT alias FROM aliases)
+       )
+       SELECT key, path, via FROM claims
+       WHERE key IN (SELECT key FROM claims GROUP BY key HAVING COUNT(DISTINCT path) > 1)
+       ORDER BY key, path, via`,
+    )
+    .all() as { key: string; path: string; via: string }[];
+  const byKey = new Map<string, Map<string, string[]>>();
+  for (const row of rows) {
+    const pages = byKey.get(row.key) ?? new Map<string, string[]>();
+    pages.set(row.path, [...(pages.get(row.path) ?? []), row.via]);
+    byKey.set(row.key, pages);
+  }
+  return [...byKey].map(([key, pages]) => {
+    const named = [...pages].map(([path, via]) => `${path} (${via.join(", ")})`);
+    const more = named.length > MAX_NAMED ? ` and ${named.length - MAX_NAMED} more` : "";
+    return {
+      kind: "shared-alias",
+      path: [...pages].find(([, via]) => via.includes("alias"))![0],
+      detail: `"${key}" names ${named.length} pages, so canonical has no single answer: ${named.slice(0, MAX_NAMED).join(", ")}${more}`,
+    };
+  });
+}
+
+interface OrphanRow {
+  page_path: string;
+  footnote: string;
+  line: number;
+  role: "reference" | "definition";
+}
+
+// Undefined references first: the claim reads as cited and is not, where an unused definition only clutters.
+function orphanFootnoteFindings(db: Database): LintFinding[] {
+  const rows = db
+    .prepare(
+      `SELECT page_path, footnote, line, role FROM footnote_orphans
+       ORDER BY page_path, line, footnote`,
+    )
+    .all() as OrphanRow[];
+  const undefinedRefs = new Map<string, { path: string; id: string; lines: number[] }>();
+  const unused: LintFinding[] = [];
+  for (const row of rows) {
+    if (row.role === "definition") {
+      unused.push({
+        kind: "unused-footnote",
+        path: row.page_path,
+        detail: `[^${row.footnote}] (line ${row.line}) is defined but no claim on the page leads to it`,
+      });
+      continue;
+    }
+    const key = `${row.page_path}\0${footnoteKey(row.footnote)}`;
+    const group = undefinedRefs.get(key);
+    if (group) group.lines.push(row.line);
+    else undefinedRefs.set(key, { path: row.page_path, id: row.footnote, lines: [row.line] });
+  }
+  const undefinedFindings = [...undefinedRefs.values()].map(({ path, id, lines }) => ({
+    kind: "undefined-footnote" as const,
+    path,
+    detail: `[^${id}] (${lines.length === 1 ? "line" : "lines"} ${lines.join(", ")}) is referenced but defined nowhere on the page, so its claim reads as cited and is not`,
+  }));
+  return [...undefinedFindings, ...unused];
+}
+
 interface CitationRow {
   path: string;
   canonical_source: string;
+}
+
+interface VerifiedRow {
+  path: string;
+  source: string;
+  last_verified_revision: string;
 }
 
 interface FootnoteRow {
@@ -375,10 +476,31 @@ export async function lintCitations(
     return known;
   };
 
+  // Drift reads this field only against the page's own source, so that is the history to ask.
+  const verified = db
+    .prepare(
+      `SELECT path, source, last_verified_revision FROM pages
+       WHERE source IS NOT NULL AND last_verified_revision IS NOT NULL
+       ORDER BY path`,
+    )
+    .all() as VerifiedRow[];
+  for (const page of verified) {
+    const adapter = sources.get(page.source);
+    if (!adapter) continue;
+    checkedPages.add(page.path);
+    if ((await knows(adapter, page.last_verified_revision)) === false) {
+      findings.push({
+        kind: "verified-revision-unknown",
+        path: page.path,
+        detail: `source "${adapter.id}" cannot place last_verified_revision ${page.last_verified_revision} (history rewritten, shallow clone, or a different repository); re-verify against "${adapter.id}" before recording a revision`,
+      });
+    }
+  }
+
   const firstLine = new Map<string, number>();
   for (const row of footnotes) {
     checkedPages.add(row.page_path);
-    const id = `${row.page_path}\0${row.footnote}`;
+    const id = `${row.page_path}\0${footnoteKey(row.footnote)}`;
     const first = firstLine.get(id);
     if (first !== undefined) {
       findings.push({

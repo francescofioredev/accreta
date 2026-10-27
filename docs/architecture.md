@@ -142,20 +142,22 @@ A pointer that *is* present is checked rather than trusted, whether it is `canon
 or a footnote. Footnotes are read back through the knowledge base's own `provenance.format`,
 and indexed with the sentence that cites them. `lint` asks the source, through
 `SourceAdapter.locate`, whether the path and locator exist. Where the source keeps history, it
-also asks whether the cited revision does. All of it is deterministic. What none of it can tell
+also asks whether the cited revision does, and whether the page's own `source` has its
+`last_verified_revision`. All of it is deterministic. What none of it can tell
 is whether a range that exists supports the claim made from it. That needs reading both, and is
 not attempted.
 
 ## The index
 
-Seven tables. `pages` holds frontmatter fields promoted to columns for filtering, plus the
+Eight tables. `pages` holds frontmatter fields promoted to columns for filtering, plus the
 full frontmatter as JSON and the body. `pages_fts` is an FTS5 virtual table over title, aliases
 and body. `aliases(alias, path)` holds each declared alias, and `pages.title_key` each title, both
 passed through one normaliser (trim, lower-case, NFC) in JavaScript, so `find_canonical`
 resolves both by key lookup whichever SQLite build is underneath. `links(src, dst, kind)` is the graph. `broken_links` keeps every link that did not
 resolve, because that is what `lint` reports. `citations` holds one row per footnote, with the
 sentence it cites; a footnote that does not parse as `provenance.format` is kept with no source,
-so `lint` can report it. `meta` holds build metadata.
+so `lint` can report it. `footnote_orphans` holds each footnote reference nothing defines and
+each definition no claim leads to. `meta` holds build metadata.
 
 Rebuilds are wholesale rather than incremental: a full delete-and-reinsert inside one
 transaction. At this corpus size delta tracking would add failure modes to save milliseconds.

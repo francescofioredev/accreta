@@ -1,0 +1,82 @@
+// The same tasks through a CLI-only and an MCP-only agent: success and tokens.
+// bun bench/eval/surfaces.ts --tasks t.json --arms arms.json [--a cli-only --b mcp-only] (--canned c.json | --live) [--out <dir>]
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { parseArgs } from "node:util";
+import { dryAgent, liveAgent, readArms, runArms, type Canned } from "./lib/agent.ts";
+import { sha256 } from "./lib/answers.ts";
+import {
+  scoreSurfaces,
+  TASKS_REQUIRED,
+  validateTasks,
+  type SurfacesScore,
+} from "./lib/surfaces.ts";
+
+const readJson = <T>(path: string) => JSON.parse(readFileSync(path, "utf-8")) as T;
+
+export async function runSurfaces(opts: {
+  tasks: string;
+  arms: string;
+  a: string;
+  b: string;
+  canned?: string;
+  live?: boolean;
+  /** Live runs only: the pre-registered hash the tasks file must match. */
+  tasksSha256?: string;
+  out?: string;
+}): Promise<SurfacesScore> {
+  const bytes = readFileSync(opts.tasks);
+  if (opts.live && sha256(bytes) !== opts.tasksSha256) {
+    throw new Error("the tasks file's SHA-256 is not the pre-registered --tasks-sha256");
+  }
+  const tasks = validateTasks(JSON.parse(bytes.toString("utf-8")));
+  if (opts.live && tasks.length !== TASKS_REQUIRED) {
+    throw new Error(
+      `a live run needs the ${TASKS_REQUIRED} registered tasks, found ${tasks.length}`,
+    );
+  }
+  const all = readArms(opts.arms);
+  const arms = [opts.a, opts.b].map((id) => {
+    const arm = all.find((x) => x.id === id);
+    if (!arm) throw new Error(`no arm "${id}" in ${opts.arms}`);
+    return arm;
+  });
+  if (!opts.live && !opts.canned) throw new Error("pass --canned <file> for a dry run, or --live");
+  const agent = opts.live ? liveAgent : dryAgent(readJson<Canned>(opts.canned!));
+  const sessions = await runArms(agent, arms, tasks);
+  const score = scoreSurfaces(tasks, sessions, [opts.a, opts.b]);
+  if (opts.out) {
+    mkdirSync(opts.out, { recursive: true });
+    writeFileSync(join(opts.out, "sessions.json"), JSON.stringify({ arms, sessions }, null, 2));
+    writeFileSync(join(opts.out, "score.json"), JSON.stringify(score, null, 2));
+  }
+  return score;
+}
+
+if (import.meta.main) {
+  const { values: v } = parseArgs({
+    options: {
+      tasks: { type: "string" },
+      arms: { type: "string" },
+      a: { type: "string", default: "cli-only" },
+      b: { type: "string", default: "mcp-only" },
+      canned: { type: "string" },
+      live: { type: "boolean", default: false },
+      "tasks-sha256": { type: "string" },
+      out: { type: "string" },
+    },
+  });
+  if (!v.tasks || !v.arms) {
+    console.error("usage: surfaces.ts --tasks t.json --arms arms.json (--canned c.json | --live)");
+    process.exit(2);
+  }
+  const score = await runSurfaces({
+    ...v,
+    tasks: v.tasks,
+    arms: v.arms,
+    a: v.a!,
+    b: v.b!,
+    tasksSha256: v["tasks-sha256"],
+  });
+  console.log(JSON.stringify(score, null, 2));
+}

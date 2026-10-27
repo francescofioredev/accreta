@@ -1,0 +1,36 @@
+[
+  {
+    "id": "with-kb",
+    "model": "claude-opus-5-5",
+    "cwd": "kb",
+    "tools": [],
+    "mcpConfig": "mcp.json",
+    "allowedTools": ["mcp__accreta__*"],
+    "budgetUsd": 1
+  },
+  { "id": "closed-book", "model": "claude-opus-5-5", "cwd": ".", "tools": [], "budgetUsd": 1 },
+  {
+    "id": "repo-tools",
+    "model": "claude-opus-5-5",
+    "cwd": "repo",
+    "tools": ["Read", "Glob", "Grep"],
+    "budgetUsd": 1
+  },
+  {
+    "id": "cli-only",
+    "model": "claude-opus-5-5",
+    "cwd": "kb",
+    "tools": ["Bash"],
+    "allowedTools": ["Bash(accreta:*)"],
+    "budgetUsd": 1
+  },
+  {
+    "id": "mcp-only",
+    "model": "claude-opus-5-5",
+    "cwd": "kb",
+    "tools": [],
+    "mcpConfig": "mcp.json",
+    "allowedTools": ["mcp__accreta__*"],
+    "budgetUsd": 1
+  }
+]
