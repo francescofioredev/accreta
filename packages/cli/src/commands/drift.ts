@@ -300,7 +300,7 @@ export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport)
     ctx.out("    a shallow clone or rewritten history does this: fetch the full history,");
     ctx.out("    or re-verify these pages from scratch. So does a ref such as HEAD where a");
     ctx.out(
-      "    commit belongs, which `accreta lint` names: re-cite a cited page, re-verify a verified one",
+      "    revision belongs, which `accreta lint` names: re-cite a cited page, re-verify a verified one",
     );
   }
   printUnverifiable(ctx, report);

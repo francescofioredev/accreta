@@ -64,7 +64,7 @@ different source, and — for `fs` — a revision whose saved listing is missing
 damaged, since a hash cannot be inverted.
 
 A name that moves is not a revision either. `git` diffs only from the commit `resolveRevision`
-names, so `HEAD` throws instead of comparing HEAD with itself, and a branch called like a
+names, so `HEAD` throws instead of comparing HEAD with itself, and a branch named like a
 commit's prefix does not stand in for that commit, as it would if git were asked directly.
 
 **A revision must be placeable by a new instance of the adapter.** Every CLI run is a new

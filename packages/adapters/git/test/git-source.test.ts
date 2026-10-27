@@ -1746,7 +1746,7 @@ describe("GitSource spawn hardening", () => {
   });
 
   test.skipIf(!gitAtLeast(2, 44))(
-    "knowsRevision never fetches a revision from a promisor remote",
+    "knowsRevision and resolveRevision never fetch a revision from a promisor remote",
     async () => {
       const server = join(outside, "server");
       const client = join(outside, "client");
@@ -1773,6 +1773,9 @@ describe("GitSource spawn hardening", () => {
 
       const git = new GitSource({ id: "c", root: client, citationFormat: "x" });
       expect(await git.knowsRevision(later)).toBe(false);
+      // Drift asks through resolveRevision, which must keep the same guard.
+      expect(await git.resolveRevision(later)).toEqual({ status: "unknown" });
+      await expect(git.changedSince(later)).rejects.toThrow(UnknownRevisionError);
       const local = Bun.spawnSync(["git", "cat-file", "-e", later], {
         cwd: client,
         env: { ...process.env, GIT_NO_LAZY_FETCH: "1" },

@@ -488,7 +488,7 @@ export async function listRecentChangesTool(
       source: adapter.id,
       unresolvable: true as const,
       message: ref
-        ? `${input.since} names a ref of source "${adapter.id}", not a revision: a ref moves with the source. Pass the revision \`cite\` or \`check_drift\` gave.`
+        ? `"${input.since}" names a ref of source "${adapter.id}", not a revision: a ref moves with the source. Pass the revision \`cite\` or \`check_drift\` gave.`
         : error instanceof Error
           ? error.message
           : String(error),

@@ -336,7 +336,7 @@ describe("source-backed tools", () => {
     ctx.sources.set("repo", asGit);
     const ref = await listRecentChangesTool(ctx, { source: "repo", since: "HEAD~5" });
     expect(ref).toMatchObject({ unresolvable: true, changed: [] });
-    expect(ref.message).toContain('HEAD~5 names a ref of source "repo", not a revision');
+    expect(ref.message).toContain('"HEAD~5" names a ref of source "repo", not a revision');
     expect(ref.message).toContain("`cite` or `check_drift`");
     const gone = await listRecentChangesTool(ctx, { source: "repo", since: "0".repeat(40) });
     expect(gone.message).toContain("cannot resolve revision");
