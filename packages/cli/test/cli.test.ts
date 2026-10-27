@@ -180,6 +180,19 @@ describe("accreta search", () => {
     expect(stdout()).not.toContain("knowledge/a.md");
   });
 
+  test("--json reports an alias matched on a word FTS5 would read as an operator", async () => {
+    writePage("c.md", '---\ntype: note\naliases: ["OR gate", "NOT NULL"]\n---\n\n# Logic\n');
+    await cli("reindex");
+    const aliasesFor = async (query: string) => {
+      output = [];
+      await cli("search", query, "--json");
+      const hits: { path: string; matched_aliases?: string[] }[] = JSON.parse(stdout()).results;
+      return hits.find((h) => h.path === "knowledge/c.md")?.matched_aliases;
+    };
+    expect(await aliasesFor("OR")).toEqual(["OR gate"]);
+    expect(await aliasesFor("NOT")).toEqual(["NOT NULL"]);
+  });
+
   test("a --limit the MCP tool would refuse is refused here", async () => {
     expect(await cli("search", "tropopause", "--limit", "51")).toBe(2);
     expect(stderr()).toContain("--limit");
@@ -1001,12 +1014,14 @@ describe("accreta drift --base", () => {
     expect(first).toBeGreaterThan(already);
   });
 
-  test("an edit to an uncited line alone puts no page newly in doubt, though drift exits 1", async () => {
+  test("an edit to an uncited line alone puts no page newly in doubt, so only --base passes", async () => {
     const { edit, baseReport } = await repo();
     await baseReport();
     await edit("b.md", { 15: "uncited" });
 
-    expect(await cli("drift", "--json", "--base", "base.json")).toBe(1);
+    expect(await cli("drift")).toBe(1);
+    output = [];
+    expect(await cli("drift", "--json", "--base", "base.json")).toBe(0);
     const report = JSON.parse(stdout());
     expect(report.pages_newly_in_doubt).toBe(0);
     expect(report.sources[0].in_doubt).toEqual([]);

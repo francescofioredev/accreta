@@ -1,5 +1,12 @@
 import { getPage, searchPages, type SearchHit } from "@accreta/core";
-import { parseLimit, printJson, provenance, withIndex, type CommandContext } from "./shared.ts";
+import {
+  parseLimit,
+  printable,
+  printJson,
+  provenance,
+  withIndex,
+  type CommandContext,
+} from "./shared.ts";
 
 // search_pages refuses a limit above this rather than letting the core clamp it silently.
 const MAX_LIMIT = 50;
@@ -49,9 +56,9 @@ export function search(ctx: CommandContext, query: string, options: SearchOption
       return 0;
     }
     for (const hit of hits) {
-      ctx.out(`${hit.path}  [${hit.type}]`);
-      ctx.out(`  ${hit.title}`);
-      ctx.out(`  ${hit.snippet.replace(/\s+/g, " ").trim()}`);
+      ctx.out(`${printable(hit.path)}  [${printable(hit.type)}]`);
+      ctx.out(`  ${printable(hit.title)}`);
+      ctx.out(`  ${printable(hit.snippet.replace(/\s+/g, " ").trim())}`);
     }
     ctx.out(`\n${hits.length} result(s).`);
     return 0;
@@ -85,7 +92,7 @@ function matchedAliasesOf(query: string, frontmatter: Record<string, unknown>): 
     .toLowerCase()
     .replace(/["*()]/g, " ")
     .split(/\s+/)
-    .filter((term) => term.length > 0 && !["and", "or", "not", "near"].includes(term));
+    .filter((term) => term.length > 0);
 
   return aliases.filter((alias) => {
     const text = alias.toLowerCase();

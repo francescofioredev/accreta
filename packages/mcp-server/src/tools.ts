@@ -24,7 +24,12 @@ import {
   type SourceAdapter,
   type UnresolvableRevision,
 } from "@accreta/core";
-import { countUnchecked, unloadedFindings, type UnloadedSource } from "@accreta/adapters";
+import {
+  countUnchecked,
+  noSourceNamed,
+  unloadedFindings,
+  type UnloadedSource,
+} from "@accreta/adapters";
 import type { GetPageOutput, HitOutput, PageOutput, SearchPagesOutput } from "./schemas.ts";
 
 /** A handle a call holds across awaits; it stays open until `release`, even past a rebuild. */
@@ -187,7 +192,7 @@ function matchedAliasesOf(query: string, frontmatter: Record<string, unknown>): 
     .toLowerCase()
     .replace(/["*()]/g, " ")
     .split(/\s+/)
-    .filter((term) => term.length > 0 && !["and", "or", "not", "near"].includes(term));
+    .filter((term) => term.length > 0);
 
   return aliases.filter((alias) => {
     const text = alias.toLowerCase();
@@ -200,7 +205,8 @@ export function searchPagesTool(
   input: { query: string; types?: string[]; source?: string; limit?: number },
 ): SearchPagesOutput {
   const db = ctx.db;
-  const hits = searchPages(db, input);
+  const { query, types, source, limit } = input;
+  const hits = searchPages(db, { query, types, source, limit });
   const results = hits.map((hit) => {
     const page = getPage(db, hit.path, ctx.config);
     return hitOut(hit, page ? matchedAliasesOf(input.query, page.frontmatter) : []);
@@ -268,6 +274,9 @@ const DRIFT_FIELDS = [
   "reports[].stale[].citations[].footnote",
   "reports[].stale[].citations[].path",
   "reports[].stale[].citations[].locator",
+  // locate's reason names the cited path back; the per-page record is also keyed by page path.
+  "reports[].stale[].citations[].refused",
+  "reports[].stale[].refused",
   "reports[].unverifiable",
   "reports[].unpinned[].page",
   "reports[].unpinned[].footnote",
@@ -348,7 +357,7 @@ async function checkDrift(ctx: ToolContext, db: Database, input: { source?: stri
   if (adapters.length === 0) {
     return {
       message: input.source
-        ? `No source named "${input.source}". Known: ${[...ctx.sources.keys()].join(", ") || "none"}.`
+        ? noSourceNamed(input.source, [...ctx.sources.keys()], ctx.unloadedSources)
         : unloaded_sources.length > 0
           ? "No declared source loaded; see unloaded_sources."
           : "No sources are declared.",
@@ -377,6 +386,7 @@ async function checkDrift(ctx: ToolContext, db: Database, input: { source?: stri
             pages: entry.pages,
             cited_only: entry.citedOnly,
             cited_paths: entry.citedPaths,
+            refused: entry.refused,
           };
         }
         const byChange = (change: PageChange) => entry.pages.filter((p) => doubt.get(p) === change);
@@ -403,6 +413,7 @@ async function checkDrift(ctx: ToolContext, db: Database, input: { source?: stri
               locator: c.locator,
               status: c.change.status,
               ...(c.change.status === "moved" ? { now: c.change.locator } : {}),
+              ...(c.refused === undefined ? {} : { refused: c.refused }),
             })),
           citations_untouched: cited.filter((c) => c.change.status === "untouched").length,
         };

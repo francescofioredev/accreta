@@ -38,8 +38,10 @@ function hasFts5(db: Database): boolean {
   try {
     db.prepare("SELECT fts5(NULL)").get();
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    // Any other failure is the file's, such as a read-only open of a WAL index with no `-shm`.
+    if (error instanceof Error && error.message.includes("no such function: fts5")) return false;
+    throw error;
   }
 }
 
@@ -61,21 +63,27 @@ export function openIndex(path: string, opts: OpenOptions = {}): Database {
 
   // node:sqlite silently ignores Bun's old spelling, `readonly`, and leaves the reader writable.
   const db = new DatabaseSync(path, { readOnly: opts.readonly === true });
-  if (!hasFts5(db)) {
+  try {
+    if (!hasFts5(db)) throw new UnsupportedRuntimeError();
+
+    // Only writers set WAL. A read-only connection cannot create the `-shm` file a
+    // WAL database needs, so asking for WAL here is what turns a perfectly good
+    // index into "unable to open database file".
+    if (!opts.readonly) {
+      db.exec("PRAGMA journal_mode = WAL");
+      db.exec(readFileSync(SCHEMA_PATH, "utf-8"));
+    }
+
+    db.exec("PRAGMA foreign_keys = ON");
+    return db;
+  } catch (error) {
     db.close();
-    throw new UnsupportedRuntimeError();
+    if (!opts.readonly || error instanceof UnsupportedRuntimeError) throw error;
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Cannot read the index (${reason}); run \`accreta reindex\`.`, {
+      cause: error,
+    });
   }
-
-  // Only writers set WAL. A read-only connection cannot create the `-shm` file a
-  // WAL database needs, so asking for WAL here is what turns a perfectly good
-  // index into "unable to open database file".
-  if (!opts.readonly) {
-    db.exec("PRAGMA journal_mode = WAL");
-    db.exec(readFileSync(SCHEMA_PATH, "utf-8"));
-  }
-
-  db.exec("PRAGMA foreign_keys = ON");
-  return db;
 }
 
 /**

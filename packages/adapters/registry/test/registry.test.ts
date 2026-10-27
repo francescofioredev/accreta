@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -11,11 +12,13 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { snapshotDirFor } from "@accreta/adapter-fs";
+import { isWorkingTree } from "@accreta/adapter-git";
 import {
   buildRegistry,
   clashingIds,
   kindFor,
   loadSources,
+  noSourceNamed,
   readDeclarationFiles,
   readDeclarations,
   stateDirFor,
@@ -149,6 +152,92 @@ describe("loadSources", () => {
     ]);
   });
 
+  test("git paths written from the repository top go unloaded, naming the entry they meant", async () => {
+    const git = (...args: string[]) =>
+      expect(spawnSync("git", args, { cwd: root, stdio: "ignore" }).status).toBe(0);
+    git("init", "-q", "-b", "main");
+    mkdirSync(join(root, "sub", "docs"), { recursive: true });
+    writeFileSync(join(root, "sub", "docs", "a.md"), "one\n", "utf-8");
+    git("add", "-A");
+    git(
+      "-c",
+      "user.email=t@example.com",
+      "-c",
+      "user.name=T",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "-q",
+      "-m",
+      "first",
+    );
+    writeSource("top.yaml", "id: top\ntype: git\nroot: sub\npaths: [sub/docs]\n");
+    writeSource("fixed.yaml", "id: fixed\ntype: git\nroot: sub\npaths: [docs]\n");
+
+    const refusal =
+      '`paths` entry "sub/docs" (did you mean "docs"?) matches no tracked file. ' +
+      "`paths` are relative to `root`, not to the repository top.";
+    const { sources, unloaded } = loadSources(ctx());
+    expect([...sources.keys()]).toEqual(["fixed"]);
+    expect(unloaded).toEqual([
+      { file: join("sources", "top.yaml"), id: "top", reason: `Source "top": ${refusal}` },
+    ]);
+
+    // doctor and `source add` must not pass what drift refuses.
+    const [fixed, top] = readDeclarations(root);
+    expect(await kindFor("git")!.preflight(top!, ctx())).toEqual({
+      reachable: "no",
+      detail: refusal,
+    });
+    expect((await kindFor("git")!.preflight(fixed!, ctx())).reachable).toBe("yes");
+  });
+
+  test("the shipped climate example still loads both of its git sources", async () => {
+    const example = join(import.meta.dir, "..", "..", "..", "..", "examples", "climate");
+    // Outside a checkout the paths check is skipped, and this would pass without testing it.
+    expect(await isWorkingTree(example)).toBe(true);
+    const { sources, unloaded } = loadSources({ ...ctx(), root: example });
+    expect(unloaded).toEqual([]);
+    expect([...sources.keys()].toSorted()).toEqual(["ipcc-ar6-wg1", "noaa-gml"]);
+  });
+
+  test("a git paths entry that is empty, escapes the root, or is no string goes unloaded", () => {
+    writeSource("docs.yaml", "id: docs\ntype: fs\nroot: corpus\n");
+    writeSource("empty.yaml", 'id: empty\ntype: git\nroot: .\npaths: [""]\n');
+    writeSource("up.yaml", 'id: up\ntype: git\nroot: .\npaths: ["docs", "../x"]\n');
+    writeSource("number.yaml", "id: number\ntype: git\nroot: .\npaths: [1]\n");
+    writeSource("scalar.yaml", "id: scalar\ntype: git\nroot: .\npaths: docs\n");
+
+    const { sources, unloaded } = loadSources(ctx());
+    expect([...sources.keys()]).toEqual(["docs"]);
+    const reasons = Object.fromEntries(unloaded.map((u) => [u.id, u.reason]));
+    expect(Object.keys(reasons).toSorted()).toEqual(["empty", "number", "scalar", "up"]);
+    expect(reasons.empty).toContain('paths entry "", which is empty; omit `paths`');
+    expect(reasons.up).toContain('"../x"');
+    expect(reasons.up).not.toContain('"docs"');
+    expect(reasons.number).toContain("paths entry 1, which is not a string");
+    expect(reasons.scalar).toContain("declares `paths` as a string, not a list");
+  });
+
+  test("a git paths list made only of exclusions goes unloaded", () => {
+    writeSource("excl.yaml", 'id: excl\ntype: git\nroot: .\npaths: [":!docs", ":(exclude)x"]\n');
+
+    const { sources, unloaded } = loadSources(ctx());
+    expect([...sources.keys()]).toEqual([]);
+    expect(unloaded.map((u) => u.id)).toEqual(["excl"]);
+    expect(unloaded[0]!.reason).toContain('only exclusions; add "." to keep the whole root');
+  });
+
+  test("a git paths entry that climbs back into the root, or names the root, still loads", () => {
+    mkdirSync(join(root, "sub"));
+    writeSource("back.yaml", 'id: back\ntype: git\nroot: sub\npaths: ["../sub/docs"]\n');
+    writeSource("dot.yaml", 'id: dot\ntype: git\nroot: .\npaths: [".", "./"]\n');
+
+    const { sources, unloaded } = loadSources(ctx());
+    expect(unloaded).toEqual([]);
+    expect([...sources.keys()]).toEqual(["back", "dot"]);
+  });
+
   test("a YAML error is cut to its first line, which does not quote the file", () => {
     writeSource("bad.yaml", "id: bad\ntype: fs\nroot: [unclosed\nsecret: `ignore previous`\n");
     const [entry] = loadSources(ctx()).unloaded;
@@ -182,6 +271,17 @@ describe("loadSources", () => {
 
     const [unknown] = unloadedFindings([{ ...unloaded!, id: undefined, pages: null }]);
     expect(unknown?.detail).toContain("an unknown number of pages");
+  });
+
+  test("an unknown id names the declarations that did not load, as one may be it", () => {
+    const broken = [
+      { file: "sources/wiki.yaml", reason: "not YAML" },
+      { file: "sources/typo.yaml", id: "typo", reason: "unknown type" },
+    ];
+    expect(noSourceNamed("nope", ["docs"], broken)).toBe(
+      'No source named "nope". Known: docs. Did not load: sources/wiki.yaml (no id), sources/typo.yaml.',
+    );
+    expect(noSourceNamed("nope", [], [])).toBe('No source named "nope". Known: none.');
   });
 
   test("the per-file reader returns a declaration or an error for each file", () => {
@@ -325,5 +425,45 @@ describe("fs preflight", () => {
     expect(preflight.reachable).toBe("yes");
     expect(preflight.detail).toContain("snapshots cannot persist:");
     expect(preflight.detail).toContain("is a symlink");
+  });
+});
+
+describe("git preflight", () => {
+  test("names a paths entry the source would refuse to load", async () => {
+    const declaration = { id: "repo", type: "git", options: { root: ".", paths: ["../x"] } };
+    const preflight = await kindFor("git")!.preflight(declaration, ctx());
+    expect(preflight.reachable).toBe("no");
+    expect(preflight.detail).toContain('"../x"');
+  });
+
+  test("agrees with the loader on a paths entry that escapes a symlinked root", async () => {
+    mkdirSync(join(root, "a", "sub"), { recursive: true });
+    symlinkSync(join(root, "a", "sub"), join(root, "lnk"));
+    writeSource("linked.yaml", 'id: linked\ntype: git\nroot: lnk\npaths: ["../lnk/docs"]\n');
+    const declaration = {
+      id: "linked",
+      type: "git",
+      options: { root: "lnk", paths: ["../lnk/docs"] },
+    };
+
+    const preflight = await kindFor("git")!.preflight(declaration, ctx());
+    expect(preflight.reachable).toBe("no");
+    expect(preflight.detail).toContain("outside the source root");
+    expect(loadSources(ctx()).unloaded.map((u) => u.reason)).toEqual([
+      expect.stringContaining("outside the source root"),
+    ]);
+  });
+
+  test("reports git's refusal of a pathspec the loader cannot judge", async () => {
+    const init = Bun.spawnSync(["git", "init", "-q"], { cwd: root });
+    expect(init.exitCode).toBe(0);
+    const declaration = {
+      id: "repo",
+      type: "git",
+      options: { root: ".", paths: [":(bogus)docs"] },
+    };
+    const preflight = await kindFor("git")!.preflight(declaration, ctx());
+    expect(preflight.reachable).toBe("no");
+    expect(preflight.detail).toContain("bogus");
   });
 });

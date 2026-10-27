@@ -40,6 +40,19 @@ citation says where the claim came from but not *when*, and drift detection has 
 compare against. A page with citations that omit revisions is a page that can never be
 checked.
 
+**A citation covers its whole sentence.** Every fact in a cited sentence — a name, a value, a
+sequence, a condition, a cause — must be in the cited lines, in your words or theirs. Split off
+any that is not and give it its own footnote from `cite`, or drop it; never widen a range to
+cover it. Mark an inference as yours ("this suggests") and cite the lines it rests on; it never
+settles a disagreement (rule 3).
+
+```markdown
+Before: The assessed likely range is 2.5 to 4.0 degrees Celsius, narrowed by paleoclimate evidence.[^ecs]
+After:  The assessed likely range is 2.5 to 4.0 degrees Celsius.[^ecs] Paleoclimate evidence narrowed it.[^paleo]
+```
+
+`[^ecs]`'s lines give the range, not why it narrowed.
+
 ### 2. Never duplicate a source into the knowledge base
 
 Cite it. A page that reproduces three paragraphs of a source has created a second copy that
@@ -100,6 +113,15 @@ Two fields do most of the work:
 - **`canonical_source`** makes "what is the authoritative definition of X" answerable.
 - **`last_verified_revision`** makes drift detectable. A page without it renders fine and
   cannot be checked — `accreta lint` will tell you so.
+
+**A page drawn from two sources still names one.** `source` and `last_verified_revision` each
+hold a single value: the source the page is mainly about, and the revision of it you verified.
+Cite every other source in footnotes; drift checks the pinned ones (`{rev}`). A list in either
+field is not supported, and lint reports it.
+
+**A contradiction page has no main source.** Either side may be named in `source`; the choice
+carries no authority and does not make that side the winner. Give both sides a pinned footnote,
+since only pinned footnotes are drift-checked.
 
 **`aliases` are not decoration.** They are how a reader who knows a concept by another name
 finds it, and search consults them alongside the title and the body. A page that declares
@@ -191,6 +213,9 @@ With a shell, use the CLI. Without one, the MCP tool beside it does the same.
 5. **Record the revision of the page's own `source`** in `last_verified_revision`. On a page
    you extended, only if you re-verified the whole page against it.
 6. **`accreta reindex`**, then **`accreta lint`**. Fix what it reports.
+7. **Before you stop, re-open the source lines cited by each footnote you added, re-pinned, or
+   whose sentence you changed — only those.** Lint checks that they exist, not what they say. Fix
+   any part they do not show as rule 1 says; if you changed anything, run step 6 again.
 
 A citation `cite` cannot pin comes back with `unknown` where the revision belongs, and lint
 reports it as `citation-unpinned`. Paste it as returned: never write a revision into it. For an
@@ -232,7 +257,7 @@ re-reading converts a detectable problem into an undetectable one, and is the si
 damaging thing you can do here.
 
 The loop is **drift → re-verify → cite → lint**: for each page drift names, re-read the changed
-parts, then follow Ingesting 4–6 with `--expect-revision` set to drift's revision for that source
+parts, then follow Ingesting 4–7 with `--expect-revision` set to drift's revision for that source
 (`source @ rev`; `current_revision` in JSON). If that fails, the source moved again: rerun drift.
 Repeat until drift exits 0.
 
@@ -266,16 +291,25 @@ an interruption to work around.
 - **dangling links** — a link to a page that does not exist
 - **unknown page types** — a `type` outside the configured vocabulary
 - **missing provenance** — no `canonical_source`
-- **unverified pages** — no `last_verified_revision`
+- **unverified pages** — no `last_verified_revision`, or one the page's own `source` cannot
+  place (history rewritten, a shallow clone, or a commit from another repository)
+- **unsupported field values** — a list in `source` or `last_verified_revision`
 - **citations that point at nothing** — a `canonical_source` or footnote naming a path the
   source does not have, or a locator the source cannot place
 - **citations that name no revision, or one the source never had** — `unknown` where a
   revision belongs, or a commit that is not in the history
 - **abbreviated revisions** — a footnote naming a short revision; lint gives the full one to write
 - **footnotes that do not read as the configured format**, and footnote ids defined twice
+- **footnotes that do not pair up** — a reference with no definition, whose claim reads as cited
+  and is not, or a definition no claim on the page leads to. Fix `undefined-footnote` by citing
+  what you read with `accreta cite`, or by removing the marker; never write a definition to clear it.
 - **inconsistent supersession** — pages that supersede one another in a loop, or a replacement
   only one of its two pages records. Resolve it by checking the source; never add the missing
   half just to clear the finding.
+- **shared aliases** — a name that two or more pages claim, as an alias or as one page's alias
+  and another's title, so `canonical` has no single answer for it. Keep the alias on the page
+  that defines the concept; if two pages really do, that is a contradiction to record. The finding
+  names at most 20 pages; run `canonical <name>` for the full list.
 
 It also prints how many citations it could not check, grouped by why. That is not a finding:
 nobody looked. The reason may be a source accreta cannot reach, a git file with uncommitted

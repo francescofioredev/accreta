@@ -375,3 +375,142 @@ describe("detectDrift at line granularity", () => {
     expect(source.asked).toEqual([]);
   });
 });
+
+/** A line-aware source whose `locate` answers from a script, keyed by `path` or `path#locator`. */
+class RefusingSource extends LineAwareSource {
+  readonly located: string[] = [];
+  /** How many places had been asked when each answer arrived. */
+  readonly askedByAnswer: number[] = [];
+
+  constructor(
+    changes: Record<string, string[] | "unknown">,
+    lines: Record<string, Record<string, LocatorChange> | "unknown">,
+    private readonly verdicts: Record<string, LocationVerdict>,
+  ) {
+    super("docs", "rev2", changes, lines);
+  }
+
+  override async locate(path = "", locator?: string): Promise<LocationVerdict> {
+    const place = locator ? `${path}#${locator}` : path;
+    this.located.push(place);
+    await Promise.resolve();
+    this.askedByAnswer.push(this.located.length);
+    return this.verdicts[place] ?? this.verdicts[path] ?? { verdict: "found" };
+  }
+}
+
+const SYMLINK: LocationVerdict = {
+  verdict: "missing",
+  part: "path",
+  detail: 'link.md is reached through a symlink in source "docs": cite "real.md" instead',
+};
+
+describe("detectDrift and a citation locate refuses (#303)", () => {
+  test("a symlink whose target changed is in doubt, not uncited", async () => {
+    addPage("knowledge/a.md", "docs", "rev1");
+    addFootnote("knowledge/a.md", "x", "rev1", "link.md", "L5-L8");
+    const source = new RefusingSource({ rev1: ["real.md"] }, {}, { "link.md": SYMLINK });
+
+    const [entry] = (await detectDrift(db, source)).stale;
+
+    expect(pageChanges(entry!)?.get("knowledge/a.md")).toBe("changed");
+    expect(entry?.citations).toEqual([
+      {
+        page: "knowledge/a.md",
+        footnote: "x",
+        path: "link.md",
+        locator: "L5-L8",
+        revision: "rev1",
+        change: { status: "unknown" },
+        refused: SYMLINK.detail,
+      },
+    ]);
+  });
+
+  test("a refused citation keeps its place among the page's footnotes", async () => {
+    addPage("knowledge/a.md", "docs", "rev1");
+    addFootnote("knowledge/a.md", "x", "rev1", "link.md", "L5-L8");
+    addFootnote("knowledge/a.md", "yy", "rev1", "real.md", "L1");
+    const source = new RefusingSource(
+      { rev1: ["real.md"] },
+      { "rev1 real.md": { L1: { status: "touched" } } },
+      { "link.md": SYMLINK },
+    );
+    const [entry] = (await detectDrift(db, source)).stale;
+    expect(entry?.citations?.map((c) => c.footnote)).toEqual(["x", "yy"]);
+  });
+
+  test("a range the diff leaves in place is in doubt when the source refuses it", async () => {
+    addPage("knowledge/a.md", "docs", "rev1");
+    addFootnote("knowledge/a.md", "x", "rev1", "link.md", "L5-L8");
+    const source = new RefusingSource(
+      { rev1: ["link.md"] },
+      { "rev1 link.md": {} },
+      { "link.md": SYMLINK },
+    );
+    const [entry] = (await detectDrift(db, source)).stale;
+    expect(entry?.citations?.map((c) => c.change.status)).toEqual(["unknown"]);
+    expect(pageChanges(entry!)?.get("knowledge/a.md")).toBe("changed");
+  });
+
+  test("a moved range is located where it moved to", async () => {
+    addPage("knowledge/a.md", "docs", "rev1");
+    addFootnote("knowledge/a.md", "x", "rev1", "ch.md", "L5");
+    const source = new RefusingSource(
+      { rev1: ["ch.md"] },
+      { "rev1 ch.md": { L5: { status: "moved", locator: "L7" } } },
+      {},
+    );
+    const [entry] = (await detectDrift(db, source)).stale;
+    expect(source.located).toEqual(["ch.md#L7"]);
+    expect(pageChanges(entry!)?.get("knowledge/a.md")).toBe("moved");
+  });
+
+  test("a place the source finds, or cannot check, keeps its rank", async () => {
+    for (const page of ["a", "b", "c"]) addPage(`knowledge/${page}.md`, "docs", "rev1");
+    addFootnote("knowledge/a.md", "x", "rev1", "ch.md", "L1");
+    addFootnote("knowledge/b.md", "y", "rev1", "other.md", "L1");
+    addFootnote("knowledge/c.md", "z", "rev1", "remote.md", "L1");
+    const source = new RefusingSource(
+      { rev1: ["ch.md"] },
+      { "rev1 ch.md": {} },
+      { "remote.md": { verdict: "unknown", detail: "the network is down" } },
+    );
+    const [entry] = (await detectDrift(db, source)).stale;
+    expect(Object.fromEntries(pageChanges(entry!)!)).toEqual({
+      "knowledge/a.md": "untouched",
+      "knowledge/b.md": "uncited",
+      "knowledge/c.md": "uncited",
+    });
+    expect(entry?.citations?.map((c) => c.path)).toEqual(["ch.md"]);
+  });
+
+  test("a missing locator is refused like a missing path", async () => {
+    addPage("knowledge/a.md", "docs", "rev1");
+    addFootnote("knowledge/a.md", "x", "rev1", "other.md", "L90");
+    const missing: LocationVerdict = {
+      verdict: "missing",
+      part: "locator",
+      detail: "cites L90-L90 but other.md has 12 line(s)",
+    };
+    const source = new RefusingSource({ rev1: ["ch.md"] }, {}, { "other.md#L90": missing });
+    const [entry] = (await detectDrift(db, source)).stale;
+    expect(entry?.citations?.map((c) => c.refused)).toEqual([missing.detail]);
+  });
+
+  test("each place is asked once, all before any answer, and only for stale pages", async () => {
+    for (const page of ["a", "b"]) addPage(`knowledge/${page}.md`, "docs", "rev1");
+    addPage("knowledge/current.md", "docs", "rev2");
+    addFootnote("knowledge/a.md", "x", "rev1", "one.md", "L1");
+    addFootnote("knowledge/b.md", "y", "rev1", "one.md", "L1");
+    addFootnote("knowledge/b.md", "zz", "rev1", "two.md", "L1");
+    addFootnote("knowledge/current.md", "w", "rev2", "three.md", "L1");
+    const source = new RefusingSource({ rev1: ["ch.md"] }, {}, {});
+
+    await detectDrift(db, source);
+
+    expect(source.located.toSorted()).toEqual(["one.md#L1", "two.md#L1"]);
+    // A source that batches its lookups, as git batches `git status`, answers them in one pass.
+    expect(source.askedByAnswer).toEqual([2, 2]);
+  });
+});

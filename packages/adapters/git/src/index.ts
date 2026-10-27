@@ -1,7 +1,8 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { constants } from "node:os";
-import { relative, resolve, sep } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import {
   countLines,
   formatCitation,
@@ -28,12 +29,17 @@ export interface GitSourceOptions {
   paths?: readonly string[];
 }
 
-/** Run a git command in the repository, returning stdout. */
-function git(root: string, args: string[]): Promise<string> {
+function gitEnv(): NodeJS.ProcessEnv {
   // accreta only reads; without this `status` rewrites .git/index and a user's commit can hit index.lock.
   const env: NodeJS.ProcessEnv = { ...process.env, GIT_OPTIONAL_LOCKS: "0" };
   // GIT_DIFF_OPTS would override the -U0 that hunk parsing depends on.
   delete env.GIT_DIFF_OPTS;
+  return env;
+}
+
+/** Run a git command in the repository, returning stdout. */
+function git(root: string, args: string[]): Promise<string> {
+  const env = gitEnv();
 
   return new Promise((resolveOutput, reject) => {
     // Streamed, not execFile: its maxBuffer turns a large diff into an error.
@@ -78,6 +84,182 @@ export async function isWorkingTree(root: string): Promise<boolean> {
   }
 }
 
+function gitSync(root: string, args: string[], stdout: "pipe" | "ignore" = "pipe") {
+  const run = spawnSync("git", args, {
+    cwd: root,
+    env: gitEnv(),
+    stdio: ["ignore", stdout, "ignore"],
+  });
+  return { status: run.status, out: run.stdout?.toString("utf-8") ?? "" };
+}
+
+/**
+ * Why `paths` would leave drift silent, or undefined: an entry that no tracked file matches and no
+ * commit ever touched, usually one written from the repository top. Synchronous, so the
+ * constructor can throw it and `loadSources` report it.
+ */
+export function unmatchedPaths(root: string, paths: readonly string[]): string | undefined {
+  if (paths.length === 0) return undefined;
+  // git attributes the pathspecs itself, so a symlinked root or a dead glob is judged as drift sees it.
+  const matches = (entries: readonly string[]) =>
+    gitSync(root, ["ls-files", "--error-unmatch", "--", ...entries], "ignore").status;
+  // 128: a root git cannot read fails every later call, with git's own reason.
+  if (matches(paths) !== 1) return undefined;
+  // A deleted entry once matched, and drift must still report the deletion. A shallow clone cannot
+  // see past its boundary, so there an entry deleted before it is refused.
+  const dead = paths.filter(
+    (entry) =>
+      matches([entry]) === 1 && gitSync(root, ["rev-list", "-1", "HEAD", "--", entry]).out === "",
+  );
+  if (dead.length === 0) return undefined;
+
+  const prefix = gitSync(root, ["rev-parse", "--show-prefix"]).out.trim();
+  const named = dead.map((entry) => {
+    if (entry.startsWith(":")) return `"${entry}"`;
+    const scope = scopeOf(root, entry);
+    const submodule = submoduleAbove(root, scope);
+    if (submodule)
+      return `"${entry}" (inside submodule "${submodule}", which needs its own source)`;
+    const fix =
+      prefix === ""
+        ? undefined
+        : scope === prefix.slice(0, -1)
+          ? "."
+          : scope.startsWith(prefix)
+            ? scope.slice(prefix.length)
+            : undefined;
+    return fix !== undefined && matches([fix]) === 0
+      ? `"${entry}" (did you mean "${fix}"?)`
+      : `"${entry}"`;
+  });
+  const one = named.length === 1;
+  return (
+    `${one ? "`paths` entry" : "`paths` entries"} ${named.join(", ")} ` +
+    `${one ? "matches" : "match"} no tracked file. ` +
+    `\`paths\` are relative to \`root\`, not to the repository top.`
+  );
+}
+
+/** The gitlink above `scope`, if any: the superproject lists none of a submodule's files. */
+function submoduleAbove(root: string, scope: string): string | undefined {
+  const parts = scope.split("/");
+  const ancestors = parts.slice(0, -1).map((_, i) => parts.slice(0, i + 1).join("/"));
+  const named = ancestors.filter((a) => !a.endsWith(".."));
+  if (named.length === 0) return undefined;
+  const out = gitSync(root, ["ls-tree", "-z", "HEAD", "--", ...named]).out;
+  for (const record of out.split("\0")) {
+    if (record.startsWith("160000 ")) return record.slice(record.indexOf("\t") + 1);
+  }
+  return undefined;
+}
+
+/**
+ * Why `paths` cannot bound a source at `root`, or undefined when it can. An empty entry fails
+ * every git call, and one outside the root matches no citation, so locate calls everything missing.
+ */
+export function scopeProblem(root: string, paths: unknown): string | undefined {
+  if (paths === undefined || paths === null) return undefined;
+  if (!Array.isArray(paths)) return `declares \`paths\` as a ${typeof paths}, not a list`;
+  // Git works from the real directory, so `..` through a symlinked root lands beside its target.
+  const base = realRoot(root);
+  let positive = false;
+  for (const entry of paths as unknown[]) {
+    if (typeof entry !== "string") {
+      return `declares paths entry ${scalarOrType(entry)}, which is not a string`;
+    }
+    if (entry === "")
+      return `declares paths entry "", which is empty; omit \`paths\` for the whole root`;
+    const { top, exclude, pattern } = pathspecMagic(entry);
+    // Not quoted: reasons reach PR comments, and an absolute path names somebody's machine.
+    if (isAbsolute(entry) || isAbsolute(pattern)) {
+      return "declares a paths entry that is an absolute path; name it relative to `root`";
+    }
+    const shown = JSON.stringify(entry);
+    // Citations are relative to the root, so a top-anchored match is one no citation names.
+    if (top && !exclude) {
+      return `declares paths entry ${shown}, which is relative to the repository top; name it relative to \`root\``;
+    }
+    const target = resolve(base, pattern);
+    if (exclude) {
+      // Nothing left in scope: rev-list finds no commit and the revision falls back to HEAD.
+      if (!escapes(relative(target, base))) {
+        return `declares paths entry ${shown}, which excludes the whole source root`;
+      }
+      continue;
+    }
+    positive = true;
+    if (escapes(relative(base, target))) {
+      return `declares paths entry ${shown}, which resolves outside the source root`;
+    }
+  }
+  // Git reads an exclude-only pathspec from the repository top, widening the source past its root.
+  if (paths.length > 0 && !positive) {
+    return 'declares `paths` with only exclusions; add "." to keep the whole root, or omit `paths`';
+  }
+  return undefined;
+}
+
+const escapes = (rel: string): boolean =>
+  rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel);
+
+function realRoot(root: string): string {
+  try {
+    return realpathSync(root);
+  } catch {
+    return resolve(root);
+  }
+}
+
+const scalarOrType = (value: unknown): string =>
+  value === null || typeof value === "number" || typeof value === "boolean"
+    ? String(value)
+    : Array.isArray(value)
+      ? "a list"
+      : `a ${typeof value}`;
+
+/** The `top` and `exclude` magic of a pathspec, short or long form, and the pattern after it. */
+function pathspecMagic(entry: string): { top: boolean; exclude: boolean; pattern: string } {
+  if (!entry.startsWith(":")) return { top: false, exclude: false, pattern: entry };
+  const long = /^:\(([^)]*)\)/.exec(entry);
+  if (long) {
+    const words = long[1]!.split(",").map((word) => word.trim().split(/[:=]/)[0]);
+    return {
+      top: words.includes("top"),
+      exclude: words.includes("exclude"),
+      pattern: entry.slice(long[0].length),
+    };
+  }
+  const short = /^:([/!^]*):?/.exec(entry)!;
+  const signs = short[1]!;
+  return {
+    top: signs.includes("/"),
+    exclude: /[!^]/.test(signs),
+    pattern: entry.slice(short[0].length),
+  };
+}
+
+/**
+ * What git itself makes of `paths` from `root`: its refusal of the pathspec, or a match outside the
+ * root. Run by preflight, since the loader cannot run git and cannot read every kind of magic.
+ */
+export async function scopeRefusal(
+  root: string,
+  paths: readonly string[],
+): Promise<string | undefined> {
+  if (paths.length === 0) return undefined;
+  let out: string;
+  try {
+    out = await git(root, ["ls-files", "-z", "--", ...paths]);
+  } catch (error) {
+    if (!(error instanceof GitCommandError)) throw error;
+    return `git refuses \`paths\`: ${error.stderr.split("\n")[0]}`;
+  }
+  const outside = out.split("\0").find((path) => path.startsWith("../"));
+  return outside === undefined
+    ? undefined
+    : `\`paths\` matches files outside the source root, such as ${outside}`;
+}
+
 /**
  * A git repository as a source.
  *
@@ -93,10 +275,16 @@ export class GitSource implements SourceAdapter {
   private readonly paths: readonly string[];
 
   constructor(options: GitSourceOptions) {
+    // `loadSources` turns this throw into an unloaded source naming the entry.
+    const problem = scopeProblem(options.root, options.paths);
+    if (problem) throw new Error(`Source "${options.id}" ${problem}`);
     this.id = options.id;
     this.root = options.root;
     this.citationFormat = options.citationFormat;
     this.paths = options.paths ?? [];
+    // Checked once, when the source is built: a long-lived MCP server keeps its startup verdict.
+    const refusal = unmatchedPaths(this.root, this.paths);
+    if (refusal) throw new Error(`Source "${this.id}": ${refusal}`);
   }
 
   /**
@@ -262,10 +450,9 @@ export class GitSource implements SourceAdapter {
       part: "path",
       detail: `${path} is outside the declared paths (${this.paths.join(", ")}) of source "${this.id}"`,
     };
-    const patterned = this.paths.some((p) => /[*?[\\]/.test(p) || p.startsWith(":"));
+    const patterned = this.paths.some(isPattern);
     if (this.paths.length > 0 && !patterned) {
-      const base = resolve(this.root);
-      const scope = this.paths.map((p) => relative(base, resolve(base, p)).split(sep).join("/"));
+      const scope = this.paths.map((p) => scopeOf(this.root, p));
       if (!scope.some((p) => p === "" || path === p || path.startsWith(`${p}/`))) return outside;
     }
 
@@ -440,6 +627,14 @@ export class GitSource implements SourceAdapter {
 }
 
 type WorkingState = "committed" | "changed" | "untracked";
+
+const isPattern = (entry: string) => /[*?[\\]/.test(entry) || entry.startsWith(":");
+
+/** A literal `paths` entry as git lists it from the root: `./docs/` is `docs`, `.` is "". */
+function scopeOf(root: string, entry: string): string {
+  const base = resolve(root);
+  return relative(base, resolve(base, entry)).split(sep).join("/");
+}
 
 interface Hunk {
   oldStart: number;

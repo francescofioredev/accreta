@@ -7,12 +7,18 @@ import {
   type CitedChange,
   type DriftReport,
   type PageChange,
+  type RefusedCitation,
   type StaleRevision,
   type UnresolvableRevision,
 } from "@accreta/core";
-import { countUnchecked, uncheckedPages, type UncheckedSource } from "@accreta/adapters";
+import {
+  countUnchecked,
+  noSourceNamed,
+  uncheckedPages,
+  type UncheckedSource,
+} from "@accreta/adapters";
 import { findWorkspace } from "../workspace.ts";
-import { loadSources, type CommandContext } from "./shared.ts";
+import { loadSources, printable, provenance, type CommandContext } from "./shared.ts";
 
 export type DriftFormat = "text" | "json" | "github";
 
@@ -20,6 +26,8 @@ export interface DriftOptions {
   format: DriftFormat;
   /** A `drift --json` report from the base branch, to tell what this change put in doubt. */
   base?: string;
+  /** Check this source alone, as `check_drift {source}` does. */
+  source?: string;
 }
 
 /**
@@ -48,6 +56,11 @@ export function driftOptions(args: readonly string[]): DriftOptions {
         throw new Error("--base takes the path of a `drift --json` report.");
       }
       options.base = path;
+    } else if (name === "--source") {
+      const id = value();
+      if (!id || id.startsWith("--")) throw new Error("--source takes the id of a source.");
+      if (options.source !== undefined) throw new Error("drift takes one --source.");
+      options.source = id;
     } else {
       throw new Error(`drift does not take "${arg}".`);
     }
@@ -68,7 +81,7 @@ export async function drift(
   let base: BaseKeys | undefined;
   try {
     options = driftOptions(args);
-    base = options.base ? readBase(resolve(ctx.cwd, options.base)) : undefined;
+    base = options.base ? readBase(resolve(ctx.cwd, options.base), options.source) : undefined;
   } catch (error) {
     // 2, as for any refused argument: 1 already means drift found something.
     ctx.err(error instanceof Error ? error.message : String(error));
@@ -76,6 +89,23 @@ export async function drift(
   }
 
   const loaded = loadSources(workspace);
+  if (options.source !== undefined) {
+    const id = options.source;
+    const broken = loaded.unloaded.filter((u) => u.id === id);
+    // As check_drift: a named source that did not load is reported alone; otherwise every
+    // broken declaration still is, so the run cannot pass over one.
+    if (broken.length > 0) {
+      loaded.sources = [];
+      loaded.unloaded = broken;
+    } else {
+      const known = loaded.sources.map((adapter) => adapter.id);
+      loaded.sources = loaded.sources.filter((adapter) => adapter.id === id);
+      if (loaded.sources.length === 0) {
+        ctx.err(printable(noSourceNamed(id, known, loaded.unloaded)));
+        return 2;
+      }
+    }
+  }
   const reports: DriftReport[] = [];
   let unloaded: UnloadedEntry[] = [];
   if (loaded.sources.length > 0 || loaded.unloaded.length > 0) {
@@ -88,24 +118,53 @@ export async function drift(
     }
   }
 
+  const compared = base && toJson(reports, base, unloaded);
   if (options.format === "json") {
-    ctx.out(JSON.stringify(toJson(reports, base, unloaded), null, 2));
+    const json = compared || toJson(reports, base, unloaded);
+    ctx.out(JSON.stringify(options.source ? { ...json, source: options.source } : json, null, 2));
   } else if (options.format === "github") {
     ctx.out(toGithub(reports, base, GITHUB_BODY_LIMIT, unloaded));
   } else {
     for (const source of unloaded) {
       const when = source.on_base ? " on the base branch either" : "";
-      ctx.out(`${source.file} — did not load${when}, so ${uncheckedPages(source.pages)}`);
-      ctx.out(`  ${source.reason}`);
+      ctx.out(
+        `${printable(source.file)} — did not load${when}, so ${uncheckedPages(source.pages)}`,
+      );
+      ctx.out(`  ${printable(source.reason)}`);
     }
     if (reports.length === 0 && unloaded.length === 0) {
       ctx.out("No sources declared in sources/. Nothing to check.");
-    } else for (const report of reports) printText(ctx, report);
+    } else {
+      if (compared) ctx.out(againstBase(compared));
+      printReports(ctx, reports);
+    }
   }
 
   // "I cannot tell", like `unresolvable`: a typo in `type` must not turn a failing run green.
-  const failed = reports.some((report) => fails(report, strict)) || unloaded.length > 0;
+  const failed =
+    base && compared
+      ? failsAgainst(compared, base, reports, strict)
+      : reports.some((report) => fails(report, strict)) || unloaded.length > 0;
   return failed ? 1 : 0;
+}
+
+/** Text mode's verdict with `--base`, since its rows do not say which pages the base had. */
+function againstBase(json: DriftJson): string {
+  const kept = json.pages_in_doubt - json.pages_newly_in_doubt;
+  return `${json.pages_newly_in_doubt} page(s) newly in doubt; ${kept} already in doubt on the base branch`;
+}
+
+/** With `--base`, only what the change put in doubt fails, as the action counts it. */
+function failsAgainst(
+  json: DriftJson,
+  base: BaseKeys,
+  reports: DriftReport[],
+  strict: boolean,
+): boolean {
+  if (json.pages_newly_in_doubt + json.pages_newly_unplaceable + json.sources_newly_unloaded > 0) {
+    return true;
+  }
+  return strict && reports.some((r) => uncheckedKeys(r.sourceId, r).some((key) => !base.has(key)));
 }
 
 function fails(report: DriftReport, strict: boolean): boolean {
@@ -149,8 +208,18 @@ function printUnverifiable(ctx: Pick<CommandContext, "out">, report: DriftReport
   ctx.out(`  ${pinless} page(s) cite this source without a revision:`);
   for (const u of report.unpinned ?? []) {
     const { cited, fix } = howToPin(u);
-    ctx.out(`    ${u.page} ${cited} names no revision: ${fix}`);
+    ctx.out(`    ${printable(u.page)} ${printable(cited)} names no revision: ${fix}`);
   }
+}
+
+/** Each source's report, then, with several, the distinct total that `--json` reports. */
+export function printReports(ctx: Pick<CommandContext, "out">, reports: DriftReport[]): void {
+  for (const report of reports) printText(ctx, report);
+  if (reports.length < 2) return;
+  // A page in doubt under two sources is counted under each above, but once here.
+  const total = toJson(reports).pages_in_doubt;
+  // A bare 0 would close a failing run on what reads as all clear.
+  if (total > 0) ctx.out(`${total} page(s) in doubt across ${reports.length} sources`);
 }
 
 export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport): void {
@@ -160,13 +229,15 @@ export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport)
   if (report.delegated) {
     const work = report.delegated;
     const pageCount = distinctPages(work.pending);
-    ctx.out(`${report.sourceId} — read through ${work.via} by the agent, not by accreta`);
+    ctx.out(
+      `${printable(report.sourceId)} — read through ${printable(work.via)} by the agent, not by accreta`,
+    );
 
     if (pageCount > 0) {
       ctx.out(`  ${pageCount} page(s) for the agent to re-verify there:`);
       for (const entry of work.pending) {
         for (const path of entry.pages) {
-          ctx.out(`    ${path} (${atLabel(entry, path)} ${entry.revision})`);
+          ctx.out(`    ${printable(path)} (${atLabel(entry, path)} ${printable(entry.revision)})`);
         }
       }
     } else {
@@ -174,11 +245,11 @@ export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport)
     }
     printUnverifiable(ctx, report);
     ctx.out("  in scope:");
-    for (const line of work.guidance.trim().split("\n")) ctx.out(`    ${line}`);
+    for (const line of work.guidance.trim().split("\n")) ctx.out(`    ${printable(line)}`);
     return;
   }
 
-  ctx.out(`${report.sourceId} @ ${report.currentRevision}`);
+  ctx.out(`${printable(report.sourceId)} @ ${printable(String(report.currentRevision))}`);
 
   if (report.stale.length > 0) {
     const rows = report.stale
@@ -197,7 +268,7 @@ export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport)
     const inDoubt = group(rank("changed"));
     const rest = group(rank("moved"), rank("untouched"), rank("uncited"));
     if (inDoubt.length === 0) {
-      // Drift still fails on these, so the line must not read as all clear.
+      // Without --base drift still fails on these, so the line must not read as all clear.
       const count = distinct(rest.map((row) => row.page));
       ctx.out(
         count > 0 ? `  no page in doubt; ${count} to re-pin or re-verify` : "  no page in doubt",
@@ -219,9 +290,11 @@ export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport)
     const revisions = report.unresolvable.length;
     ctx.out(`  ${pageCount} page(s) rest on ${revisions} revision(s) this source cannot place:`);
     for (const entry of report.unresolvable) {
-      ctx.out(`    ${entry.revision}:`);
+      ctx.out(`    ${printable(entry.revision)}:`);
       for (const path of entry.pages) {
-        ctx.out(`      ${path} (${entry.citedOnly?.includes(path) ? "cited" : "verified"})`);
+        ctx.out(
+          `      ${printable(path)} (${entry.citedOnly?.includes(path) ? "cited" : "verified"})`,
+        );
       }
     }
     ctx.out("    a shallow clone or rewritten history does this: fetch the full history,");
@@ -232,6 +305,9 @@ export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport)
     ctx.out("  up to date");
   }
 }
+
+const repinText = (c: CitedChange) =>
+  c.change.status === "moved" ? [printable(`${c.path}#${c.locator} → ${c.change.locator}`)] : [];
 
 const DOUBT_ORDER: PageChange[] = ["changed", "moved", "untouched", "uncited"];
 
@@ -250,28 +326,39 @@ function printStale(ctx: Pick<CommandContext, "out">, label: string, rows: Stale
   if (rows.length === 0) return;
   ctx.out(`  ${distinct(rows.map((row) => row.page))} ${label}:`);
   for (const { entry, page, doubt } of rows) {
-    const why = doubt ? ` — ${explainDoubt(doubt, entry, page)}` : "";
-    ctx.out(`    ${page} (${atLabel(entry, page)} ${entry.revision})${why}`);
+    const refused = entry.refused?.[page];
+    const why = doubt
+      ? ` — ${explainDoubt(doubt, entry, page)}`
+      : refused
+        ? ` — ${refusedText(refused)}`
+        : "";
+    ctx.out(`    ${printable(page)} (${atLabel(entry, page)} ${printable(entry.revision)})${why}`);
   }
 }
+
+const refusedText = (refused: readonly { refused: string }[]) =>
+  `the source refuses ${refused.map((c) => printable(c.refused)).join("; ")}`;
 
 function explainDoubt(doubt: PageChange, entry: StaleRevision, page: string): string {
   const mine = (entry.citations ?? []).filter((c) => c.page === page);
   const count = (status: string) => mine.filter((c) => c.change.status === status).length;
   switch (doubt) {
     case "changed": {
-      const changed = `${count("touched") + count("unknown")} cited range(s) changed`;
-      const moved = mine.flatMap((c) =>
-        c.change.status === "moved" ? [`${c.path}#${c.locator} → ${c.change.locator}`] : [],
+      const refused = mine.filter(
+        (c): c is RefusedCitation & CitedChange => c.refused !== undefined,
       );
-      return moved.length > 0 ? `${changed}; re-pin ${moved.join(", ")}` : changed;
+      const ranges = count("touched") + count("unknown") - refused.length;
+      const moved = mine.flatMap(repinText);
+      return [
+        ranges > 0 ? `${ranges} cited range(s) changed` : "",
+        refused.length > 0 ? refusedText(refused) : "",
+        moved.length > 0 ? `re-pin ${moved.join(", ")}` : "",
+      ]
+        .filter(Boolean)
+        .join("; ");
     }
     case "moved":
-      return `re-pin ${mine
-        .flatMap((c) =>
-          c.change.status === "moved" ? [`${c.path}#${c.locator} → ${c.change.locator}`] : [],
-        )
-        .join(", ")}`;
+      return `re-pin ${mine.flatMap(repinText).join(", ")}`;
     case "untouched":
       return "cited lines unchanged";
     case "uncited":
@@ -289,6 +376,8 @@ interface DoubtedPage {
   citations: DoubtedCitation[] | null;
   /** The changed files; for a page with `cited_at`, only those it cites. */
   changed_paths?: string[];
+  /** Instead, for a page with `cited_at` here only because the source refuses its citations. */
+  refused?: RefusedCitation[];
   /** With `--base`, for a page the source can only judge per file. */
   on_base?: boolean;
 }
@@ -300,6 +389,8 @@ interface DoubtedCitation {
   /** The revision the locator's lines belong to. */
   cited_at: string;
   change: "touched" | "unknown";
+  /** Why the source refuses the place, when that is why its change is unknown. */
+  refused?: string;
   /** With `--base`: the base branch already had this citation in doubt. */
   on_base?: boolean;
 }
@@ -326,12 +417,25 @@ interface SourceVerdict {
   repin: RepinPage[];
   /** Pages on a stale revision whose cited lines are untouched: lower in doubt, not verified. */
   other_stale_pages: number;
-  unresolvable: UnresolvableRevision[];
+  unresolvable: UnplacedJson[];
   unverifiable: string[];
   /** Of `unverifiable`, pages of other sources whose citations here name no revision. */
   unpinned: Unpinned;
-  delegated: { via: string; pending: UnresolvableRevision[] } | null;
+  delegated: { via: string; pending: UnplacedJson[] } | null;
 }
+
+/** An `UnresolvableRevision` in check_drift's snake case. */
+interface UnplacedJson {
+  revision: string;
+  pages: string[];
+  cited_only?: string[];
+}
+
+const unplacedJson = (group: UnresolvableRevision): UnplacedJson => ({
+  revision: group.revision,
+  pages: group.pages,
+  cited_only: group.citedOnly,
+});
 
 interface DriftJson {
   pages_in_doubt: number;
@@ -345,12 +449,50 @@ interface DriftJson {
   unloaded_sources: UnloadedEntry[];
   /** Of those, the ones the base report did not have; all of them without one. */
   sources_newly_unloaded: number;
+  /** With `--source`: the one source this report checked. */
+  source?: string;
+  _provenance: ReturnType<typeof provenance>;
 }
+
+// check_drift's DRIFT_FIELDS in this shape. `now` and `unloaded_sources` are left out there too:
+// the adapter computes one, sources/*.yaml supplies the other.
+const DRIFT_FIELDS = [
+  "sources[].in_doubt[].page",
+  "sources[].in_doubt[].verified_at",
+  "sources[].in_doubt[].cited_at",
+  "sources[].in_doubt[].changed_paths",
+  "sources[].in_doubt[].citations[].footnote",
+  "sources[].in_doubt[].citations[].path",
+  "sources[].in_doubt[].citations[].locator",
+  "sources[].in_doubt[].citations[].cited_at",
+  // locate's reason names the cited path back, so `refused` is page-derived too.
+  "sources[].in_doubt[].citations[].refused",
+  "sources[].in_doubt[].refused[].footnote",
+  "sources[].in_doubt[].refused[].path",
+  "sources[].in_doubt[].refused[].locator",
+  "sources[].in_doubt[].refused[].refused",
+  "sources[].repin[].page",
+  "sources[].repin[].verified_at",
+  "sources[].repin[].cited_at",
+  "sources[].repin[].citations[].footnote",
+  "sources[].repin[].citations[].path",
+  "sources[].repin[].citations[].locator",
+  "sources[].repin[].citations[].cited_at",
+  "sources[].unresolvable[].revision",
+  "sources[].unresolvable[].pages",
+  "sources[].unresolvable[].cited_only",
+  "sources[].unverifiable",
+  "sources[].unpinned[].page",
+  "sources[].unpinned[].footnote",
+  "sources[].delegated.pending[].revision",
+  "sources[].delegated.pending[].pages",
+  "sources[].delegated.pending[].cited_only",
+] as const;
 
 /** With `--base`, `on_base` says the base branch already failed to load the same declaration. */
 type UnloadedEntry = UncheckedSource & { on_base?: boolean };
 
-/** Keys of what a base report already had in doubt or could not place, and what it did not load. */
+/** Keys of what a base report had in doubt, could not place, left unchecked, or did not load. */
 type BaseKeys = Set<string> & {
   unloaded?: Map<string, Pick<UncheckedSource, "id" | "pages">>;
 };
@@ -362,8 +504,16 @@ const citationKey = (source: string, page: string, c: DoubtedCitation) =>
 const fileKey = (source: string, page: string) => JSON.stringify(["file", source, page]);
 const unplacedKey = (source: string, page: string, revision: string) =>
   JSON.stringify(["unplaced", source, page, revision]);
+// One key by page: a page gaining a revision, or re-verified at a new one, leaves no new work undone.
+const uncheckedKeys = (
+  source: string,
+  s: { unverifiable?: string[]; delegated?: { pending: { pages: string[] }[] } | null },
+) =>
+  [...(s.unverifiable ?? []), ...(s.delegated?.pending ?? []).flatMap((e) => e.pages)].map((page) =>
+    JSON.stringify(["unchecked", source, page]),
+  );
 
-export function readBase(path: string): BaseKeys {
+export function readBase(path: string, only?: string): BaseKeys {
   let json: DriftJson;
   try {
     json = JSON.parse(readFileSync(path, "utf-8")) as DriftJson;
@@ -374,6 +524,14 @@ export function readBase(path: string): BaseKeys {
   }
   if (!Array.isArray(json.sources)) {
     throw new Error(`--base ${path} is not a \`drift --json\` report: it has no sources.`);
+  }
+  // Every other source would read as newly in doubt.
+  if (json.source !== undefined && json.source !== only) {
+    throw new Error(
+      printable(
+        `--base ${path} checked only source "${json.source}"; add --source ${json.source}.`,
+      ),
+    );
   }
   const unloaded: NonNullable<BaseKeys["unloaded"]> = new Map();
   const keys: BaseKeys = Object.assign(new Set<string>(), { unloaded });
@@ -388,6 +546,7 @@ export function readBase(path: string): BaseKeys {
     for (const entry of source.unresolvable ?? []) {
       for (const page of entry.pages) keys.add(unplacedKey(source.source_id, page, entry.revision));
     }
+    for (const key of uncheckedKeys(source.source_id, source)) keys.add(key);
   }
   // Absent from reports written before unloaded sources were reported: then none is inherited.
   for (const u of json.unloaded_sources ?? []) {
@@ -437,6 +596,7 @@ export function toJson(
     sources,
     unloaded_sources: unloaded,
     sources_newly_unloaded: unloaded.filter((u) => !u.on_base).length,
+    _provenance: provenance(DRIFT_FIELDS),
   };
 }
 
@@ -455,11 +615,14 @@ function verdict(report: DriftReport, base?: BaseKeys): SourceVerdict {
         ? { cited_at: entry.revision }
         : { verified_at: entry.revision };
       if (level === null) {
+        const refused = entry.refused?.[page];
         inDoubt.push({
           page,
           ...at,
           citations: null,
-          changed_paths: entry.citedPaths?.[page] ?? entry.changedPaths,
+          ...(refused
+            ? { refused }
+            : { changed_paths: entry.citedPaths?.[page] ?? entry.changedPaths }),
           ...(base ? { on_base: base.has(fileKey(id, page)) } : {}),
         });
       } else if (level === "changed") {
@@ -473,6 +636,7 @@ function verdict(report: DriftReport, base?: BaseKeys): SourceVerdict {
               locator: c.locator,
               cited_at: c.revision,
               change: c.change.status as DoubtedCitation["change"],
+              ...(c.refused === undefined ? {} : { refused: c.refused }),
             };
             if (base) cited.on_base = base.has(citationKey(id, page, cited));
             return cited;
@@ -493,10 +657,13 @@ function verdict(report: DriftReport, base?: BaseKeys): SourceVerdict {
     in_doubt: inDoubt.toSorted((a, b) => compare(a.page, b.page)),
     repin: repin.toSorted((a, b) => compare(a.page, b.page)),
     other_stale_pages: other,
-    unresolvable: report.unresolvable,
+    unresolvable: report.unresolvable.map(unplacedJson),
     unverifiable: report.unverifiable,
     unpinned: report.unpinned ?? [],
-    delegated: report.delegated && { via: report.delegated.via, pending: report.delegated.pending },
+    delegated: report.delegated && {
+      via: report.delegated.via,
+      pending: report.delegated.pending.map(unplacedJson),
+    },
   };
 }
 
@@ -650,7 +817,11 @@ export function toGithub(
         "A shallow clone does this: check out with `fetch-depth: 0`.",
       );
       const unplaced = source.unresolvable.flatMap((e) =>
-        e.pages.map((page) => ({ page, revision: e.revision, at: atLabel(e, page) })),
+        e.pages.map((page) => ({
+          page,
+          revision: e.revision,
+          at: atLabel({ citedOnly: e.cited_only }, page),
+        })),
       );
       table(
         [""],
@@ -718,25 +889,40 @@ function pagesHeadline(json: DriftJson, compared: boolean): string {
 function doubtRows(page: DoubtedPage, onBase: boolean): string[] {
   if (page.citations === null) {
     if ((page.on_base ?? false) !== onBase) return [];
+    const at = cellCode((page.verified_at ?? page.cited_at)!);
+    if (page.refused) {
+      return page.refused.map(
+        (c) => `| ${cellCode(page.page)} | ${cited(c)} | ${at} | ${refusedCell(c.refused)} |`,
+      );
+    }
     const paths = page.changed_paths ?? [];
     const shown = paths.slice(0, 5).map(cellCode);
     if (paths.length > 5) shown.push(`and ${paths.length - 5} more`);
     // A page of the source rests on all of it; one that only cites it, on the files it cites.
     const files = page.cited_at === undefined ? `any of ${shown.join(", ")}` : shown.join(", ");
     return [
-      `| ${cellCode(page.page)} | ${files} | ${cellCode((page.verified_at ?? page.cited_at)!)} | file changed; this source cannot tell lines |`,
+      `| ${cellCode(page.page)} | ${files} | ${at} | file changed; this source cannot tell lines |`,
     ];
   }
   return page.citations
     .filter((c) => (c.on_base ?? false) === onBase)
-    .map(
-      (c) =>
-        `| ${cellCode(page.page)} | ${cellCode(c.locator === null ? c.path : `${c.path}#${c.locator}`)}${footnote(c.footnote)} ` +
-        `| ${cellCode(c.cited_at)} | ${c.change === "touched" ? "changed" : "unknown: re-read it"} |`,
-    );
+    .map((c) => {
+      const change =
+        c.refused !== undefined
+          ? refusedCell(c.refused)
+          : c.change === "touched"
+            ? "changed"
+            : "unknown: re-read it";
+      return `| ${cellCode(page.page)} | ${cited(c)} | ${cellCode(c.cited_at)} | ${change} |`;
+    });
 }
 
 const footnote = (id: string | null) => (id === null ? "" : ` ${cellCode(`[^${id}]`)}`);
+
+const cited = (c: { path: string; locator: string | null; footnote: string | null }) =>
+  `${cellCode(c.locator === null ? c.path : `${c.path}#${c.locator}`)}${footnote(c.footnote)}`;
+
+const refusedCell = (why: string) => `refused: ${cellCode(why)}`;
 
 /** Keep the rows that fit the budget, newly-in-doubt ones first, each kind in order, and count the rest. */
 function fit(lines: Line[], limit: number): string {
@@ -771,7 +957,7 @@ const moreRows = (count: number) =>
 
 /** A code span that holds any value: nothing in it renders as Markdown or HTML. */
 function code(value: string): string {
-  const flat = value.replaceAll(/\s+/g, " ");
+  const flat = printable(value.replaceAll(/\s+/g, " "));
   if (flat === "") return "` `";
   const longest = Math.max(0, ...[...flat.matchAll(/`+/g)].map((match) => match[0].length));
   const fence = "`".repeat(longest + 1);

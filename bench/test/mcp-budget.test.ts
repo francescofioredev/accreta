@@ -15,10 +15,10 @@ test("checkText counts bytes, not characters", () => {
   expect(checkText("tool", '{"a": "é"}')).toBe(11);
 });
 
-test("every probe hits the corpus, and lint reports one finding per page", async () => {
+test("every probe hits the corpus, and lint reports one finding per page and the shared alias", async () => {
   // measure throws if any probe misses, so resolving is the content check.
   const row = await measure(10);
-  expect(row.lintFindings).toBe(10);
+  expect(row.lintFindings).toBe(11);
   expect(row.lint).toBeGreaterThan(1024);
 });
 

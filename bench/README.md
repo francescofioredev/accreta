@@ -117,6 +117,19 @@ scan drift ran before #239, so the same file measures either side.
 | index file, 10k | 55,762,944 → 57,798,656 B (+3.7%) | 55,812,096 → 57,774,080 B (+3.5%) |
 | rebuild | no measurable change | no measurable change |
 
+**Before and after #303.** Drift asks `locate` about every citation it would rank untouched. The
+`by lines` column times a source that also answers `touchedSince`; `locates` is the mean number of
+`locate` calls per source per run. Footnotes cite one of 50 ranges in one of 200 files, so up to
+10,000 distinct places. The bench's `locate` costs nothing, so a real source adds its own cost per
+call on top. Medians of 5 interleaved runs, Bun 1.4.2, Apple M3, 16 GB:
+
+| | before → after |
+| --- | --- |
+| drift per source, 1k pages | 0.23 → 0.27 ms (175 locates) |
+| drift per source by lines, 1k pages | 0.24 → 0.33 ms (315 locates) |
+| drift per source, 10k pages | 1.81 → 2.23 ms (1,629 locates) |
+| drift per source by lines, 10k pages | 1.87 → 2.69 ms (2,617 locates) |
+
 # MCP response budget
 
 The consumer of the MCP server is a language model with a finite context window, so every
