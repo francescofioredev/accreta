@@ -16,7 +16,7 @@ import { homedir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
-import type { CommandContext } from "./shared.ts";
+import { printable, type CommandContext } from "./shared.ts";
 
 export const CLIENTS = ["claude", "cursor", "codex", "vscode"] as const;
 export const SCOPES = ["project", "user"] as const;
@@ -69,18 +69,9 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
-/** A value read from a config file, safe to print: C0, DEL and C1 cannot paint a fake line. */
-export function esc(value: string): string {
-  let out = "";
-  for (const c of value) {
-    const code = c.charCodeAt(0);
-    out += isControl(code) ? `\\u${code.toString(16).padStart(4, "0")}` : c;
-  }
-  return out;
-}
-
-export function isControl(code: number): boolean {
-  return code < 0x20 || (code >= 0x7f && code <= 0x9f);
+// JSON already doubles every literal backslash, so printable's own doubling is undone.
+function printableJson(value: unknown): string {
+  return printable(JSON.stringify(value)).replaceAll("\\\\", "\\");
 }
 
 const RUN = { command: "accreta", args: ["mcp"] };
@@ -267,7 +258,7 @@ export function install(ctx: CommandContext, root: string, options: InstallOptio
   const read = readTarget(target, { strict: target.command === undefined });
 
   if (read.kind === "broken") {
-    ctx.err(`${target.shown} does not parse: ${esc(read.reason)}`);
+    ctx.err(`${target.shown} does not parse: ${printable(read.reason)}`);
     ctx.err("accreta does not rewrite a file it cannot read. Fix it, or add this by hand:\n");
     ctx.err(snippet(target));
     return 1;
@@ -280,8 +271,8 @@ export function install(ctx: CommandContext, root: string, options: InstallOptio
   }
   if (current !== undefined && !options.force) {
     ctx.err(`${target.shown} already has an \`${SERVER}\` server that differs:`);
-    ctx.err(`  current: ${esc(JSON.stringify(current))}`);
-    ctx.err(`  install: ${esc(JSON.stringify(target.entry))}`);
+    ctx.err(`  current: ${printableJson(current)}`);
+    ctx.err(`  install: ${printableJson(target.entry)}`);
     ctx.err("Re-run with --force to replace it.");
     return 1;
   }
@@ -349,7 +340,7 @@ function refuseOutside(ctx: CommandContext, root: string, target: Target): boole
   if (target.scope !== "project") return false;
   const problem = escapesRoot(root, target.path);
   if (!problem) return false;
-  ctx.err(`Refusing to write ${target.shown}: ${esc(problem)}.`);
+  ctx.err(`Refusing to write ${target.shown}: ${printable(problem)}.`);
   ctx.err(
     "A project file must stay inside the knowledge base, so install follows no symlink there.",
   );
@@ -569,9 +560,9 @@ export function reportMcp(ctx: CommandContext, root: string): boolean {
       seen.add(target.path);
       const read = readTarget(target);
       if (read.kind === "missing") continue;
-      const label = `${esc(target.shown)} (${NAMES[client]}, ${scope})`;
+      const label = `${printable(target.shown)} (${NAMES[client]}, ${scope})`;
       if (read.kind === "broken") {
-        ctx.out(`  broken: ${label} does not parse — ${esc(read.reason)}`);
+        ctx.out(`  broken: ${label} does not parse — ${printable(read.reason)}`);
         ctx.out(`    → fix it, then re-run \`${installCommand(client, scope)}\``);
         broken = true;
         found++;
@@ -589,7 +580,7 @@ export function reportMcp(ctx: CommandContext, root: string): boolean {
     for (const key of keys) {
       const project = projects[key];
       if (!isTable(project) || !isTable(project.mcpServers)) continue;
-      check(`${esc(user.shown)} (Claude Code, local)`, project.mcpServers, "claude", "local");
+      check(`${printable(user.shown)} (Claude Code, local)`, project.mcpServers, "claude", "local");
     }
   }
   if (found === 0) {
@@ -616,10 +607,10 @@ interface Found {
 
 function checkEntry(ctx: CommandContext, found: Found): boolean {
   const { entry, client, scope, root } = found;
-  const label = `${found.label} \`${esc(found.name)}\``;
+  const label = `${found.label} \`${printable(found.name)}\``;
   const reinstall =
     scope === "local"
-      ? `run \`claude mcp remove --scope local ${esc(found.name)}\`, then \`${installCommand(client, "project")}\``
+      ? `run \`claude mcp remove --scope local ${printable(found.name)}\`, then \`${installCommand(client, "project")}\``
       : `re-run \`${installCommand(client, scope)} --force\``;
   const command = isTable(entry) && typeof entry.command === "string" ? entry.command : undefined;
   const args =
@@ -630,14 +621,14 @@ function checkEntry(ctx: CommandContext, found: Found): boolean {
     ctx.out(`  unknown: ${label} has no \`command\` — not a stdio server doctor can check`);
     return false;
   }
-  const shown = esc([command, ...args].join(" "));
+  const shown = printable([command, ...args].join(" "));
   if (args.some((arg) => arg.replaceAll("\\", "/").includes(STALE_SERVER))) {
     ctx.out(`  stale: ${label} runs \`${shown}\`, a path that no longer ships`);
     ctx.out(`    → ${reinstall}`);
     return true;
   }
   if (!resolves(command, root)) {
-    ctx.out(`  broken: ${label} runs \`${esc(command)}\`, which is not on this shell's PATH`);
+    ctx.out(`  broken: ${label} runs \`${printable(command)}\`, which is not on this shell's PATH`);
     ctx.out(
       "    → install accreta where the client can find it (`npm install -g accreta`), or run `npx -y accreta mcp`",
     );
@@ -650,7 +641,7 @@ function checkEntry(ctx: CommandContext, found: Found): boolean {
   }
   const elsewhere = servesElsewhere(entry, root);
   if (elsewhere) {
-    ctx.out(`  ok: ${label} runs \`${shown}\`, for the knowledge base at ${esc(elsewhere)}`);
+    ctx.out(`  ok: ${label} runs \`${shown}\`, for the knowledge base at ${printable(elsewhere)}`);
     return false;
   }
   ctx.out(`  ok: ${label} runs \`${shown}\``);
