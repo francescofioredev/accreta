@@ -454,8 +454,8 @@ interface DriftJson {
   _provenance: ReturnType<typeof provenance>;
 }
 
-// check_drift's DRIFT_FIELDS in this shape. `now` and `unloaded_sources` are left out there too:
-// the adapter computes one, sources/*.yaml supplies the other.
+// check_drift's DRIFT_FIELDS in this shape. `now` is the adapter's; `unloaded_sources` quotes
+// sources/*.yaml and is left out there too, a known gap (#362).
 const DRIFT_FIELDS = [
   "sources[].in_doubt[].page",
   "sources[].in_doubt[].verified_at",

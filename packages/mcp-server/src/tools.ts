@@ -341,7 +341,7 @@ async function withPinnedIndex<T>(
   }
 }
 
-// The early returns carry no block: `unloaded_sources` quotes sources/*.yaml, not a page.
+// Known gap (#362): the early returns and `unloaded_sources` quote sources/*.yaml unlabelled.
 export function checkDriftTool(ctx: ToolContext, input: { source?: string }) {
   return withPinnedIndex(ctx, "check_drift", (db) => checkDrift(ctx, db, input));
 }
@@ -473,8 +473,10 @@ export async function listRecentChangesTool(
         delegated: true as const,
         via: error.via,
         scope: error.guidance,
-        message: error.message,
+        // Constant: the error's own message names `via`, which only a labelled field may carry.
+        message: "This source is delegated: read it through `via`, within `scope`.",
         changed: [],
+        _provenance: provenance(["via", "scope"], DRIFT_NOTICE),
       };
     }
     // "I cannot tell" reaches the agent as itself. Returning an empty list here
@@ -488,7 +490,7 @@ export async function listRecentChangesTool(
   }
 }
 
-// An adapter's detail may quote the source (git's stderr does); the rest is the caller's input, the config or a revision.
+// An adapter's detail may quote the source (git's stderr does); `delegated` quotes the declaration.
 const CITE_FIELDS = ["location.detail", "delegated.via", "delegated.scope"] as const;
 
 export async function citeTool(
@@ -511,7 +513,7 @@ export async function citeTool(
       citation.revision !== null
         ? `Source "${target.sourceId}" is at ${citation.revision}, not ${expected}: it moved since you read it, or ${expected} did not come from cite. Re-read ${citation.canonicalSource}, then cite again.`
         : citation.delegated
-          ? `Cannot confirm source "${target.sourceId}" is still at ${expected}: it is read through ${citation.delegated.via}, and accreta cannot tell its revision.`
+          ? `Cannot confirm source "${target.sourceId}" is still at ${expected}: it is delegated, and accreta cannot tell its revision.`
           : `Cannot confirm source "${target.sourceId}" is still at ${expected}: accreta could not check this place. Cite it without an expected revision to see why.`,
     );
   }

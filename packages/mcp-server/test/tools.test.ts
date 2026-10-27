@@ -307,6 +307,9 @@ describe("source-backed tools", () => {
     });
     expect(result).toMatchObject({ delegated: true, via: "notion", changed: [] });
     expect(result).not.toHaveProperty("unresolvable");
+    // via and scope come from the declaration; the message must not repeat them unlabelled.
+    expect(result).toMatchObject({ _provenance: { page_derived_fields: ["via", "scope"] } });
+    expect((result as { message: string }).message).not.toContain("notion");
   });
 
   test("list_recent_changes surfaces an unplaceable revision as such", async () => {
