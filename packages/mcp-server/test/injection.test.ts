@@ -74,6 +74,7 @@ const PROMPT_PROBES: Record<string, Record<string, string>> = {
   ingest_source: { target: "docs:ch01.md" },
   reverify_stale_pages: { source: "lines" },
   answer_with_citations: { question: "filename probe" },
+  verify_citations: { pages: "concepts/injected" },
 };
 
 // Declared fields that name a whole author-written object rather than one text value.

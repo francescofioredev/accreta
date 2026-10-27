@@ -43,8 +43,9 @@ checked.
 **A citation covers its whole sentence.** Every fact in a cited sentence — a name, a value, a
 sequence, a condition, a cause — must be in the cited lines, in your words or theirs. Split off
 any that is not and give it its own footnote from `cite`, or drop it; never widen a range to
-cover it. Mark an inference as yours ("this suggests") and cite the lines it rests on; it never
-settles a disagreement (rule 3).
+cover it. Only what follows from a cited fact may stay as an inference: yours ("this suggests"),
+in a sentence of its own with no footnote, right after that fact. It never settles a
+disagreement (rule 3).
 
 ```markdown
 Before: The assessed likely range is 2.5 to 4.0 degrees Celsius, narrowed by paleoclimate evidence.[^ecs]
@@ -215,7 +216,8 @@ With a shell, use the CLI. Without one, the MCP tool beside it does the same.
 6. **`accreta reindex`**, then **`accreta lint`**. Fix what it reports.
 7. **Before you stop, re-open the source lines cited by each footnote you added, re-pinned, or
    whose sentence you changed — only those.** Lint checks that they exist, not what they say. Fix
-   any part they do not show as rule 1 says; if you changed anything, run step 6 again.
+   any part they do not show, and any inference after it that no longer follows, as rule 1 says;
+   if you changed anything, run step 6 again.
 
 A citation `cite` cannot pin comes back with `unknown` where the revision belongs, and lint
 reports it as `citation-unpinned`. Paste it as returned: never write a revision into it. For an
@@ -226,6 +228,14 @@ If lint reports that `provenance.format` has no `{rev}`, or you change the forma
 in `accreta.config.yaml` first, then re-cite every existing footnote with `accreta cite`. Lint
 lists each old footnote with a #locator as `unparseable-citation`, but one without a #locator can
 read as prose and drop out of lint and drift, so do not rely on lint to find them all.
+
+### Verifying citations
+
+After an ingest, a session that did not write the pages checks them. Skip a page `accreta drift`
+lists as in doubt, to re-pin, behind the source or on a revision it cannot place, and a delegated
+one unless you read it at its `last_verified_revision`. Re-read the lines each footnote cites and
+fix each part they do not show as rule 1 says, citing new lines as Ingesting 1 and 4 say. Never
+add a claim. End with Ingesting step 6. Over MCP this is the prompt `verify_citations`.
 
 ### Never write a speculative page
 
