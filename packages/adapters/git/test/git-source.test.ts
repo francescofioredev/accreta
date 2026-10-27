@@ -1324,8 +1324,9 @@ describe("GitSource spawn hardening", () => {
         (p) => `"${p.replaceAll("\\", "/")}"`,
       );
       await run(["config", "filter.slow.clean", command.join(" ")]);
-      // A changed file makes status hash it through the clean filter.
-      write("a.md", lines(4));
+      // A newer mtime at the same size makes status re-hash the file through its clean filter.
+      const later = new Date(Date.now() + 60_000);
+      utimesSync(join(root, "a.md"), later, later);
       process.env.ACCRETA_GIT_TIMEOUT_MS = "3000";
 
       const pid = () => (existsSync(pidFile) ? Number(readFileSync(pidFile, "utf-8")) : 0);
