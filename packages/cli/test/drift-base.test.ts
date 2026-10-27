@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -155,8 +155,7 @@ describe("drift --base on source declarations that did not load", () => {
     // A new reason on the same file is still the same declaration.
     writeSource("broken.yaml", "id: broken\ntype: fsss\n");
 
-    // The exit code is not base-aware yet; the action keys on sources_newly_unloaded.
-    expect(await cli("drift", "--base", base)).toBe(1);
+    expect(await cli("drift", "--base", base)).toBe(0);
     expect(output.join("\n")).toContain("sources/broken.yaml — did not load on the base branch");
 
     const { json: report } = await json("--base", base);
@@ -250,5 +249,162 @@ describe("drift --base on source declarations that did not load", () => {
     // From before #176: no unloaded_sources at all, so nothing is inherited.
     writeFileSync(base, JSON.stringify({ ...old, sources: [] }));
     expect((await json("--base", base)).json.sources_newly_unloaded).toBe(1);
+  });
+});
+
+const twentyLines = (edit: Record<number, string> = {}) =>
+  Array.from({ length: 20 }, (_, i) => edit[i + 1] ?? `line ${i + 1}`).join("\n") + "\n";
+
+describe("drift --base exits 1 only on what the change put in doubt", () => {
+  let output: string[] = [];
+  const cli = (...argv: string[]) =>
+    run(argv, { cwd: root, out: (line) => output.push(line), err: () => {} });
+  const docs = () => join(root, "sources", "docs");
+  const git = (...args: string[]) => {
+    const proc = Bun.spawnSync(["git", ...args], { cwd: docs() });
+    if (proc.exitCode !== 0) throw new Error(proc.stderr.toString());
+    return proc.stdout.toString().trim();
+  };
+  const UNKNOWN = "0123456789abcdef0123456789abcdef01234567";
+  let first = "";
+
+  const page = (name: string, frontmatter: string, body = "") =>
+    writeFileSync(
+      join(root, "knowledge", `${name}.md`),
+      `---\ntype: note\n${frontmatter}---\n\n# ${name}\n${body}`,
+      "utf-8",
+    );
+  /** A page verified at the first commit, citing `locator` of `a.md`. */
+  const citing = (name: string, locator: string) =>
+    page(
+      name,
+      `source: docs\nlast_verified_revision: ${first}\n`,
+      `\nA claim.[^c]\n\n[^c]: docs @ ${first.slice(0, 7)} · a.md#${locator}\n`,
+    );
+  const delegated = (name: string, revision: string) =>
+    page(name, `source: design-docs\nlast_verified_revision: ${revision}\n`);
+
+  /** What the action does on the base branch: `drift --json`, kept even when it exits 1. */
+  async function baseReport(): Promise<string> {
+    await cli("reindex");
+    output = [];
+    await cli("drift", "--json");
+    const path = join(root, "base.json");
+    writeFileSync(path, output.join("\n"), "utf-8");
+    return path;
+  }
+
+  async function drift(...argv: string[]): Promise<number> {
+    await cli("reindex");
+    output = [];
+    return cli("drift", ...argv);
+  }
+
+  beforeEach(async () => {
+    delete process.env.ACCRETA_INDEX_PATH;
+    delete process.env.ACCRETA_ROOT;
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    mkdirSync(docs(), { recursive: true });
+    writeFileSync(join(docs(), "a.md"), twentyLines(), "utf-8");
+    git("init", "-q");
+    git("config", "user.email", "t@example.invalid");
+    git("config", "user.name", "Test");
+    git("add", ".");
+    git("commit", "-qm", "first");
+    first = git("rev-parse", "HEAD");
+    writeFileSync(join(root, "sources", "docs.yaml"), "id: docs\ntype: git\nroot: sources/docs\n");
+    writeFileSync(
+      join(root, "sources", "design-docs.yaml"),
+      "id: design-docs\ntype: delegated\nvia: notion\nscope: The Design decisions page.\n",
+    );
+  });
+
+  test("a page already in doubt on the base passes, without --base it still fails", async () => {
+    citing("changed", "L3-L5");
+    writeFileSync(join(docs(), "a.md"), twentyLines({ 4: "rewritten" }), "utf-8");
+    git("commit", "-qam", "second");
+    const base = await baseReport();
+
+    expect(await drift("--base", base)).toBe(0);
+    // The rows alone would read as a failure; the first line says the base had it.
+    expect(output[0]).toBe("0 page(s) newly in doubt; 1 already in doubt on the base branch");
+    expect(output.join("\n")).toContain("1 page(s) in doubt:");
+    expect(await drift()).toBe(1);
+  });
+
+  test("a page the change put in doubt fails, and --json counts it", async () => {
+    citing("changed", "L3-L5");
+    const base = await baseReport();
+    writeFileSync(join(docs(), "a.md"), twentyLines({ 4: "rewritten" }), "utf-8");
+    git("commit", "-qam", "second");
+
+    expect(await drift("--json", "--base", base)).toBe(1);
+    expect(JSON.parse(output.join("\n")).pages_newly_in_doubt).toBe(1);
+    expect(await drift("--base", base)).toBe(1);
+    expect(output[0]).toBe("1 page(s) newly in doubt; 0 already in doubt on the base branch");
+  });
+
+  test("an empty base, as the action passes with none, fails on doubt but not on moved lines", async () => {
+    citing("moved", "L10-L12");
+    const empty = join(root, "empty.json");
+    writeFileSync(empty, JSON.stringify({ sources: [] }), "utf-8");
+    writeFileSync(join(docs(), "a.md"), `inserted\n${twentyLines()}`, "utf-8");
+    git("commit", "-qam", "moved");
+
+    expect(await drift("--json", "--base", empty)).toBe(0);
+    const { sources } = JSON.parse(output.join("\n")) as { sources: { source_id: string }[] };
+    expect(sources.find((s) => s.source_id === "docs")).toMatchObject({
+      repin: [{ page: "knowledge/moved.md" }],
+    });
+    expect(await drift()).toBe(1);
+
+    writeFileSync(join(docs(), "a.md"), `inserted\n${twentyLines({ 11: "rewritten" })}`, "utf-8");
+    git("commit", "-qam", "changed");
+    expect(await drift("--json", "--base", empty)).toBe(1);
+    expect(JSON.parse(output.join("\n")).pages_newly_in_doubt).toBe(1);
+  });
+
+  test("a page already unplaceable on the base passes; one newly unplaceable fails", async () => {
+    page("lost", `source: docs\nlast_verified_revision: ${UNKNOWN}\n`);
+    const base = await baseReport();
+
+    expect(await drift("--base", base)).toBe(0);
+    expect(await drift()).toBe(1);
+
+    page("also-lost", `source: docs\nlast_verified_revision: ${UNKNOWN}\n`);
+    expect(await drift("--json", "--base", base)).toBe(1);
+    expect(JSON.parse(output.join("\n")).pages_newly_unplaceable).toBe(1);
+  });
+
+  test("under --strict, a page already unverifiable passes; a new one fails", async () => {
+    page("bare", "source: docs\n");
+    const base = await baseReport();
+
+    expect(await drift("--strict", "--base", base)).toBe(0);
+    expect(await drift("--strict")).toBe(1);
+
+    page("also-bare", "source: docs\n");
+    expect(await drift("--strict", "--base", base)).toBe(1);
+    expect(await drift("--base", base)).toBe(0);
+  });
+
+  test("under --strict, a delegated page already pending passes; a new one fails", async () => {
+    delegated("design", "2026-08-01T10:22:00Z");
+    page("unrecorded", "source: design-docs\n");
+    const base = await baseReport();
+
+    expect(await drift("--strict", "--base", base)).toBe(0);
+    expect(await drift("--strict")).toBe(1);
+    // Re-verified through the connector: the same page, so no new work is left undone.
+    delegated("design", "2026-09-01T08:00:00Z");
+    expect(await drift("--strict", "--base", base)).toBe(0);
+    // From unverifiable to pending is the same page left unchecked, not a new one.
+    delegated("unrecorded", "2026-09-01T08:00:00Z");
+    expect(await drift("--strict", "--base", base)).toBe(0);
+
+    delegated("another", "2026-09-01T08:00:00Z");
+    expect(await drift("--strict", "--base", base)).toBe(1);
+    expect(await drift("--base", base)).toBe(0);
   });
 });

@@ -40,6 +40,19 @@ citation says where the claim came from but not *when*, and drift detection has 
 compare against. A page with citations that omit revisions is a page that can never be
 checked.
 
+**A citation covers its whole sentence.** Every fact in a cited sentence — a name, a value, a
+sequence, a condition, a cause — must be in the cited lines, in your words or theirs. Split off
+any that is not and give it its own footnote from `cite`, or drop it; never widen a range to
+cover it. Mark an inference as yours ("this suggests") and cite the lines it rests on; it never
+settles a disagreement (rule 3).
+
+```markdown
+Before: The assessed likely range is 2.5 to 4.0 degrees Celsius, narrowed by paleoclimate evidence.[^ecs]
+After:  The assessed likely range is 2.5 to 4.0 degrees Celsius.[^ecs] Paleoclimate evidence narrowed it.[^paleo]
+```
+
+`[^ecs]`'s lines give the range, not why it narrowed.
+
 ### 2. Never duplicate a source into the knowledge base
 
 Cite it. A page that reproduces three paragraphs of a source has created a second copy that
@@ -191,6 +204,9 @@ With a shell, use the CLI. Without one, the MCP tool beside it does the same.
 5. **Record the revision of the page's own `source`** in `last_verified_revision`. On a page
    you extended, only if you re-verified the whole page against it.
 6. **`accreta reindex`**, then **`accreta lint`**. Fix what it reports.
+7. **Before you stop, re-open the source lines cited by each footnote you added, re-pinned, or
+   whose sentence you changed — only those.** Lint checks that they exist, not what they say. Fix
+   any part they do not show as rule 1 says; if you changed anything, run step 6 again.
 
 A citation `cite` cannot pin comes back with `unknown` where the revision belongs, and lint
 reports it as `citation-unpinned`. Paste it as returned: never write a revision into it. For an
@@ -232,7 +248,7 @@ re-reading converts a detectable problem into an undetectable one, and is the si
 damaging thing you can do here.
 
 The loop is **drift → re-verify → cite → lint**: for each page drift names, re-read the changed
-parts, then follow Ingesting 4–6 with `--expect-revision` set to drift's revision for that source
+parts, then follow Ingesting 4–7 with `--expect-revision` set to drift's revision for that source
 (`source @ rev`; `current_revision` in JSON). If that fails, the source moved again: rerun drift.
 Repeat until drift exits 0.
 
