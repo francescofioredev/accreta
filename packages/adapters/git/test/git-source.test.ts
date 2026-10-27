@@ -23,7 +23,13 @@ import {
   pageChanges,
   UnknownRevisionError,
 } from "@accreta/core";
-import { GitCommandError, GitSource, isWorkingTree, TimeoutError } from "../src/index.ts";
+import {
+  GitCommandError,
+  GitSource,
+  isWorkingTree,
+  TimeoutError,
+  unmatchedPaths,
+} from "../src/index.ts";
 
 // Some tests spawn about 20 git processes, which a loaded machine stretches past the 5 s default.
 setDefaultTimeout(20_000);
@@ -459,6 +465,48 @@ describe("GitSource scoped to paths", () => {
       rmSync(outside, { recursive: true, force: true });
     }
   });
+
+  test.skipIf(process.platform === "win32")(
+    "a history git could not read is not taken for an entry no commit touched",
+    () => {
+      const bin = join(root, "bin");
+      mkdirSync(bin);
+      // ls-files finds no match; rev-list fails, as a timeout or a missing promisor tree would.
+      writeFileSync(
+        join(bin, "git"),
+        '#!/bin/sh\nfor a; do case "$a" in ls-files) exit 1;; rev-list) exit 128;; esac; done\nexit 0\n',
+      );
+      chmodSync(join(bin, "git"), 0o755);
+      const path = process.env.PATH;
+      process.env.PATH = bin;
+      try {
+        expect(unmatchedPaths(root, ["docs/zzz"])).toBeUndefined();
+      } finally {
+        process.env.PATH = path;
+      }
+    },
+  );
+
+  test.skipIf(process.platform === "win32")(
+    "loading a source never asks a promisor remote for a missing tree",
+    () => {
+      const bin = join(root, "bin");
+      mkdirSync(bin);
+      // Stands in for a treeless clone: rev-list fetches unless lazy fetch is off, then fails.
+      writeFileSync(
+        join(bin, "git"),
+        '#!/bin/sh\nfor a; do case "$a" in ls-files) exit 1;; rev-list) [ "$GIT_NO_LAZY_FETCH" = 1 ] && exit 128; exit 0;; esac; done\nexit 0\n',
+      );
+      chmodSync(join(bin, "git"), 0o755);
+      const path = process.env.PATH;
+      process.env.PATH = bin;
+      try {
+        expect(unmatchedPaths(root, ["docs/zzz"])).toBeUndefined();
+      } finally {
+        process.env.PATH = path;
+      }
+    },
+  );
 });
 
 const lines = (n: number, edit: Record<number, string> = {}) =>

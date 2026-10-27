@@ -136,10 +136,10 @@ export async function isWorkingTree(root: string): Promise<boolean> {
 function gitSync(root: string, args: string[], stdout: "pipe" | "ignore" = "pipe") {
   const file = executable("git");
   if (file === undefined) return { status: null, out: "" };
-  // Synchronous, so no process group: these calls run no filter or fsmonitor that could outlive git.
+  // No process group, so nothing may outlive git: these read no blob, and a promisor fetch is off.
   const result = spawnSync(file, [...HARDENED, ...args], {
     cwd: root,
-    env: gitEnv(),
+    env: gitEnv({ GIT_NO_LAZY_FETCH: "1" }),
     stdio: ["ignore", stdout, "ignore"],
     timeout: timeoutMs(),
     killSignal: "SIGKILL",
@@ -163,10 +163,12 @@ export function unmatchedPaths(root: string, paths: readonly string[]): string |
   if (matches(paths) !== 1) return undefined;
   // A deleted entry once matched, and drift must still report the deletion. A shallow clone cannot
   // see past its boundary, so there an entry deleted before it is refused.
-  const dead = paths.filter(
-    (entry) =>
-      matches([entry]) === 1 && gitSync(root, ["rev-list", "-1", "HEAD", "--", entry]).out === "",
-  );
+  const neverTouched = (entry: string) => {
+    const { status, out } = gitSync(root, ["rev-list", "-1", "HEAD", "--", entry]);
+    // A git that timed out or failed has not said no commit touched it.
+    return status === 0 && out === "";
+  };
+  const dead = paths.filter((entry) => matches([entry]) === 1 && neverTouched(entry));
   if (dead.length === 0) return undefined;
 
   const prefix = gitSync(root, ["rev-parse", "--show-prefix"]).out.trim();
