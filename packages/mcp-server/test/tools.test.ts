@@ -320,6 +320,28 @@ describe("source-backed tools", () => {
     expect(result.changed).toEqual([]);
   });
 
+  // #338: a ref used to list real changes; now it is refused, and the refusal says why.
+  test("list_recent_changes says a ref names no revision, and what to pass instead", async () => {
+    const full = "5b824c5e0f1a2b3c4d5e6f708192a3b4c5d6e7f8";
+    const asGit: SourceAdapter = {
+      ...lines(),
+      id: "repo",
+      knowsRevision: async (revision) => revision === "HEAD~5" || revision === full,
+      resolveRevision: async (revision) =>
+        revision === full ? { status: "resolved", revision } : { status: "unknown" },
+      changedSince: async (revision) => {
+        throw new UnknownRevisionError("repo", revision);
+      },
+    };
+    ctx.sources.set("repo", asGit);
+    const ref = await listRecentChangesTool(ctx, { source: "repo", since: "HEAD~5" });
+    expect(ref).toMatchObject({ unresolvable: true, changed: [] });
+    expect(ref.message).toContain('"HEAD~5" names a ref of source "repo", not a revision');
+    expect(ref.message).toContain("`cite` or `check_drift`");
+    const gone = await listRecentChangesTool(ctx, { source: "repo", since: "0".repeat(40) });
+    expect(gone.message).toContain("cannot resolve revision");
+  });
+
   test("an unknown source is named, not silently empty", async () => {
     const result = await listRecentChangesTool(ctx, { source: "nope", since: "x" });
     expect(result.message).toContain("No source named");
