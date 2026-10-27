@@ -30,7 +30,8 @@ Usage: accreta <command> [arguments]
   reindex                  Rebuild the index from the knowledge base
   lint                     Report unresolvable links, missing provenance, unknown types
   drift [--strict]         Report which pages their sources have moved out from under.
-                           --strict also fails on anything left unchecked
+                           --strict also fails on anything left unchecked;
+                           --source <id> checks that source alone
   doctor                   Report what is wired up, and what cannot be checked from here
   source add <type> <id>   Write a source declaration (--set key=value, repeatable)
   search <query>           Full-text search (--type <type>, repeatable; --source <id>;

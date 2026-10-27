@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { compileCitationTemplate, extractFootnotes } from "../src/citations.ts";
+import { compileCitationTemplate, extractFootnotes, readFootnotes } from "../src/citations.ts";
 import { DEFAULT_CONFIG } from "../src/config.ts";
 import { formatCitation } from "../src/source/adapter.ts";
 
@@ -171,5 +171,80 @@ describe("extractFootnotes", () => {
   test("definitions inside a code fence are examples, not citations", () => {
     const body = "```markdown\n[^x]: s @ r · p.md#L1\n```\n";
     expect(extractFootnotes(body)).toEqual([]);
+  });
+});
+
+describe("readFootnotes", () => {
+  test("a reference on a definition's indented continuation leads from that definition", () => {
+    const body = [
+      "A claim.[^a]",
+      "",
+      "[^a]: s @ r · p.md#L1",
+      "    read alongside [^b].",
+      "[^b]: s @ r · p.md#L2",
+      "[^c]: s @ r · p.md#L3",
+      "    which cites [^d].",
+      "[^d]: s @ r · p.md#L4",
+    ].join("\n");
+    expect(readFootnotes(body).orphans).toEqual([
+      { id: "c", line: 6, role: "definition" },
+      { id: "d", line: 8, role: "definition" },
+    ]);
+  });
+
+  test("an unindented line right after a definition continues it, as GFM reads it", () => {
+    const body = "[^a]: s @ r · p.md#L1\nLazy prose.[^a]";
+    expect(readFootnotes(body).orphans).toEqual([{ id: "a", line: 1, role: "definition" }]);
+  });
+
+  test("an unindented line after a blank line is a claim again", () => {
+    const body = "[^a]: s @ r · p.md#L1\n\nLater prose.[^a]";
+    expect(readFootnotes(body).orphans).toEqual([]);
+    expect(readFootnotes(body).footnotes[0]?.claim).toBe("Later prose.");
+  });
+
+  test("ids pair as GFM renderers fold labels", () => {
+    for (const [ref, def] of [
+      ["A", "a"],
+      ["\u00c9", "\u00e9"],
+      ["STRASSE", "stra\u00dfe"],
+      ["\u03a3", "\u03c2"],
+      ["\ufb01x", "fix"],
+    ]) {
+      const body = `Claim.[^${ref}]\n\n[^${def}]: s @ r · p.md#L1`;
+      expect({ ref, orphans: readFootnotes(body).orphans }).toEqual({ ref, orphans: [] });
+      expect(readFootnotes(body).footnotes[0]?.claim).toBe("Claim.");
+    }
+  });
+
+  test("a decomposed and a precomposed letter are different ids, as on GitHub", () => {
+    const body = "Claim.[^\u00e9]\n\n[^e\u0301]: s @ r · p.md#L1";
+    expect(readFootnotes(body).orphans.map((o) => o.role)).toEqual(["reference", "definition"]);
+  });
+
+  test("a heading or list item directly under a definition ends it", () => {
+    for (const start of ["## Next", "- item", "1. item", "> quote", "---\nBody"]) {
+      const body = `A claim.[^a]\n\n[^a]: s @ r · p.md#L1\n${start} cites.[^b]\n\n[^b]: s @ r · p.md#L2`;
+      const claim = readFootnotes(body).footnotes[1]?.claim ?? "";
+      expect({ start, claim: claim.endsWith("cites.") }).toEqual({ start, claim: true });
+    }
+  });
+
+  test("an escaped marker is not a reference", () => {
+    expect(readFootnotes("Write \\[^x] to cite.").orphans).toEqual([]);
+  });
+
+  test("a marker in inline code is not a claim, and the code stays in the claim", () => {
+    const body =
+      "Write `[^a]` to cite.\n\nUse `x[^a]` here.[^b]\n\n[^a]: s @ r · p.md#L1\n[^b]: s @ r · p.md#L2";
+    const [a, b] = readFootnotes(body).footnotes;
+    expect(a?.claim).toBe("");
+    expect(b?.claim).toBe("Use `x[^a]` here.");
+  });
+
+  test("a reference on a definition's continuation is not stored as body prose", () => {
+    const body =
+      "A claim.[^a]\n\n[^a]: s @ r · p.md#L1\n    read alongside [^b].\n[^b]: s @ r · p.md#L2";
+    expect(readFootnotes(body).footnotes[1]?.claim).toBe("");
   });
 });
