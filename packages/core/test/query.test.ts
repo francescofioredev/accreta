@@ -283,10 +283,14 @@ describe("searchPages on an underscore identifier", () => {
     ]);
   });
 
-  test("an identifier written in a title or an alias is matched too", () => {
+  test("an identifier in a title, an alias or escaped in markdown is matched too", () => {
     writePage(
       "notes/titled.md",
-      "---\ntype: note\n---\n\n# queue_depth\n\nHow full the queue is.\n",
+      "---\ntype: note\ntitle: queue_depth\n---\n\nHow full the queue is.\n",
+    );
+    writePage(
+      "notes/escaped.md",
+      "---\ntype: note\n---\n\n# Late answers\n\n`lag\\_seconds` per call.\n",
     );
     writePage(
       "notes/aliased.md",
@@ -296,6 +300,7 @@ describe("searchPages on an underscore identifier", () => {
     reindex();
     expect(ranked("queue_depth")).toEqual(["notes/titled.md"]);
     expect(ranked("retry_budget")).toEqual(["notes/aliased.md"]);
+    expect(ranked("lag_seconds")).toEqual(["notes/escaped.md"]);
   });
 });
 

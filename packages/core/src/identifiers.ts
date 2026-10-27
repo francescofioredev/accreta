@@ -5,5 +5,9 @@ const WORD = /[\p{L}\p{N}]/u;
 export function identifiersIn(text: string): string[] {
   // Most pages have no underscore, and a split per page is what the rebuild would pay for them.
   if (!text.includes("_")) return [];
-  return text.split(SEPARATOR).filter((run) => run.includes("_") && WORD.test(run));
+  // Markdown writes `stale\_served` for stale_served; the backslash must not split it.
+  return text
+    .replaceAll("\\_", "_")
+    .split(SEPARATOR)
+    .filter((run) => run.includes("_") && WORD.test(run));
 }

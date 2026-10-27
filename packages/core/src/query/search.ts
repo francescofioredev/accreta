@@ -43,7 +43,7 @@ export function searchPages(db: Database, options: SearchOptions): SearchHit[] {
   const identifiers = terms ? identifierMatch(terms) : "";
   if (identifiers !== "") {
     requireTable(db, "pages_identifiers");
-    // The `+` keeps the IN off pages_fts' index: there FTS5 re-ran the MATCH per rowid, 67ms against 0.7ms at 1,000 pages.
+    // The `+` keeps the IN off pages_fts' index: there FTS5 re-ran the MATCH per rowid, 30-100x slower.
     filters.push(
       "+pages_fts.rowid IN (SELECT rowid FROM pages_identifiers WHERE pages_identifiers MATCH ?)",
     );
