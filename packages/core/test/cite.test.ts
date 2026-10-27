@@ -14,6 +14,7 @@ import {
   formatCitation,
   parseCitation,
   type LocationVerdict,
+  type RevisionResolution,
   type SourceAdapter,
 } from "../src/source/adapter.ts";
 
@@ -506,5 +507,86 @@ describe("a delegated footnote under lint", () => {
     const linted = await lintFootnote(footnote);
     expect(linted.findings).toEqual([]);
     expect(linted.citationsUnchecked).toBe(1);
+  });
+});
+
+describe("an expected revision", () => {
+  const FULL = "5b824c5e0f1a2b3c4d5e6f708192a3b4c5d6e7f8";
+  const OLDER = "1111111e0f1a2b3c4d5e6f708192a3b4c5d6e7f8";
+  const target = { sourceId: "docs", path: "a.md", locator: "L1-L2" };
+  // Answers like a source with short revisions: a unique prefix, a shared one, or none.
+  const prefixed = (): SourceAdapter =>
+    Object.assign(
+      scripted("docs", async () => FULL),
+      {
+        resolveRevision: async (revision: string): Promise<RevisionResolution> => {
+          if (revision === "5b8") return { status: "ambiguous" };
+          const match = [FULL, OLDER].find((full) => full.startsWith(revision));
+          return match ? { status: "resolved", revision: match } : { status: "unknown" };
+        },
+      },
+    );
+  const refusal = (adapter: SourceAdapter, expectRevision: string) =>
+    cite(sources(adapter), FORMAT, target, { expectRevision }).then(
+      () => "",
+      (error: Error) => error.message,
+    );
+
+  test("passes when it is the current revision", async () => {
+    const result = await cite(sources(prefixed()), FORMAT, target, { expectRevision: FULL });
+    expect(result.revision).toBe(FULL);
+    expect(result.matchedPrefix).toBeUndefined();
+  });
+
+  // #259: the footnote said `5b824c5` and the source had not moved.
+  test("passes as a unique prefix of the current revision, and the footnote names it in full", async () => {
+    const result = await cite(sources(prefixed()), FORMAT, target, { expectRevision: "5b824c5" });
+    expect(result.revision).toBe(FULL);
+    expect(result.matchedPrefix).toBe("5b824c5");
+    expect(result.footnote).toBe(`docs @ ${FULL} · a.md#L1-L2`);
+  });
+
+  test("a prefix of an older revision says the source moved", async () => {
+    expect(await refusal(prefixed(), "1111111")).toContain(
+      `Source "docs" is at ${FULL}, not 1111111: it moved since you read it`,
+    );
+  });
+
+  test("an ambiguous prefix says so and asks for the full revision", async () => {
+    const message = await refusal(prefixed(), "5b8");
+    expect(message).toContain('5b8 is a prefix of more than one revision of source "docs"');
+    expect(message).toContain("full revision");
+    expect(message).not.toContain("moved");
+  });
+
+  test("an unknown prefix says so and asks for the full revision", async () => {
+    const message = await refusal(prefixed(), "abcdef0");
+    expect(message).toContain(
+      'Source "docs" has no revision abcdef0 (or its history was rewritten)',
+    );
+    expect(message).toContain("full revision");
+    expect(message).not.toContain("moved");
+  });
+
+  test("a source without prefixes compares exactly", async () => {
+    expect(
+      await refusal(
+        scripted("docs", async () => FULL),
+        "5b824c5",
+      ),
+    ).toContain(`Source "docs" is at ${FULL}, not 5b824c5: it moved since you read it`);
+  });
+
+  test("a delegated source cannot confirm it", async () => {
+    const wiki = scripted(
+      "wiki",
+      async () => {
+        throw new DelegatedSourceError("wiki", "notion", "The Design page.");
+      },
+      async () => ({ verdict: "unknown", detail: "read through notion" }),
+    );
+    await expect(
+      cite(sources(wiki), FORMAT, { sourceId: "wiki", path: "design" }, { expectRevision: "v7" }),
+    ).rejects.toThrow("it is delegated, and accreta cannot tell its revision");
   });
 });

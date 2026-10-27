@@ -26,6 +26,7 @@ export const LINT_FINDING_KINDS = [
   "citation-locator-missing",
   "citation-unpinned",
   "citation-revision-unknown",
+  "citation-revision-abbreviated",
   "verified-revision-unknown",
   "duplicate-footnote",
   "undefined-footnote",
@@ -462,18 +463,29 @@ export async function lintCitations(
     }
   }
 
-  // One question per revision, for the same reason as per location.
-  const revisions = new Map<string, Promise<boolean | null>>();
-  const knows = (adapter: SourceAdapter, revision: string) => {
+  // One question per revision, for the same reason as per location; the resolver goes first because it settles the common case alone.
+  type RevisionState = { known: boolean | null; full: string | null; ambiguous: boolean };
+  const revisions = new Map<string, Promise<RevisionState>>();
+  const revisionState = (adapter: SourceAdapter, revision: string) => {
     const key = `${adapter.id}\0${revision}`;
-    let known = revisions.get(key);
-    if (known === undefined) {
-      known = adapter.knowsRevision
-        ? adapter.knowsRevision(revision).catch(() => null)
-        : Promise.resolve(null);
-      revisions.set(key, known);
+    let state = revisions.get(key);
+    if (state === undefined) {
+      state = (async (): Promise<RevisionState> => {
+        const resolved = await Promise.resolve(adapter.resolveRevision?.(revision)).catch(
+          () => undefined,
+        );
+        if (resolved?.status === "resolved") {
+          return { known: true, full: resolved.revision, ambiguous: false };
+        }
+        if (resolved?.status === "ambiguous") return { known: false, full: null, ambiguous: true };
+        const known = adapter.knowsRevision
+          ? await adapter.knowsRevision(revision).catch(() => null)
+          : null;
+        return { known, full: null, ambiguous: false };
+      })();
+      revisions.set(key, state);
     }
-    return known;
+    return state;
   };
 
   // Drift reads this field only against the page's own source, so that is the history to ask.
@@ -488,11 +500,14 @@ export async function lintCitations(
     const adapter = sources.get(page.source);
     if (!adapter) continue;
     checkedPages.add(page.path);
-    if ((await knows(adapter, page.last_verified_revision)) === false) {
+    const state = await revisionState(adapter, page.last_verified_revision);
+    if (state.known === false) {
       findings.push({
         kind: "verified-revision-unknown",
         path: page.path,
-        detail: `source "${adapter.id}" cannot place last_verified_revision ${page.last_verified_revision} (history rewritten, shallow clone, or a different repository); re-verify against "${adapter.id}" before recording a revision`,
+        detail: state.ambiguous
+          ? `last_verified_revision ${page.last_verified_revision} now names several commits of source "${adapter.id}"; re-verify and record the full revision`
+          : `source "${adapter.id}" cannot place last_verified_revision ${page.last_verified_revision} (history rewritten, shallow clone, or a different repository); re-verify against "${adapter.id}" before recording a revision`,
       });
     }
   }
@@ -546,11 +561,23 @@ export async function lintCitations(
     }
 
     if (row.revision && row.revision !== UNPINNED_REVISION) {
-      if ((await knows(adapter, row.revision)) === false) {
+      const state = await revisionState(adapter, row.revision);
+      if (state.known === false) {
         findings.push({
           kind: "citation-revision-unknown",
           path: row.page_path,
-          detail: `${label} cites revision ${row.revision}, which source "${adapter.id}" does not have`,
+          detail: state.ambiguous
+            ? `${label} cites ${row.revision}, which now names several commits of source "${adapter.id}"; cite the full revision again`
+            : `${label} cites revision ${row.revision}, which source "${adapter.id}" does not have`,
+        });
+      } else if (state.full !== null && state.full !== row.revision) {
+        findings.push({
+          kind: "citation-revision-abbreviated",
+          path: row.page_path,
+          detail:
+            state.full.length === row.revision.length && state.full === row.revision.toLowerCase()
+              ? `${label} cites ${row.revision}, written in uppercase; write the lowercase form ${state.full}`
+              : `${label} cites ${row.revision}, an abbreviation that can turn ambiguous as source "${adapter.id}" grows; write ${state.full}`,
         });
       }
     }

@@ -298,6 +298,7 @@ an interruption to work around.
   source does not have, or a locator the source cannot place
 - **citations that name no revision, or one the source never had** — `unknown` where a
   revision belongs, or a commit that is not in the history
+- **abbreviated revisions** — a footnote naming a short revision; lint gives the full one to write
 - **footnotes that do not read as the configured format**, and footnote ids defined twice
 - **footnotes that do not pair up** — a reference with no definition, whose claim reads as cited
   and is not, or a definition no claim on the page leads to. Fix `undefined-footnote` by citing

@@ -27,6 +27,8 @@ export interface Citation {
   canonicalSource: string;
   /** Set when the source is read through a connector only the agent holds. */
   delegated?: { via: string; guidance: string };
+  /** The expected revision, when it matched `revision` as an abbreviation rather than exactly. */
+  matchedPrefix?: string;
 }
 
 export interface CiteOptions {
@@ -35,6 +37,8 @@ export interface CiteOptions {
    * The revision the cited content was read at, observed with that read, not after.
    */
   observedRevision?: string;
+  /** The revision cite gave before the read; refused unless the source is still there. */
+  expectRevision?: string;
 }
 
 /**
@@ -103,7 +107,46 @@ export async function cite(
   if (current instanceof DelegatedSourceError) {
     citation.delegated = { via: current.via, guidance: current.guidance };
   }
+  const expected = options.expectRevision;
+  if (expected !== undefined && revision !== expected) {
+    citation.matchedPrefix = await abbreviating(adapter, citation, expected);
+  }
   return citation;
+}
+
+/** `expected` when it abbreviates the citation's revision; otherwise why the place is not confirmed. */
+async function abbreviating(
+  adapter: SourceAdapter,
+  citation: Citation,
+  expected: string,
+): Promise<string> {
+  const { revision, canonicalSource, delegated } = citation;
+  const sourceId = adapter.id;
+  if (revision === null) {
+    throw new Error(
+      delegated
+        ? `Cannot confirm source "${sourceId}" is still at ${expected}: it is delegated, and accreta cannot tell its revision.`
+        : `Cannot confirm source "${sourceId}" is still at ${expected}: accreta could not check this place. Cite it without an expected revision to see why.`,
+    );
+  }
+  const resolved =
+    citation.revisionFrom === "source" ? await adapter.resolveRevision?.(expected) : undefined;
+  if (resolved?.status === "resolved" && resolved.revision === revision) return expected;
+  // Not "it moved" for a prefix: nothing says the source did, and re-reading would not help.
+  const again = `expect the full revision cite gave you before you read ${canonicalSource}.`;
+  if (resolved?.status === "ambiguous") {
+    throw new Error(
+      `${expected} is a prefix of more than one revision of source "${sourceId}": ${again}`,
+    );
+  }
+  if (resolved?.status === "unknown") {
+    throw new Error(
+      `Source "${sourceId}" has no revision ${expected} (or its history was rewritten): ${again}`,
+    );
+  }
+  throw new Error(
+    `Source "${sourceId}" is at ${revision}, not ${expected}: it moved since you read it, or ${expected} did not come from cite. Re-read ${canonicalSource}, then cite again.`,
+  );
 }
 
 // Widen deliberately when a real connector needs it.

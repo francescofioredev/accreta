@@ -162,6 +162,7 @@ const REFUSED: { argv: string[]; says: string }[] = [
 ];
 
 let root = "";
+let first = "";
 let head = "";
 let ctx: ToolContext;
 let client: Client;
@@ -218,7 +219,7 @@ beforeAll(async () => {
     }
     return Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: repo }).stdout.toString().trim();
   };
-  const first = commit(["init", "-q"], ["add", "."], ["commit", "-qm", "first"]);
+  first = commit(["init", "-q"], ["add", "."], ["commit", "-qm", "first"]);
   write("src-repo/b.md", "bee, rewritten\n");
   head = commit(["commit", "-qam", "second"]);
   write(
@@ -549,12 +550,48 @@ describe("cite", () => {
     expect(JSON.parse(fromCli.stdout)).toStrictEqual(JSON.parse(fromMcp.text));
   });
 
+  // #259: a 7-character revision the source is still at was refused as "it moved".
+  test("the expected revision passes as a unique prefix, and the footnote names it in full", async () => {
+    const short = head.slice(0, 7);
+    const fromCli = await cli(["cite", "repo:a.md#L1", "--expect-revision", short, "--json"]);
+    const fromMcp = await mcp("cite", { target: "repo:a.md#L1", expect_revision: short });
+    expect(fromCli.code).toBe(0);
+    expect(fromMcp.isError).toBe(false);
+    const out = JSON.parse(fromCli.stdout);
+    expect(out).toStrictEqual(JSON.parse(fromMcp.text));
+    expect(out.revision).toBe(head);
+    expect(out.footnote).toContain(head);
+    expect(out.matched_prefix).toBe(short);
+
+    const text = await cli(["cite", "repo:a.md#L1", "--expect-revision", short]);
+    expect(text.code).toBe(0);
+    expect(text.stdout).toContain(`revision: ${head}`);
+    expect(text.stderr).toContain(`matched ${head} as a prefix`);
+  });
+
+  test("an expected revision the source has since left says it moved", async () => {
+    const args = { target: "repo:a.md#L1", expect_revision: first.slice(0, 7) };
+    const fromCli = await cli([
+      "cite",
+      args.target,
+      "--json",
+      "--expect-revision",
+      first.slice(0, 7),
+    ]);
+    const fromMcp = await mcp("cite", args);
+    expect(fromCli.code).toBe(1);
+    expect(fromCli.stderr).toBe(fromMcp.text);
+    expect(fromMcp.text).toContain(
+      `is at ${head}, not ${first.slice(0, 7)}: it moved since you read it`,
+    );
+  });
+
   // The same sentence on both surfaces, never a footnote; the CLI exits 2 for bad input, 1 for a refusal.
   const refusals = [
     {
-      name: "the source moved after the read",
+      name: "a revision the source never had",
       args: { target: "repo:a.md#L1", expect_revision: "0000000" },
-      says: "not 0000000: it moved since you read it, or 0000000 did not come from cite",
+      says: 'Source "repo" has no revision 0000000 (or its history was rewritten)',
       code: 1,
     },
     {

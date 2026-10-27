@@ -506,17 +506,9 @@ export async function citeTool(
   const why = notLoaded(ctx, target.sourceId);
   if (why) throw new Error(why);
 
-  const citation = await cite(ctx.sources, ctx.config.provenanceFormat, target);
-  const expected = input.expect_revision;
-  if (expected !== undefined && citation.revision !== expected) {
-    throw new Error(
-      citation.revision !== null
-        ? `Source "${target.sourceId}" is at ${citation.revision}, not ${expected}: it moved since you read it, or ${expected} did not come from cite. Re-read ${citation.canonicalSource}, then cite again.`
-        : citation.delegated
-          ? `Cannot confirm source "${target.sourceId}" is still at ${expected}: it is delegated, and accreta cannot tell its revision.`
-          : `Cannot confirm source "${target.sourceId}" is still at ${expected}: accreta could not check this place. Cite it without an expected revision to see why.`,
-    );
-  }
+  const citation = await cite(ctx.sources, ctx.config.provenanceFormat, target, {
+    expectRevision: input.expect_revision,
+  });
   return {
     canonical_source: citation.canonicalSource,
     footnote: citation.footnote,
@@ -526,6 +518,7 @@ export async function citeTool(
     ...(citation.delegated
       ? { delegated: { via: citation.delegated.via, scope: citation.delegated.guidance } }
       : {}),
+    ...(citation.matchedPrefix !== undefined ? { matched_prefix: citation.matchedPrefix } : {}),
     _provenance: provenance(CITE_FIELDS, SOURCE_NOTICE),
   };
 }
