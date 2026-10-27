@@ -180,7 +180,18 @@ paths: []
     }
     const bad = checkDirectory(root);
     if (bad) return bad;
-    if (!(await isWorkingTree(root))) {
+    let repository: boolean;
+    try {
+      repository = await isWorkingTree(root);
+    } catch (error) {
+      return {
+        reachable: "no",
+        detail: `git could not run: ${error instanceof Error ? error.message : String(error)}`,
+        remedy:
+          "Put git 2.24 or newer on PATH (2.38 or newer to refuse a git dir inside the corpus), or raise ACCRETA_GIT_TIMEOUT_MS if it timed out.",
+      };
+    }
+    if (!repository) {
       return {
         reachable: "no",
         detail: `${root} is not a git repository`,
