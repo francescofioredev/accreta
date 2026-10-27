@@ -226,6 +226,15 @@ describe("MCP prompts", () => {
     expect(text).toContain("On a page you extended, leave its revision alone");
   });
 
+  test("ingest and reverify check that each cited sentence is in its lines", async () => {
+    const ingest = await withClient(false, (c) => render(c, "ingest_source"));
+    expect(ingest).toContain("re-open the source lines cited by each footnote you added");
+    expect(ingest).toContain("never widen a range to cover it");
+    expect(await reverify()).toContain(
+      "check every fact in each re-cited sentence is in its lines",
+    );
+  });
+
   test("reverify with no source checks all of them", async () => {
     const text = await withClient(false, (c) => render(c, "reverify_stale_pages", {}));
     expect(text).toContain("Call `check_drift`. ");
