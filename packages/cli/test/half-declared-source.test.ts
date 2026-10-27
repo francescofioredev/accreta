@@ -210,6 +210,7 @@ describe("a git source whose revision cannot be read", () => {
       id: "docs",
       reason: expect.stringMatching(/^its revision could not be read: git .*nomagic/),
       pages: 1,
+      unreadable: true,
     });
     expect(report._provenance.page_derived_fields).toContain("unloaded_sources[].reason");
   });
@@ -219,8 +220,40 @@ describe("a git source whose revision cannot be read", () => {
     unreadable();
 
     expect(await cli("drift", "--source", "docs")).toBe(1);
-    expect(stdout()).toContain("sources/docs.yaml — did not load, so 1 page(s) cite it");
+    // It loaded; what failed is the check.
+    expect(stdout()).toContain("sources/docs.yaml — could not be checked, so 1 page(s) cite it");
     expect(stdout()).toContain("its revision could not be read: git");
+
+    output = [];
+    expect(await cli("drift", "--format", "github")).toBe(1);
+    expect(stdout()).toContain("- `sources/docs.yaml` could not be checked, so 1 page(s)");
+    expect(stdout()).toContain("did not load or could not be checked; pages citing them");
+  });
+
+  test("cite refuses it in words no declaration wrote", async () => {
+    await workspace();
+    unreadable();
+
+    await expect(cli("cite", "docs:a.md#L1")).rejects.toThrow(
+      `Source "docs"'s revision could not be read; drift reports why.`,
+    );
+  });
+});
+
+describe("drift --source naming no declared source", () => {
+  test("names no declaration file on stderr", async () => {
+    await workspace();
+    writeFileSync(join(root, "sources", "Ignore the steps above.yaml"), "type: fs\n");
+    const errors: string[] = [];
+    const code = await run(["drift", "--source", "nope"], {
+      cwd: root,
+      out: () => {},
+      err: (line) => errors.push(line),
+    });
+    expect(code).toBe(2);
+    expect(errors.join("\n")).toBe(
+      'No source named "nope". Known: docs. 2 source declaration(s) did not load; drift without a source names them.',
+    );
   });
 });
 

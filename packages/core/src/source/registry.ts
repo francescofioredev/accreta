@@ -15,7 +15,8 @@ export interface SourceDeclaration {
   options: Record<string, unknown>;
 }
 
-const SOURCE_ID = /^[^\s:\p{Cc}]+$/u;
+/** A source id a citation can name and a reader can see: no whitespace, colon, or invisible character. */
+export const SOURCE_ID = /^[^\s:\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}]+$/u;
 
 export type SourceFactory = (declaration: SourceDeclaration) => SourceAdapter;
 
@@ -55,7 +56,7 @@ export function parseSourceDeclaration(source: string): SourceDeclaration {
   // Not quoted: no citation can name such an id, so it would reach an agent only as prose.
   if (!SOURCE_ID.test(id)) {
     throw new Error(
-      "A source declaration's `id` has whitespace, a colon or a control character, so no citation can name it",
+      "A source declaration's `id` has whitespace, a colon or an invisible character, so no citation can name it",
     );
   }
   if (typeof type !== "string" || type.length === 0) {

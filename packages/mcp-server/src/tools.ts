@@ -31,6 +31,7 @@ import {
   noSourceNamed,
   notLoadedError,
   unloadedFindings,
+  withRevisionRefusal,
   type UnloadedSource,
 } from "@accreta/adapters";
 import type { GetPageOutput, HitOutput, PageOutput, SearchPagesOutput } from "./schemas.ts";
@@ -52,6 +53,8 @@ export interface ToolContext {
   sources: Map<string, SourceAdapter>;
   /** Declarations that did not build; reported by lint and drift instead of stopping the server. */
   unloadedSources: UnloadedSource[];
+  /** The declaration file each source was built from, for reporting one that fails. */
+  sourceFiles?: ReadonlyMap<string, string>;
   /** Whether write tools are permitted. Off unless ACCRETA_ALLOW_WRITES is set. */
   writesEnabled: boolean;
 }
@@ -398,8 +401,16 @@ async function checkDrift(ctx: ToolContext, db: Database, input: { source?: stri
     };
   }
 
-  const { reports, unreadable } = await detectDriftEach(db, adapters, ctx.root);
+  const { reports, unreadable } = await detectDriftEach(db, adapters, ctx.sourceFiles ?? new Map());
   const unloaded_sources = countUnchecked(db, [...ctx.unloadedSources, ...unreadable]);
+  if (input.source && reports.length === 0) {
+    return {
+      message: `Source "${input.source}"'s revision could not be read; see unloaded_sources.`,
+      reports: [],
+      unloaded_sources,
+      _provenance: provenance(EARLY_FIELDS, DRIFT_NOTICE),
+    };
+  }
 
   // Renamed here rather than in `DriftReport` itself: the CLI reads the core
   // shape directly, so moving the names would break it to tidy this surface.
@@ -532,7 +543,11 @@ export async function citeTool(
   }
   if (notLoaded(ctx, target.sourceId)) throw new Error(notLoadedError(target.sourceId));
 
-  const citation = await cite(ctx.sources, ctx.config.provenanceFormat, target, {
+  const adapter = ctx.sources.get(target.sourceId);
+  const sources = adapter
+    ? new Map(ctx.sources).set(target.sourceId, withRevisionRefusal(adapter))
+    : ctx.sources;
+  const citation = await cite(sources, ctx.config.provenanceFormat, target, {
     expectRevision: input.expect_revision,
   });
   return {
@@ -649,7 +664,7 @@ export async function updateVerifiedRevisionTool(ctx: ToolContext, input: Update
   let sourceRevision: string | null;
   let delegated = false;
   try {
-    sourceRevision = await adapter.revision();
+    sourceRevision = await withRevisionRefusal(adapter).revision();
   } catch (error) {
     if (!(error instanceof DelegatedSourceError)) throw error;
     sourceRevision = null;

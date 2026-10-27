@@ -279,6 +279,23 @@ describe("MCP prompts", () => {
     });
   });
 
+  // An unreachable source reports no pages, so without this reverify could end at `reports: []`.
+  test("reverify sends each unloaded source to the unreachable step, with its page count", async () => {
+    const text = await reverify();
+    expect(text).toMatch(/`unloaded_sources`[^\n]*cannot reach[^\n]*step 2[^\n]*`pages`/);
+  });
+
+  test("the prompt takes a source id only where the registry would load it", async () => {
+    await withClient(false, async (client) => {
+      await expect(
+        client.getPrompt({
+          name: "reverify_stale_pages",
+          arguments: { source: "docs\u{e0049}\u{e0047}\u{e004e}" },
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
   test("a source id the registry accepts renders", async () => {
     await withClient(false, async (client) => {
       expect(await render(client, "reverify_stale_pages", { source: "ietf/rfc" })).toContain(

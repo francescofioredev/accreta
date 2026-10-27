@@ -5,7 +5,7 @@ import {
   type ParsedCitation,
   type SourceAdapter,
 } from "@accreta/core";
-import { notLoadedError } from "@accreta/adapters";
+import { notLoadedError, withRevisionRefusal } from "@accreta/adapters";
 import { findWorkspace } from "../workspace.ts";
 import {
   loadSources,
@@ -94,7 +94,9 @@ export async function cite(
   // No index: a citation asks the source, never the pages.
   const workspace = findWorkspace(ctx.cwd);
   const loaded = loadSources(workspace);
-  const sources = new Map(loaded.sources.map((adapter) => [adapter.id, revisionOnce(adapter)]));
+  const sources = new Map(
+    loaded.sources.map((adapter) => [adapter.id, revisionOnce(withRevisionRefusal(adapter))]),
+  );
   // Every target is checked before any is cited, so bad input prints no partial answer.
   for (const target of targets) {
     if (loaded.unloaded.some((u) => u.id === target.sourceId)) {

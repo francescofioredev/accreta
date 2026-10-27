@@ -469,7 +469,7 @@ describe("drift --source checks what check_drift {source} checks", () => {
     expect(cliOut.stdout).toBe("");
     expect(cliOut.stderr).toBe(mcpOut.message);
     expect(cliOut.stderr).toBe(
-      'No source named "nope". Known: docs, repo, wiki. Did not load: sources/typo.yaml.',
+      'No source named "nope". Known: docs, repo, wiki. 1 source declaration(s) did not load; drift without a source names them.',
     );
   });
 

@@ -52,8 +52,11 @@ const PROBES: Record<string, Probe[]> = {
     { target: "quoting:p#b1" },
     { target: "agent:ticket-1" },
     { target: "broken:a.md" },
+    { target: "failing:a.md" },
   ],
   [WRITE_TOOL]: [
+    // Its source's revision fails, with git's error quoting the declaration's `paths`.
+    { path: "notes/unreadable", revision: "deadbeef" },
     // Refused: the page's own source is page text, echoed back.
     { path: "notes/foreign-source", revision: "deadbeef" },
     { path: "notes/unsourced", revision: "deadbeef" },
@@ -74,7 +77,7 @@ const PROBES: Record<string, Probe[]> = {
 };
 
 // Read probes refused by design; the error text is still swept, as an unmarked string.
-const EXPECTED_ERRORS = ['cite {"target":"broken:a.md"}'];
+const EXPECTED_ERRORS = ['cite {"target":"broken:a.md"}', 'cite {"target":"failing:a.md"}'];
 
 // Prompts carry no page or source text, so any canary in one is a leak; each argument names injected text.
 const PROMPT_PROBES: Record<string, Record<string, string>> = {
@@ -474,7 +477,7 @@ describe("every tool response, against pages that try to give instructions", () 
   });
 
   // A declaration's text reaches a reply only labelled; an id the grammar refuses reaches none (#362).
-  test("every canary in sources/*.yaml reaches some response, except a prose id", () => {
+  test("every canary in sources/*.yaml reaches some response, except an id no citation can name", () => {
     const dir = join(FIXTURE, "sources");
     const planted = readdirSync(dir)
       .filter((name) => name.endsWith(".yaml"))
@@ -483,9 +486,10 @@ describe("every tool response, against pages that try to give instructions", () 
         ...canariesIn(readFileSync(join(dir, name), "utf-8")),
       ]);
     const seen = new Set([...seenBy.values()].flatMap((channels) => [...channels]));
-    expect(planted).toEqual(expect.arrayContaining(["DECLFILE", "DECLID", "TYPE", "PROSEID"]));
-    expect([...new Set(planted)].filter((c) => c !== "PROSEID" && !seen.has(c))).toEqual([]);
-    expect(seen.has("PROSEID")).toBe(false);
+    const refused = ["PROSEID", "TAGID"];
+    expect(planted).toEqual(expect.arrayContaining(["DECLFILE", "DECLID", "TYPE", ...refused]));
+    expect([...new Set(planted)].filter((c) => !refused.includes(c) && !seen.has(c))).toEqual([]);
+    expect(refused.filter((c) => seen.has(c))).toEqual([]);
     // A source whose revision fails is reported, not an error that ends the call.
     expect(seen.has("PATHS")).toBe(true);
   });

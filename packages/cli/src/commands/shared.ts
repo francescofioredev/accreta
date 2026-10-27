@@ -24,13 +24,18 @@ export interface CommandContext {
 export function loadSources(workspace: Workspace): {
   sources: SourceAdapter[];
   unloaded: UnloadedSource[];
+  files: Map<string, string>;
 } {
   const loaded = loadDeclaredSources({
     root: workspace.root,
     citationFormat: workspace.config.provenanceFormat,
     stateDir: stateDirFor(workspace.root, workspace.indexPath),
   });
-  return { sources: [...loaded.sources.values()], unloaded: loaded.unloaded };
+  return {
+    sources: [...loaded.sources.values()],
+    unloaded: loaded.unloaded,
+    files: loaded.files,
+  };
 }
 
 export function withIndex<T>(
