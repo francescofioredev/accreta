@@ -230,7 +230,12 @@ export function createServer(ctx: ToolContext): McpServer {
         PAGE_DERIVED,
       inputSchema: {
         source: z.string().min(1).describe("Source id, as declared in sources/."),
-        since: z.string().min(1).describe("Revision to compare against."),
+        since: z
+          .string()
+          .min(1)
+          .describe(
+            "Revision to compare against, as `cite` or `check_drift` gave it; a ref such as `HEAD` or a branch is unresolvable.",
+          ),
       },
     },
     async (input: { source: string; since: string }) =>

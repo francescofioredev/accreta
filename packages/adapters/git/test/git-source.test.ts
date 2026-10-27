@@ -1400,6 +1400,11 @@ describe("a revision that names a ref, not a commit", () => {
     expect(report.stale.map((entry) => [entry.revision, entry.changedPaths])).toEqual([
       [prefix, ["a.md"]],
     ]);
+    const { findings } = await withPage("", `repo @ ${prefix} · a.md#L2`, (db) =>
+      lintCitations(db, new Map([["repo", git]])),
+    );
+    expect(findings.map((f) => f.kind)).toEqual(["citation-revision-abbreviated"]);
+    expect(findings[0]?.detail).toContain(`write ${first}`);
   });
 
   test("cite refuses a ref as one, as lint reports it, and reads a shadowed prefix as the commit", async () => {
