@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { CitedChange, DriftReport, StaleRevision } from "@accreta/core";
-import { printText, toGithub, toJson } from "../src/commands/drift.ts";
+import { printReports, printText, toGithub, toJson } from "../src/commands/drift.ts";
 
 const PAGE = "knowledge/contradiction.md";
 
@@ -52,6 +52,32 @@ describe("drift counts each page once", () => {
     expect(json.pages_in_doubt).toBe(1);
     expect(json.pages_newly_in_doubt).toBe(1);
     expect(toGithub(reports)).toContain("**1 page in doubt:**");
+    const lines: string[] = [];
+    printReports({ out: (line: string) => lines.push(line) }, reports);
+    expect(lines.filter((line) => line === "  1 page(s) in doubt:")).toHaveLength(2);
+    expect(lines.at(-1)).toBe("1 page(s) in doubt across 2 sources");
+  });
+
+  test("one source prints no total", () => {
+    const lines: string[] = [];
+    printReports({ out: (line: string) => lines.push(line) }, [
+      report("ipcc", [stale("a1", "a", false)]),
+    ]);
+    expect(lines.join("\n")).not.toContain("across");
+  });
+
+  test("no total when nothing is in doubt, so a failing run does not end on all clear", () => {
+    const moved: StaleRevision = {
+      ...stale("a1", "a", false),
+      citations: [{ ...touched("a1", "a"), change: { status: "moved", locator: "L6-L8" } }],
+    };
+    const lines: string[] = [];
+    printReports({ out: (line: string) => lines.push(line) }, [
+      report("ipcc", [moved]),
+      report("noaa", []),
+    ]);
+    expect(lines.join("\n")).toContain("no page in doubt; 1 to re-pin or re-verify");
+    expect(lines.join("\n")).not.toContain("across");
   });
 
   test("a page with footnotes pinned at two stale revisions", () => {
