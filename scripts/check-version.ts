@@ -45,15 +45,26 @@ export function skillRequires(): string | null {
   return frontmatter ? (/^\s+requires:\s*"?([^"\s]+)"?$/m.exec(frontmatter)?.[1] ?? null) : null;
 }
 
-/** Ascending, on the three numeric parts. */
-function compareVersions(a: string, b: string): number {
-  const parts = (v: string) => v.split(".").map(Number);
-  const [left, right] = [parts(a), parts(b)];
-  for (let i = 0; i < 3; i++) {
-    const diff = (left[i] ?? 0) - (right[i] ?? 0);
+const VERSION = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
+
+/** Semver precedence, as the CLI's doctor compares; null when either is not a version. */
+export function compareVersions(a: string, b: string): number | null {
+  const [left, right] = [VERSION.exec(a), VERSION.exec(b)];
+  if (!left || !right) return null;
+  for (let i = 1; i <= 3; i++) {
+    const diff = Number(left[i]) - Number(right[i]);
     if (diff !== 0) return diff;
   }
-  return 0;
+  if (!left[4] || !right[4]) return left[4] ? -1 : right[4] ? 1 : 0;
+  const [x, y] = [left[4].split("."), right[4].split(".")];
+  for (let i = 0; i < Math.min(x.length, y.length); i++) {
+    const [p, q] = [x[i]!, y[i]!];
+    const [pNum, qNum] = [/^\d+$/.test(p), /^\d+$/.test(q)];
+    if (pNum && qNum && Number(p) !== Number(q)) return Number(p) - Number(q);
+    if (pNum !== qNum) return pNum ? -1 : 1;
+    if (p !== q) return p < q ? -1 : 1;
+  }
+  return x.length - y.length;
 }
 
 /** Returns the disagreements, so the caller can report all of them at once. */
@@ -70,8 +81,9 @@ export function mismatches(expected: string): string[] {
 export function floorTooNew(expected: string): string | null {
   const requires = skillRequires();
   if (requires === null) return `  ${SKILL} declares no metadata.requires`;
-  if (compareVersions(requires, expected) > 0)
-    return `  ${SKILL} requires ${requires}, which is newer than ${expected}`;
+  const order = compareVersions(requires, expected);
+  if (order === null) return `  ${SKILL} requires ${requires}, and ${expected} is not comparable`;
+  if (order > 0) return `  ${SKILL} requires ${requires}, which is newer than ${expected}`;
   return null;
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "@accreta/adapters",
-  "version": "0.1.4",
+  "version": "0.2.0-rc.1",
   "type": "module",
   "license": "MIT",
   "description": "Every source adapter this build knows how to construct, and the loader that reads sources/.",
@@ -30,10 +30,10 @@
     "dist"
   ],
   "dependencies": {
-    "@accreta/adapter-delegated": "0.1.4",
-    "@accreta/adapter-fs": "0.1.4",
-    "@accreta/adapter-git": "0.1.4",
-    "@accreta/core": "0.1.4"
+    "@accreta/adapter-delegated": "0.2.0-rc.1",
+    "@accreta/adapter-fs": "0.2.0-rc.1",
+    "@accreta/adapter-git": "0.2.0-rc.1",
+    "@accreta/core": "0.2.0-rc.1"
   },
   "scripts": {
     "build": "bun ../../../scripts/build-package.ts",

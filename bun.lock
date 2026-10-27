@@ -33,64 +33,64 @@
     },
     "packages/adapters/delegated": {
       "name": "@accreta/adapter-delegated",
-      "version": "0.1.4",
+      "version": "0.2.0-rc.1",
       "dependencies": {
-        "@accreta/core": "0.1.4",
+        "@accreta/core": "0.2.0-rc.1",
       },
     },
     "packages/adapters/fs": {
       "name": "@accreta/adapter-fs",
-      "version": "0.1.4",
+      "version": "0.2.0-rc.1",
       "dependencies": {
-        "@accreta/core": "0.1.4",
+        "@accreta/core": "0.2.0-rc.1",
       },
     },
     "packages/adapters/git": {
       "name": "@accreta/adapter-git",
-      "version": "0.1.4",
+      "version": "0.2.0-rc.1",
       "dependencies": {
-        "@accreta/core": "0.1.4",
+        "@accreta/core": "0.2.0-rc.1",
       },
     },
     "packages/adapters/registry": {
       "name": "@accreta/adapters",
-      "version": "0.1.4",
+      "version": "0.2.0-rc.1",
       "dependencies": {
-        "@accreta/adapter-delegated": "0.1.4",
-        "@accreta/adapter-fs": "0.1.4",
-        "@accreta/adapter-git": "0.1.4",
-        "@accreta/core": "0.1.4",
+        "@accreta/adapter-delegated": "0.2.0-rc.1",
+        "@accreta/adapter-fs": "0.2.0-rc.1",
+        "@accreta/adapter-git": "0.2.0-rc.1",
+        "@accreta/core": "0.2.0-rc.1",
       },
     },
     "packages/cli": {
       "name": "accreta",
-      "version": "0.1.4",
+      "version": "0.2.0-rc.1",
       "bin": {
         "accreta": "./dist/bin.js",
       },
       "dependencies": {
-        "@accreta/adapters": "0.1.4",
-        "@accreta/core": "0.1.4",
-        "@accreta/mcp-server": "0.1.4",
+        "@accreta/adapters": "0.2.0-rc.1",
+        "@accreta/core": "0.2.0-rc.1",
+        "@accreta/mcp-server": "0.2.0-rc.1",
         "smol-toml": "^1.9.0",
       },
     },
     "packages/core": {
       "name": "@accreta/core",
-      "version": "0.1.4",
+      "version": "0.2.0-rc.1",
       "dependencies": {
         "yaml": "^2.7.0",
       },
     },
     "packages/mcp-server": {
       "name": "@accreta/mcp-server",
-      "version": "0.1.4",
+      "version": "0.2.0-rc.1",
       "bin": {
         "accreta-mcp": "./dist/bin.js",
       },
       "dependencies": {
-        "@accreta/adapters": "0.1.4",
-        "@accreta/core": "0.1.4",
+        "@accreta/adapters": "0.2.0-rc.1",
+        "@accreta/core": "0.2.0-rc.1",
         "@modelcontextprotocol/sdk": "^1.30.0",
         "zod": "^4.1.0",
       },
