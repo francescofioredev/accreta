@@ -12,6 +12,7 @@ import {
   type LocatorChange,
   type SourceAdapter,
 } from "@accreta/core";
+import { countUnchecked, type UncheckedSource } from "@accreta/adapters";
 import { drift, printText, readBase, toGithub, toJson } from "../src/commands/drift.ts";
 import { loadSources } from "../src/commands/shared.ts";
 import { findWorkspace } from "../src/workspace.ts";
@@ -113,6 +114,7 @@ function taint<T>(value: T, key = ""): T {
 
 let root = "";
 const runs: DriftReport[][] = [];
+let unloaded: UncheckedSource[] = [];
 
 beforeAll(async () => {
   root = mkdtempSync(join(tmpdir(), "accreta-drift-provenance-"));
@@ -121,9 +123,12 @@ beforeAll(async () => {
   const config = parseConfig(readFileSync(join(root, "accreta.config.yaml"), "utf-8"));
   const indexPath = join(root, ".accreta", "index.sqlite");
   buildIndex({ root, config, indexPath });
-  const docs = loadSources(findWorkspace(root)).sources;
+  const loaded = loadSources(findWorkspace(root));
+  const docs = loaded.sources;
   const db = openIndex(indexPath, { readonly: true });
   try {
+    // The fixture's hostile declarations, which `unloaded_sources` quotes.
+    unloaded = countUnchecked(db, loaded.unloaded);
     // Touched lines fill `in_doubt`, moved ones `repin`: no single run shows both for one citation.
     for (const change of [{ status: "touched" }, { status: "moved", locator: "L9" }] as const) {
       const run: DriftReport[] = [];
@@ -148,10 +153,10 @@ afterAll(() => {
 
 describe("drift --json against pages that try to give instructions", () => {
   const payloads = () => {
-    const plain = runs.map((reports) => toJson(reports));
+    const plain = runs.map((reports) => toJson(reports, undefined, unloaded));
     const basePath = join(root, "base.json");
     writeFileSync(basePath, JSON.stringify(plain[0]));
-    return [...plain, ...runs.map((reports) => toJson(reports, readBase(basePath)))];
+    return [...plain, ...runs.map((reports) => toJson(reports, readBase(basePath), unloaded))];
   };
 
   test("every page-authored string sits in a field _provenance names", () => {
@@ -286,13 +291,13 @@ describe("drift's other formats, against the same pages", () => {
   });
 
   test("the text format escapes a broken declaration's file and reason", async () => {
-    const hostile = 'id: "dup\\e[2J"\ntype: fs\nroot: sources/docs\n';
+    // In `type`: an id holding a control character no longer loads far enough to be quoted.
+    const hostile = 'id: dup\ntype: "fs\\e[2J"\nroot: sources/docs\n';
     writeFileSync(join(root, "sources", "dup\u200b-a.yaml"), hostile);
-    writeFileSync(join(root, "sources", "dup-b.yaml"), hostile);
     const lines: string[] = [];
     const code = await drift({ cwd: root, out: (line) => lines.push(line), err: () => {} });
     expect(code).toBe(1);
-    expect(lines.join("\n")).toContain("dup\\u001b[2J");
+    expect(lines.join("\n")).toContain("fs\\u001b[2J");
     expect(lines.join("\n")).toContain("dup\\u200b-a.yaml");
     expect(lines.filter((line) => UNSAFE.test(line))).toEqual([]);
 

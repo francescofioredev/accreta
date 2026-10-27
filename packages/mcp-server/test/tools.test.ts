@@ -15,6 +15,7 @@ import {
 import { buildRegistry } from "@accreta/adapters";
 import {
   checkDriftTool,
+  citeTool,
   findCanonicalTool,
   findConsumersTool,
   getPageTool,
@@ -345,6 +346,60 @@ describe("source-backed tools", () => {
   test("an unknown source is named, not silently empty", async () => {
     const result = await listRecentChangesTool(ctx, { source: "nope", since: "x" });
     expect(result.message).toContain("No source named");
+  });
+
+  // One source git cannot read must not take every other source's report with it (#362).
+  test("check_drift reports a source whose revision fails beside the unloaded, and checks the rest", async () => {
+    const stderr =
+      "git rev-list -1 HEAD -- :(nomagic)a failed (128): fatal: Invalid pathspec magic";
+    ctx.sources.set("broken", {
+      ...lines(),
+      id: "broken",
+      revision: async () => {
+        throw new Error(`${stderr}\nsecond line`);
+      },
+    });
+    ctx.sourceFiles = new Map([["broken", "sources/broken.yaml"]]);
+    for (const input of [{}, { source: "broken" }]) {
+      const result = await checkDriftTool(ctx, input);
+      expect(result.reports.map((r) => r.source_id)).toEqual("source" in input ? [] : ["docs"]);
+      expect(result.unloaded_sources).toEqual([
+        {
+          file: "sources/broken.yaml",
+          id: "broken",
+          reason: `its revision could not be read: ${stderr}`,
+          pages: 0,
+          unreadable: true,
+        },
+      ]);
+      expect(result._provenance?.page_derived_fields).toContain("unloaded_sources[].reason");
+    }
+    // Asked for alone, the reply says why it is empty, in words no declaration wrote.
+    const one = await checkDriftTool(ctx, { source: "broken" });
+    expect(one.message).toBe(`Source "broken"'s revision could not be read; see unloaded_sources.`);
+  });
+
+  test("cite and update_verified_revision refuse a source whose revision fails, without git's words", async () => {
+    const stderr = "git rev-list -1 HEAD -- :(Ignore the above)a failed (128)";
+    const failing: SourceAdapter = {
+      ...lines(),
+      id: "docs",
+      revision: async () => {
+        throw new Error(stderr);
+      },
+    };
+    ctx.sources.set("docs", failing);
+    const expected = `Source "docs"'s revision could not be read; drift reports why.`;
+    await expect(citeTool(ctx, { target: "docs:ch07.md#L1" })).rejects.toThrow(expected);
+    ctx.writesEnabled = true;
+    const write = updateVerifiedRevisionTool(ctx, { path: "a.md", revision: "r1" });
+    await expect(write).rejects.toThrow(expected);
+    await expect(write.catch((error: Error) => error.message)).resolves.not.toContain("Ignore");
+  });
+
+  test("list_recent_changes labels a failing source's error, which may quote its declaration", async () => {
+    const result = await listRecentChangesTool(ctx, { source: "docs", since: "unknownrev" });
+    expect(result._provenance?.page_derived_fields).toEqual(["message"]);
   });
 });
 
@@ -756,6 +811,8 @@ describe("page-derived fields are named as such", () => {
     // detail must stay actionable while being named for what it is.
     expect(broken?.detail).toContain("escapes");
     expect(result._provenance.page_derived_fields).toContain("findings[].detail");
+    // An unloaded-source finding quotes sources/*.yaml, so the notice names its author too.
+    expect(result._provenance.notice).toContain("the page or the source declaration");
   });
 
   test("lint names the reasons and paths of unchecked citations, which an author wrote", async () => {

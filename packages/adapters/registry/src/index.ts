@@ -2,10 +2,13 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   countPagesCiting,
+  DelegatedSourceError,
+  detectDrift,
   parseSourceDeclaration,
   SourceDeclarationError,
   SourceRegistry,
   type Database,
+  type DriftReport,
   type SourceAdapter,
   type SourceDeclaration,
 } from "@accreta/core";
@@ -86,12 +89,16 @@ export interface UnloadedSource {
   /** Absent when the file did not parse far enough to name one. */
   id?: string;
   reason: string;
+  /** It loaded, but its revision could not be read, so nothing citing it was checked. */
+  unreadable?: true;
 }
 
 export interface LoadedSources {
   /** Every source that built, keyed by id. */
   sources: Map<string, SourceAdapter>;
   unloaded: UnloadedSource[];
+  /** The declaration file each source in `sources` was built from. */
+  files: Map<string, string>;
 }
 
 /**
@@ -103,6 +110,7 @@ export function loadSources(ctx: SourceContext): LoadedSources {
   const registry = buildRegistry(ctx);
   const sources = new Map<string, SourceAdapter>();
   const unloaded: UnloadedSource[] = [];
+  const files = new Map<string, string>();
   const entries = readDeclarationFiles(ctx.root);
   const clashes = clashingIds(entries);
 
@@ -128,11 +136,12 @@ export function loadSources(ctx: SourceContext): LoadedSources {
     const { declaration } = entry;
     try {
       sources.set(declaration.id, registry.create(declaration));
+      files.set(declaration.id, file);
     } catch (error) {
       unloaded.push({ file, id: declaration.id, reason: firstLine(error) });
     }
   }
-  return { sources, unloaded };
+  return { sources, unloaded, files };
 }
 
 /** An unloaded source and how many pages cite it; `pages` is null when there is no id to count by. */
@@ -156,15 +165,85 @@ export const uncheckedPages = (pages: number | null) =>
     ? "an unknown number of pages cite it and were not checked"
     : `${pages} page(s) cite it and were not checked`;
 
-/** Why `id` names no source; a declaration that did not load may be the one meant. */
+/** Why `id` names no source. Counted, not named: a file name is declaration text, and this is unlabelled. */
 export function noSourceNamed(
   id: string,
   known: readonly string[],
   unloaded: readonly UnloadedSource[],
 ): string {
-  const broken = unloaded.map((u) => (u.id === undefined ? `${u.file} (no id)` : u.file));
-  const loose = broken.length > 0 ? ` Did not load: ${broken.join(", ")}.` : "";
+  const loose =
+    unloaded.length > 0
+      ? ` ${unloaded.length} source declaration(s) did not load; drift without a source names them.`
+      : "";
   return `No source named "${id}". Known: ${known.join(", ") || "none"}.${loose}`;
+}
+
+function withRevision(adapter: SourceAdapter, revision: () => Promise<string>): SourceAdapter {
+  return new Proxy(adapter, {
+    get(target, prop) {
+      if (prop === "revision") return revision;
+      const value: unknown = Reflect.get(target, prop);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+/**
+ * Each source's drift report; one whose revision fails is returned as unloaded, failing no other.
+ * `files` names each source's declaration; only an adapter loadSources did not build lacks one.
+ */
+export async function detectDriftEach(
+  db: Database,
+  adapters: readonly SourceAdapter[],
+  files: ReadonlyMap<string, string>,
+): Promise<{ reports: DriftReport[]; unreadable: UnloadedSource[] }> {
+  const reports: DriftReport[] = [];
+  const unreadable: UnloadedSource[] = [];
+  for (const adapter of adapters) {
+    // Asked out here, so an index error inside detectDrift still fails the call.
+    const revision = (async () => adapter.revision())();
+    try {
+      await revision;
+    } catch (error) {
+      if (!(error instanceof DelegatedSourceError)) {
+        unreadable.push({
+          file: files.get(adapter.id) ?? "sources",
+          id: adapter.id,
+          reason: `its revision could not be read: ${firstLine(error)}`,
+          unreadable: true,
+        });
+        continue;
+      }
+    }
+    // Asked once: detectDrift gets the answer already read.
+    reports.push(
+      await detectDrift(
+        db,
+        withRevision(adapter, () => revision),
+      ),
+    );
+  }
+  return { reports, unreadable };
+}
+
+/** cite's refusal of a source that did not load. Its reason is declaration text, which an error cannot label. */
+export const notLoadedError = (id: string) =>
+  `Source "${id}" is declared but did not load; drift and lint report why.`;
+
+/** A revision failure in words no declaration wrote: git's error quotes `paths`. */
+export const revisionUnreadableError = (id: string) =>
+  `Source "${id}"'s revision could not be read; drift reports why.`;
+
+/** The adapter, with a revision failure other than delegation reworded by `revisionUnreadableError`. */
+export function withRevisionRefusal(adapter: SourceAdapter): SourceAdapter {
+  return withRevision(adapter, async () => {
+    try {
+      return await adapter.revision();
+    } catch (error) {
+      if (error instanceof DelegatedSourceError) throw error;
+      throw new Error(revisionUnreadableError(adapter.id), { cause: error });
+    }
+  });
 }
 
 /** The same finding for the CLI and the MCP server, so they cannot word it differently. */

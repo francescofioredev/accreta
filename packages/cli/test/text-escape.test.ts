@@ -163,13 +163,18 @@ describe("cite's text output against a declaration that carries them", () => {
     expect(unsafe()).toEqual([]);
   });
 
+  // An invisible character keeps an id from loading (#362); a backslash still loads, escaped.
   test("an unknown source escapes every configured id", async () => {
     writeFileSync(
       join(root, "sources", "evil.yaml"),
-      `id: "evil${YAML}"\ntype: delegated\nvia: notion\nscope: "x"\n`,
+      `id: 'evil\\u001b'\ntype: delegated\nvia: notion\nscope: "x"\n`,
+    );
+    writeFileSync(
+      join(root, "sources", "hidden.yaml"),
+      `id: "hidden${YAML}"\ntype: delegated\nvia: notion\nscope: "x"\n`,
     );
     expect(await cli("cite", "nosuch:a.md")).toBe(2);
-    expect(errors.join("\n")).toContain(`Configured sources: evil${SHOWN}, wiki.`);
+    expect(errors.join("\n")).toContain("Configured sources: evil\\\\u001b, wiki.");
     expect(unsafeErrors()).toEqual([]);
   });
 

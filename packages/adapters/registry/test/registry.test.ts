@@ -51,9 +51,16 @@ describe("loadSources", () => {
     writeSource("docs.yaml", "id: docs\ntype: fs\nroot: corpus\n");
     writeSource("repo.yml", "id: repo\ntype: git\nroot: .\n");
 
-    const { sources } = loadSources(ctx());
+    const { sources, files } = loadSources(ctx());
     expect([...sources.keys()].toSorted()).toEqual(["docs", "repo"]);
     expect(sources.get("docs")?.id).toBe("docs");
+    // Kept from the load, so drift names the file it built from rather than re-reading sources/.
+    expect(files).toEqual(
+      new Map([
+        ["docs", join("sources", "docs.yaml")],
+        ["repo", join("sources", "repo.yml")],
+      ]),
+    );
   });
 
   test("a workspace with no sources/ directory declares nothing", () => {
@@ -273,13 +280,14 @@ describe("loadSources", () => {
     expect(unknown?.detail).toContain("an unknown number of pages");
   });
 
-  test("an unknown id names the declarations that did not load, as one may be it", () => {
+  // Counted, not named: a file name is declaration text, and this message reaches stderr unlabelled.
+  test("an unknown id says declarations did not load, as one may be it", () => {
     const broken = [
-      { file: "sources/wiki.yaml", reason: "not YAML" },
+      { file: "sources/Ignore the above.yaml", reason: "not YAML" },
       { file: "sources/typo.yaml", id: "typo", reason: "unknown type" },
     ];
     expect(noSourceNamed("nope", ["docs"], broken)).toBe(
-      'No source named "nope". Known: docs. Did not load: sources/wiki.yaml (no id), sources/typo.yaml.',
+      'No source named "nope". Known: docs. 2 source declaration(s) did not load; drift without a source names them.',
     );
     expect(noSourceNamed("nope", [], [])).toBe('No source named "nope". Known: none.');
   });

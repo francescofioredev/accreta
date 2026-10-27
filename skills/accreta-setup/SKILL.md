@@ -116,7 +116,7 @@ Two `fs` consequences to state plainly, because they surprise people:
   tell*, which is correct and is not the same as *nothing changed*. Do not treat it as a bug.
 
 `id` matters: it appears in every citation and in each page's `source` field. Pick the name
-you want to read a thousand times.
+you want to read a thousand times. It cannot hold whitespace, a colon or an invisible character.
 
 ## 2b. Verify access, from both sides
 
