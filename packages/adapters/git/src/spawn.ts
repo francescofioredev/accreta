@@ -131,16 +131,19 @@ const onSignal = Object.fromEntries(
   ]),
 ) as Record<(typeof SIGNALS)[number], () => void>;
 
-function guard(pid: number): void {
-  if (live.size === 0) {
-    // First in line: a host's own once-listener would otherwise unhook itself and leave us re-raising.
-    for (const signal of SIGNALS) process.prependOnceListener(signal, onSignal[signal]);
-    process.once("exit", killLive);
-  }
-  live.add(pid);
+let listening = false;
+
+// Before spawn: a signal landing between spawn and listening would take the default exit, orphaning git.
+function listen(): void {
+  if (listening) return;
+  listening = true;
+  // First in line: a host's own once-listener would otherwise unhook itself and leave us re-raising.
+  for (const signal of SIGNALS) process.prependOnceListener(signal, onSignal[signal]);
+  process.once("exit", killLive);
 }
 
 function unguard(): void {
+  listening = false;
   for (const signal of SIGNALS) process.off(signal, onSignal[signal]);
   process.off("exit", killLive);
 }
@@ -180,15 +183,24 @@ export function run(
   return new Promise((resolveResult, reject) => {
     // Its own process group, so a timeout reaches the hooks and filters it started as well.
     const group = process.platform !== "win32";
-    // Streamed, not execFile: its maxBuffer turns a large diff into an error.
-    const child = spawn(file, args, {
-      cwd: options.cwd,
-      env: options.env,
-      stdio: ["ignore", "pipe", "pipe"],
-      detached: group,
-    });
+    listen();
+    const child = (() => {
+      try {
+        // Streamed, not execFile: its maxBuffer turns a large diff into an error.
+        return spawn(file, args, {
+          cwd: options.cwd,
+          env: options.env,
+          stdio: ["ignore", "pipe", "pipe"],
+          detached: group,
+        });
+      } catch (error) {
+        if (live.size === 0) unguard();
+        throw error;
+      }
+    })();
     const pid = child.pid;
-    if (pid !== undefined) guard(pid);
+    if (pid !== undefined) live.add(pid);
+    else if (live.size === 0) unguard();
     // A Windows pid may be reused after git's exit event, though a helper may still hold the pipes.
     const exited = () => !group && (child.exitCode !== null || child.signalCode !== null);
     // Deliberately, a helper that outlives git is then out of reach: taskkill on a recycled pid is worse.
