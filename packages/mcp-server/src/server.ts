@@ -241,7 +241,7 @@ export function createServer(ctx: ToolContext): McpServer {
     "lint_knowledge_base",
     {
       description:
-        "Report what is wrong with the knowledge base: links that do not resolve, page types outside the configured vocabulary, missing provenance, a verified revision that is missing or unknown, citations that do not resolve or name no revision, footnotes that do not pair up, inconsistent supersession, sources that did not load, and unusable provenance-format config. The `kinds` parameter's enum is the complete list of finding kinds. A finding's `path` is usually a page, but an `unloaded-source` finding points at the sources/*.yaml file that did not load, and the two provenance-format findings point at accreta.config.yaml." +
+        "Report what is wrong with the knowledge base: links that do not resolve or point at missing pages, page types outside the configured vocabulary, frontmatter that does not parse, missing provenance, a verified revision that is missing or unknown, citations that do not resolve or name no revision or an unknown one, footnotes that do not pair up, inconsistent supersession, a name that aliases make several pages answer to, sources that did not load, and unusable provenance-format or supersession config. The `kinds` parameter's enum is the complete list of finding kinds. A finding's `path` is usually a page; a finding about configuration points at the file that holds it (accreta.config.yaml or a sources/*.yaml file)." +
         PAGE_DERIVED +
         PAGED,
       inputSchema: {
