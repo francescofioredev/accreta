@@ -52,6 +52,20 @@ test("four footnotes from #123, one on an undeclared source, and an uncited clai
   expect(m.lint.byKind["citation-path-missing"]).toBe(1);
 });
 
+test("a footnote citing an abbreviated revision fails, not resolves", () => {
+  const root = kbDir();
+  const pin = repo(join(root, "sources", "app"), { "src/app.py": lines(20) });
+  declareGit(root, "app", "sources/app");
+  page(root, "short", {
+    source: "app",
+    verified: pin,
+    canonical: "app:src/app.py#L1-L3",
+    body: `The router matches paths in registration order.[^a]\n\n[^a]: app @ ${pin.slice(0, 7)} · src/app.py#L1-L3`,
+  });
+  const [a] = measurePages(kbAt(root)).citations.footnotes;
+  expect(a).toMatchObject({ status: "fails", why: ["citation-revision-abbreviated"] });
+});
+
 test("a clean knowledge base resolves every footnote and lints clean", () => {
   const root = kbDir();
   const pin = repo(join(root, "sources", "app"), { "src/app.py": lines(20) });
