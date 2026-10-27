@@ -129,6 +129,21 @@ const DRIFT: { name: string; mode: DriftMode; base: number; perPage: number; per
     perPage: 516.59,
     perPath: 76,
   },
+  // Each cited-only page is pinned at both revisions, so it is listed once per pin.
+  {
+    name: "without diffs, cited-only pages pinned at 2 revisions",
+    mode: { diffing: false, revisions: 2, citesPerPage: 2, citedOnly: true, pinnedTwice: true },
+    base: 25_099,
+    perPage: 352,
+    perPath: 76,
+  },
+  {
+    name: "with diffs, cited-only pages pinned at 2 revisions",
+    mode: { diffing: true, revisions: 2, citesPerPage: 2, citedOnly: true, pinnedTwice: true },
+    base: 57_692,
+    perPage: 638.59,
+    perPath: 76,
+  },
 ];
 
 /** Each changed path appears once per stale revision, plus once per citation or cited-only page naming it. */
@@ -152,6 +167,9 @@ test.each(DRIFT)("check_drift $name stays within its budgets", async (c) => {
   expectPathsOnce(base, 50);
   expectPathsOnce(morePages, 50);
   expectPathsOnce(morePaths, 100);
+  for (const drift of [base, morePages, morePaths]) {
+    expect(drift.repetition).toBe(c.mode.pinnedTwice ? 2 : 1);
+  }
   expect(base.bytes).toBeLessThanOrEqual(c.base * DRIFT_TOLERANCE);
   expect((morePages.bytes - base.bytes) / 100).toBeLessThanOrEqual(c.perPage * DRIFT_TOLERANCE);
   expect((morePaths.bytes - base.bytes) / 50).toBeLessThanOrEqual(c.perPath * DRIFT_TOLERANCE);

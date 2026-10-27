@@ -129,10 +129,15 @@ export function createServer(ctx: ToolContext): McpServer {
     "search_pages",
     {
       description:
-        "Full-text search across the knowledge base (title, declared aliases, and body), with optional filters on page type and source. The primary discovery tool: use it when you do not already know a page's path. Supports FTS5 syntax — phrases in double quotes, AND/OR/NOT." +
+        "Full-text search across the knowledge base (title, declared aliases, and body), with optional filters on page type and source. The primary discovery tool: use it when you do not already know a page's path. Every word must match, and NOT, OR and AND are searched as words; double quotes make a phrase, and a trailing * matches a prefix." +
         PAGE_DERIVED,
       inputSchema: {
-        query: z.string().min(1).describe("Search query. Supports FTS5 syntax."),
+        query: z
+          .string()
+          .min(1)
+          .describe(
+            "Words that must all match. Double quotes make a phrase; a trailing * a prefix.",
+          ),
         types: z
           .array(z.string())
           .optional()

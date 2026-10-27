@@ -78,8 +78,8 @@ describe("list tools return a page and the untruncated count", () => {
   test("lint_knowledge_base", async () => {
     const first = await lintTool(ctx, { limit: 10 });
     expect(first.findings).toHaveLength(10);
-    // Two findings per page: no canonical_source, no last_verified_revision.
-    expect(first.count).toBe(2 * (PAGES + 1));
+    // Two findings per page (no canonical_source, no last_verified_revision), and the shared alias.
+    expect(first.count).toBe(2 * (PAGES + 1) + 1);
     const second = await lintTool(ctx, { limit: 10, cursor: first.nextCursor });
     expect(second.findings[0]).not.toEqual(first.findings[0]);
   });
