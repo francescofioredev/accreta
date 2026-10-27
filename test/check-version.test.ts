@@ -65,3 +65,22 @@ test("every package is published after the packages it depends on", () => {
   );
   expect(late).toEqual([]);
 });
+
+test.skipIf(process.platform === "win32")(
+  "a prerelease tag publishes to next, and a release to latest",
+  async () => {
+    // As `latest`, an rc would reach every `npm i accreta` and every bare `npx accreta`.
+    const workflow = await Bun.file(
+      new URL("../.github/workflows/publish.yml", import.meta.url),
+    ).text();
+    expect(workflow).toContain('npm publish --access public --tag "$tag"');
+    const choice = /case "\$version" in[\s\S]*?esac/.exec(workflow)?.[0];
+    expect(choice).toBeDefined();
+    const tagFor = (version: string) =>
+      Bun.spawnSync(["bash", "-c", `version=${version}\n${choice}\necho "$tag"`])
+        .stdout.toString()
+        .trim();
+    expect(tagFor("0.2.0-rc.1")).toBe("next");
+    expect(tagFor("0.2.0")).toBe("latest");
+  },
+);

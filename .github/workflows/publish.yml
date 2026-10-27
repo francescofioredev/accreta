@@ -69,6 +69,11 @@ jobs:
       - name: Publish
         run: |
           version="${GITHUB_REF_NAME#v}"
+          # A prerelease as `latest` would reach every `npm i accreta` and bare `npx accreta`.
+          case "$version" in
+            *-*) tag=next ;;
+            *) tag=latest ;;
+          esac
           published=0
           skipped=0
 
@@ -85,14 +90,14 @@ jobs:
               echo "$name@$version is already published, skipping."
               skipped=$((skipped + 1))
             else
-              (cd "$package" && npm publish --access public)
+              (cd "$package" && npm publish --access public --tag "$tag")
               published=$((published + 1))
             fi
 
             echo "::endgroup::"
           done
 
-          echo "Published $published package(s), skipped $skipped already at $version."
+          echo "Published $published package(s) as '$tag', skipped $skipped already at $version."
           if [ "$published" -eq 0 ] && [ "$skipped" -gt 0 ]; then
             echo "::notice::Everything was already published at $version. Nothing to do."
           fi
