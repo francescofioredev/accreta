@@ -1116,7 +1116,7 @@ describe("lintCitations on last_verified_revision", () => {
   });
 
   test("a prefix that names several revisions says so, not that it is missing", async () => {
-    writePage("a.md", verified("a", "5b8"));
+    writePage("a.md", verified("a", "5b8a"));
     reindex();
     const ambiguous: SourceAdapter = {
       ...withHistory("a", []),
@@ -1128,7 +1128,7 @@ describe("lintCitations on last_verified_revision", () => {
         kind: "verified-revision-unknown",
         path: "knowledge/a.md",
         detail:
-          'last_verified_revision 5b8 now names several commits of source "a"; re-verify and record the full revision',
+          'last_verified_revision 5b8a now names several commits of source "a"; re-verify and record the full revision',
       },
     ]);
   });

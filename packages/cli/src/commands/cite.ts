@@ -134,9 +134,9 @@ export async function cite(
   }
   // On stderr, so stdout stays the footnotes or the labelled lines; one source, so one note.
   const prefixed = citations.find((c) => c.matchedPrefix !== undefined);
-  if (prefixed && format !== "json") {
+  if (prefixed?.matchedPrefix !== undefined && prefixed.revision !== null && format !== "json") {
     ctx.err(
-      `--expect-revision ${prefixed.matchedPrefix} matched ${prefixed.revision} as a prefix; the footnote names it in full.`,
+      `--expect-revision ${printable(prefixed.matchedPrefix)} matched ${printable(prefixed.revision)} as a prefix; the footnote names it in full.`,
     );
   }
   // A place that is not there must not look like a citation to paste.
