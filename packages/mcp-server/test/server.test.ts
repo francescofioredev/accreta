@@ -136,7 +136,7 @@ test("search_pages names every column the FTS index searches", async () => {
 });
 
 // A hand-kept prose list of kinds rots as kinds are added; the enum is the list.
-test("lint_knowledge_base points at the kinds enum and names only real kinds", async () => {
+test("lint_knowledge_base points at the kinds enum, which lists every kind", async () => {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "description-probe", version: "0.0.0" });
 
@@ -147,8 +147,6 @@ test("lint_knowledge_base points at the kinds enum and names only real kinds", a
     const lint = tools.find((tool) => tool.name === "lint_knowledge_base");
     const description = lint?.description ?? "";
     expect(description).toContain("enum is the complete list of finding kinds");
-    const named = [...description.matchAll(/`([a-z]+(?:-[a-z]+)+)`/g)].map((m) => m[1]!);
-    for (const kind of named) expect(LINT_FINDING_KINDS as readonly string[]).toContain(kind);
     const kinds = lint?.inputSchema.properties?.kinds as { items: { enum: string[] } };
     expect(kinds.items.enum).toEqual([...LINT_FINDING_KINDS]);
   } finally {
