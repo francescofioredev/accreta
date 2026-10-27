@@ -90,7 +90,7 @@ const quoted = ({ text, prefix }: Term) => `"${text}"${prefix ? "*" : ""}`;
 function plainTerms(query: string): Term[] {
   // FTS5 ends a string at NUL and then throws "unterminated string".
   return [...query.replaceAll("\0", " ").matchAll(/"([^"]*)"|[^\s"]+|"/g)].flatMap(
-    ([whole, phrase]) => {
+    ([whole, phrase]): Term[] => {
       if (phrase !== undefined) return [{ text: phrase, prefix: false }];
       if (whole === '"') return [];
       // `"word"*` keeps prefix search without letting any operator through.

@@ -224,7 +224,10 @@ describe("searchPages on an underscore identifier", () => {
       "metrics/stale-served.md",
       "# Cache metrics\n\n`stale_served` counts responses the cache answered after their entry expired.",
     );
-    note("metrics/stale-served-total.md", "# Totals\n\n`stale_served_total` is the counter behind the rate.");
+    note(
+      "metrics/stale-served-total.md",
+      "# Totals\n\n`stale_served_total` is the counter behind the rate.",
+    );
     note(
       "notes/replica-reads.md",
       "# Replica reads\n\nA lagging replica serves stale data. Those stale serves are tolerated for dashboards.",
@@ -281,7 +284,10 @@ describe("searchPages on an underscore identifier", () => {
   });
 
   test("an identifier written in a title or an alias is matched too", () => {
-    writePage("notes/titled.md", "---\ntype: note\n---\n\n# queue_depth\n\nHow full the queue is.\n");
+    writePage(
+      "notes/titled.md",
+      "---\ntype: note\n---\n\n# queue_depth\n\nHow full the queue is.\n",
+    );
     writePage(
       "notes/aliased.md",
       '---\ntype: note\naliases: ["retry_budget"]\n---\n\n# Retries\n\nHow many retries a call may spend.\n',
