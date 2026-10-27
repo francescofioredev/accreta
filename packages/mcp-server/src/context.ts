@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import {
+  IndexUnreadableError,
   openIndex,
   parseConfig,
   sqliteSupport,
@@ -69,10 +70,14 @@ export function createContext(cwd: string = process.cwd()): ToolContext {
     try {
       return openIndex(indexPath, { readonly: true });
     } catch (error) {
-      if (error instanceof StaleIndexError || error instanceof UnsupportedRuntimeError) throw error;
+      // Each already names its remedy.
+      if (
+        error instanceof StaleIndexError ||
+        error instanceof UnsupportedRuntimeError ||
+        error instanceof IndexUnreadableError
+      )
+        throw error;
       const reason = error instanceof Error ? error.message : String(error);
-      // core already names the remedy for a file it opened but could not read.
-      if (reason.includes("accreta reindex")) throw error;
       throw new Error(
         `Cannot open the index at ${indexPath}: ${reason}; run \`accreta reindex\` to rebuild it.`,
         { cause: error },
