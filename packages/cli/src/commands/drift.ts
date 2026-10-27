@@ -18,7 +18,15 @@ import {
   type UncheckedSource,
 } from "@accreta/adapters";
 import { findWorkspace } from "../workspace.ts";
-import { DRIFT_NOTICE, loadSources, printable, provenance, type CommandContext } from "./shared.ts";
+import {
+  DRIFT_NOTICE,
+  loadSources,
+  printable,
+  printableBlock,
+  printableLines,
+  provenance,
+  type CommandContext,
+} from "./shared.ts";
 
 export type DriftFormat = "text" | "json" | "github";
 
@@ -84,7 +92,7 @@ export async function drift(
     base = options.base ? readBase(resolve(ctx.cwd, options.base), options.source) : undefined;
   } catch (error) {
     // 2, as for any refused argument: 1 already means drift found something.
-    ctx.err(error instanceof Error ? error.message : String(error));
+    ctx.err(printableLines(error instanceof Error ? error.message : String(error)));
     return 2;
   }
 
@@ -245,7 +253,7 @@ export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport)
     }
     printUnverifiable(ctx, report);
     ctx.out("  in scope:");
-    for (const line of work.guidance.trim().split("\n")) ctx.out(`    ${printable(line)}`);
+    for (const line of printableBlock(work.guidance.trim()).split("\n")) ctx.out(`    ${line}`);
     return;
   }
 
@@ -529,9 +537,7 @@ export function readBase(path: string, only?: string): BaseKeys {
   // Every other source would read as newly in doubt.
   if (json.source !== undefined && json.source !== only) {
     throw new Error(
-      printable(
-        `--base ${path} checked only source "${json.source}"; add --source ${json.source}.`,
-      ),
+      `--base ${path} checked only source "${json.source}"; add --source ${json.source}.`,
     );
   }
   const unloaded: NonNullable<BaseKeys["unloaded"]> = new Map();

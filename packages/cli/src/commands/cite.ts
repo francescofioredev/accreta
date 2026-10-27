@@ -10,6 +10,7 @@ import {
   loadSources,
   printable,
   printableBlock,
+  printableLines,
   printJson,
   provenance,
   SOURCE_NOTICE,
@@ -99,7 +100,7 @@ export async function cite(
     const broken = loaded.unloaded.find((u) => u.id === target.sourceId);
     if (broken) {
       throw new Error(
-        `Source "${printable(target.sourceId)}" is declared in ${printable(broken.file)} but did not load: ${printable(broken.reason)}`,
+        `Source "${target.sourceId}" is declared in ${broken.file} but did not load: ${broken.reason}`,
       );
     }
     // Input errors exit 2, not 1 like a refusal; the sentences are core's, which MCP returns.
@@ -119,18 +120,11 @@ export async function cite(
   // One target off the expected revision refuses them all, before anything is printed.
   const citations: Citation[] = [];
   for (const target of targets) {
-    try {
-      citations.push(
-        await citeAt(sources, workspace.config.provenanceFormat, target, {
-          expectRevision: options.expectRevision,
-        }),
-      );
-    } catch (error) {
-      // The refusal echoes --expect-revision and the cited path, both caller text.
-      throw new Error(printable(error instanceof Error ? error.message : String(error)), {
-        cause: error,
-      });
-    }
+    citations.push(
+      await citeAt(sources, workspace.config.provenanceFormat, target, {
+        expectRevision: options.expectRevision,
+      }),
+    );
   }
   // On stderr, so stdout stays the footnotes or the labelled lines; one source, so one note.
   const prefixed = citations.find((c) => c.matchedPrefix !== undefined);
@@ -204,9 +198,6 @@ function locationLine({ location }: Citation): string {
     return `location: unknown: ${printableLines(location.detail)}`;
   return `location: missing ${location.part}: ${printableLines(location.detail)}`;
 }
-
-// A source's error output may run over several lines; each stays one, for continued() to indent.
-const printableLines = (text: string) => text.split(/\r?\n/).map(printable).join("\n");
 
 /** Indents every line after the first, a blank one as two spaces, so none can pose as a label. */
 function continued(text: string): string {

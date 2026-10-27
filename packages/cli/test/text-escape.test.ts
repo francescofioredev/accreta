@@ -28,15 +28,22 @@ const lines = () => output.flatMap((line) => line.split("\n"));
 const unsafe = () => lines().filter((line) => UNSAFE.test(line));
 const unsafeErrors = () => errors.filter((line) => UNSAFE.test(line));
 
-/** What run() threw, as main() would print it. */
-async function thrown(...argv: string[]): Promise<string> {
-  try {
-    await cli(...argv);
-  } catch (error) {
-    return (error as Error).message;
-  }
-  throw new Error("expected the command to throw");
+// Through the bin, so what a command throws is printed by main()'s catch-all.
+const BIN = [
+  process.execPath,
+  "--conditions=@accreta/source",
+  join(import.meta.dir, "..", "src", "bin.ts"),
+];
+
+/** A run through the bin: its exit code and its stderr, as lines. */
+function spawned(env: Record<string, string>, ...argv: string[]) {
+  const base = { ...process.env };
+  delete base.ACCRETA_INDEX_PATH;
+  delete base.ACCRETA_ROOT;
+  const proc = Bun.spawnSync([...BIN, ...argv], { cwd: root, env: { ...base, ...env } });
+  return { code: proc.exitCode, stderr: proc.stderr.toString().trimEnd().split("\n") };
 }
+const unsafeIn = (stderr: string[]) => stderr.filter((line) => UNSAFE.test(line));
 
 const HOSTILE_PAGE = `---
 type: note
@@ -173,19 +180,29 @@ describe("cite's text output against a declaration that carries them", () => {
     expect(unsafeErrors()).toEqual([]);
   });
 
-  test("an expected revision it cannot confirm is escaped", async () => {
-    const message = await thrown("cite", "wiki:page.md", "--expect-revision", `rev${RAW}`);
-    expect(message).toContain(`still at rev${SHOWN}:`);
-    expect(UNSAFE.test(message)).toBe(false);
+  test("an expected revision it cannot confirm is escaped once", () => {
+    const { code, stderr } = spawned({}, "cite", "wiki:page.md", "--expect-revision", `rev${RAW}`);
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain(`still at rev${SHOWN}:`);
+    expect(unsafeIn(stderr)).toEqual([]);
   });
 
-  test("a source that moved is escaped in the target it names", async () => {
+  test("a source that moved is escaped once in the target it names", () => {
     mkdirSync(join(root, "sources", "docs"), { recursive: true });
     writeFileSync(join(root, "sources", "docs", "a.md"), "text\n");
     writeFileSync(join(root, "sources", "docs.yaml"), "id: docs\ntype: fs\nroot: sources/docs\n");
-    const message = await thrown("cite", `docs:a${RAW}.md`, "--expect-revision", "bogus");
-    expect(message).toContain(`Re-read docs:a${SHOWN}.md,`);
-    expect(UNSAFE.test(message)).toBe(false);
+    const { code, stderr } = spawned({}, "cite", `docs:a${RAW}.md`, "--expect-revision", "bogus");
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain(`Re-read docs:a${SHOWN}.md,`);
+    expect(unsafeIn(stderr)).toEqual([]);
+  });
+
+  test("a source that did not load is escaped once", () => {
+    writeFileSync(join(root, "sources", "broken.yaml"), `id: broken\ntype: "fs${YAML}"\n`);
+    const { code, stderr } = spawned({}, "cite", "broken:a.md");
+    expect(code).toBe(1);
+    expect(stderr.join("\n")).toContain(`Unknown source type "fs${SHOWN}"`);
+    expect(unsafeIn(stderr)).toEqual([]);
   });
 
   test("two sources named against one expected revision are escaped", async () => {
@@ -198,5 +215,130 @@ describe("cite's text output against a declaration that carries them", () => {
     expect(await cli("cite", "wiki:a.md", "--format", `x${RAW}`)).toBe(2);
     expect(errors.join("\n")).toContain(`not "x${SHOWN}"`);
     expect(unsafeErrors()).toEqual([]);
+  });
+});
+
+describe("doctor against declarations that carry them", () => {
+  beforeEach(() => {
+    writeFileSync(join(root, "accreta.config.yaml"), "knowledge_base: knowledge\n", "utf-8");
+    mkdirSync(join(root, "sources"), { recursive: true });
+  });
+
+  test("escapes a declaration's file, id and type", async () => {
+    writeFileSync(
+      join(root, "sources", `evil${RAW}.yaml`),
+      `id: "evil${YAML}"\ntype: "fs${YAML}"\n`,
+    );
+    expect(await cli("doctor")).toBe(1);
+    expect(lines()).toContain(`  evil${SHOWN} — fs${SHOWN} — sources/evil${SHOWN}.yaml`);
+    expect(unsafe()).toEqual([]);
+  });
+
+  test("escapes why a file is not a declaration", async () => {
+    writeFileSync(join(root, "sources", "bad.yaml"), `id: "bad${YAML}"\n`);
+    expect(await cli("doctor")).toBe(1);
+    expect(lines().join("\n")).toContain(`not a source declaration — Source "bad${SHOWN}"`);
+    expect(unsafe()).toEqual([]);
+  });
+
+  test("escapes an id two files declare, and the other file", async () => {
+    const twin = `id: "twin${YAML}"\ntype: delegated\nvia: notion\nscope: x\n`;
+    writeFileSync(join(root, "sources", "a.yaml"), twin);
+    writeFileSync(join(root, "sources", `b${RAW}.yaml`), twin);
+    expect(await cli("doctor")).toBe(1);
+    expect(lines()).toContain(
+      `    no: id \`twin${SHOWN}\` is also declared in sources/b${SHOWN}.yaml`,
+    );
+    expect(unsafe()).toEqual([]);
+  });
+
+  test("escapes the preflight's detail, connector and hint", async () => {
+    writeFileSync(
+      join(root, "sources", "wiki.yaml"),
+      `id: wiki\ntype: delegated\nvia: "notion${YAML}"\nscope: x\n`,
+    );
+    await cli("doctor");
+    expect(lines()).toContain(`    unknown: accreta cannot check this source; notion${SHOWN} can`);
+    expect(lines()).toContain(`    your agent needs: notion${SHOWN} — unverified`);
+    expect(lines().join("\n")).toContain(`whether your agent can reach notion${SHOWN}.`);
+    expect(unsafe()).toEqual([]);
+  });
+});
+
+describe("source add against values that carry them", () => {
+  beforeEach(() => {
+    writeFileSync(join(root, "accreta.config.yaml"), "knowledge_base: knowledge\n", "utf-8");
+  });
+
+  test("escapes what the preflight reports", async () => {
+    const via = `via="notion${YAML}"`;
+    expect(await cli("source", "add", "delegated", "wiki", "--set", via, "--set", "scope=x")).toBe(
+      0,
+    );
+    expect(lines()).toContain(`  unknown: accreta cannot check this source; notion${SHOWN} can`);
+    expect(unsafe()).toEqual([]);
+  });
+
+  test("escapes the id it echoes", async () => {
+    // The id goes into the YAML unquoted, so reading it back may throw; the echo comes first.
+    await cli("source", "add", "fs", `w${RAW}`).catch(() => 1);
+    expect(lines()).toContain(`Wrote sources/w${SHOWN}.yaml`);
+    expect(unsafe()).toEqual([]);
+  });
+
+  test("escapes an unknown type", async () => {
+    expect(await cli("source", "add", `fs${RAW}`, "wiki")).toBe(2);
+    expect(errors.join("\n")).toContain(`Unknown source type "fs${SHOWN}".`);
+    expect(unsafeErrors()).toEqual([]);
+  });
+});
+
+describe("the CLI's catch-all", () => {
+  test("escapes a thrown message line by line", () => {
+    const { code, stderr } = spawned({ ACCRETA_ROOT: join(root, `evil${RAW}\nforged`) }, "lint");
+    expect(code).toBe(1);
+    expect(stderr).toEqual([`No accreta.config.yaml at ${root}/evil${SHOWN}`, "forged"]);
+  });
+});
+
+describe("drift's refusal of its arguments", () => {
+  beforeEach(async () => {
+    writeFileSync(join(root, "accreta.config.yaml"), "knowledge_base: knowledge\n", "utf-8");
+    mkdirSync(join(root, "knowledge"), { recursive: true });
+    await cli("reindex");
+  });
+
+  test("escapes an unknown --format value", async () => {
+    expect(await cli("drift", "--format", `x${RAW}`)).toBe(2);
+    expect(errors.join("\n")).toContain(`not "x${SHOWN}".`);
+    expect(unsafeErrors()).toEqual([]);
+  });
+
+  test("escapes a --base report's source once", async () => {
+    writeFileSync(join(root, "base.json"), JSON.stringify({ source: `x${RAW}`, sources: [] }));
+    expect(await cli("drift", "--base", "base.json")).toBe(2);
+    expect(errors.join("\n")).toContain(`only source "x${SHOWN}"; add --source x${SHOWN}.`);
+    expect(unsafeErrors()).toEqual([]);
+  });
+});
+
+describe("drift's text output against a delegated scope", () => {
+  test("prints the scope as cite does: joiners and tabs kept, CRLF one break", async () => {
+    writeFileSync(join(root, "accreta.config.yaml"), "knowledge_base: knowledge\n", "utf-8");
+    mkdirSync(join(root, "knowledge"), { recursive: true });
+    mkdirSync(join(root, "sources"), { recursive: true });
+    writeFileSync(
+      join(root, "sources", "wiki.yaml"),
+      'id: wiki\ntype: delegated\nvia: notion\nscope: "Design pages.\\r\\nsecond\\tline \\u200d joined\\e[2J\\u202e\\u2028x"\n',
+    );
+    await cli("reindex");
+    output = [];
+    await cli("drift");
+    const at = lines().indexOf("  in scope:");
+    expect(at).toBeGreaterThan(-1);
+    expect(lines().slice(at + 1)).toEqual([
+      "    Design pages.",
+      "    second\tline ‍ joined\\u001b[2J\\u202e\\u2028x",
+    ]);
   });
 });

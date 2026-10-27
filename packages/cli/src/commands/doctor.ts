@@ -11,7 +11,7 @@ import {
 } from "@accreta/adapters";
 import { CONFIG_FILENAME, findWorkspace } from "../workspace.ts";
 import { reportMcp } from "./mcp-config.ts";
-import { reportPreflight, type CommandContext } from "./shared.ts";
+import { printable, reportPreflight, type CommandContext } from "./shared.ts";
 import { compareVersions, findInstalledSkills, SKILL_NAME } from "./skill-floor.ts";
 
 /**
@@ -83,14 +83,16 @@ export async function doctor(ctx: CommandContext, version: string): Promise<numb
     const declaration = "error" in entry ? undefined : entry.declaration;
     const kind = declaration && kindFor(declaration.type);
     if ("error" in entry) {
-      ctx.out(`  ${file}`);
-      ctx.out(`    no: not a source declaration — ${entry.error}`);
+      ctx.out(`  ${printable(file)}`);
+      ctx.out(`    no: not a source declaration — ${printable(entry.error)}`);
     } else {
-      ctx.out(`  ${entry.declaration.id} — ${entry.declaration.type} — ${file}`);
+      const { id: declared, type } = entry.declaration;
+      ctx.out(`  ${printable(declared)} — ${printable(type)} — ${printable(file)}`);
       if (!kind) ctx.out(`    no: unknown source type. Known: ${KNOWN_TYPES.join(", ")}.`);
     }
     if (others.length > 0) {
-      ctx.out(`    no: id \`${id}\` is also declared in ${others.join(", ")}`);
+      const shown = others.map(printable).join(", ");
+      ctx.out(`    no: id \`${printable(id ?? "")}\` is also declared in ${shown}`);
       ctx.out("      → give each a distinct id or remove all but one");
     }
     if (!declaration || !kind || others.length > 0) {
