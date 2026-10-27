@@ -179,7 +179,7 @@ With a shell, use the CLI. Without one, the MCP tool beside it does the same.
 |---|---|---|
 | `accreta search <query>` | `search_pages` | pages matching in title, aliases or body |
 | `accreta show <path>` | `get_page` | one page, by path or wikilink |
-| `accreta consumers <path>` | `find_consumers` | what links to a page, and what it links to |
+| `accreta consumers <path>` | `find_consumers` | what links to a page, and what it links to (direction = which page declares the link; `kind` gives the meaning) |
 | `accreta canonical <term>` | `find_canonical` | the page that defines a term |
 | `accreta cite <source>:<path>[#locator]` | `cite` | the citation for a place, at the source's current revision |
 | `accreta drift` | `check_drift` | the pages their sources moved under |
