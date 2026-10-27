@@ -71,6 +71,8 @@ export function createContext(cwd: string = process.cwd()): ToolContext {
     } catch (error) {
       if (error instanceof StaleIndexError || error instanceof UnsupportedRuntimeError) throw error;
       const reason = error instanceof Error ? error.message : String(error);
+      // core already names the remedy for a file it opened but could not read.
+      if (reason.includes("accreta reindex")) throw error;
       throw new Error(
         `Cannot open the index at ${indexPath}: ${reason}; run \`accreta reindex\` to rebuild it.`,
         { cause: error },
