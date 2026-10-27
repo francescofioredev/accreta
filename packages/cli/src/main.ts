@@ -30,7 +30,8 @@ Usage: accreta <command> [arguments]
   reindex                  Rebuild the index from the knowledge base
   lint                     Report unresolvable links, missing provenance, unknown types
   drift [--strict]         Report which pages their sources have moved out from under.
-                           --strict also fails on anything left unchecked
+                           --strict also fails on anything left unchecked;
+                           --source <id> checks that source alone
   doctor                   Report what is wired up, and what cannot be checked from here
   source add <type> <id>   Write a source declaration (--set key=value, repeatable)
   search <query>           Full-text search (--type <type>, repeatable; --source <id>;
@@ -39,11 +40,17 @@ Usage: accreta <command> [arguments]
   consumers <path>         What links to this page, and what it links to (--inline;
                            --kind <field>, repeatable)
   canonical <term>         Resolve a term to the page that defines it
-  cite <source>:<path>[#locator]
+  cite <source>:<path>[#locator]...
                            The citation for a claim, at the source's current revision.
                            Before reading, cite the file and keep its revision; after
                            writing, cite the place with --expect-revision <rev>, which
-                           fails if the source has moved since
+                           fails if the source has moved since. Several targets give one
+                           result each, in order, and must name one source with
+                           --expect-revision; --json then prints an array.
+                           --format text|footnote|json: text (default) labels each line;
+                           a missing place prints "footnote: none: location missing" and
+                           exits 1, so check the exit code. footnote prints the footnotes
+                           alone, one per line, and nothing if any place is missing
   mcp                      Start the MCP server on stdio; an agent client runs this
   mcp install --client <claude|cursor|codex|vscode> [--scope project|user]
                            Add that server to the client's config (--force replaces
@@ -292,7 +299,7 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
     case "canonical":
       return canonical(ctx, positional.join(" "), { json, limit, cursor });
     case "cite":
-      return cite(ctx, positional[0] ?? "", { json, expectRevision: parsed.expectRevision });
+      return cite(ctx, rest, positional, { json, expectRevision: parsed.expectRevision });
     case "mcp":
       return mcp(ctx, rest);
     default:

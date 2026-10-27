@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_CONFIG, parseConfig } from "@accreta/core";
+import { DEFAULT_CONFIG, extractLinks, parseConfig, parsePage } from "@accreta/core";
 import { run } from "../src/main.ts";
 import { composeConstitution, PRESETS } from "../src/constitution.ts";
 import {
@@ -72,6 +72,8 @@ link_fields:
   - implements
   - supersedes
   - superseded_by
+  - amends
+  - amended_by
   - related
   - discussed_in
 
@@ -126,6 +128,25 @@ describe("init with one preset", () => {
   }
 });
 
+describe("decision records (#270)", () => {
+  const page =
+    '---\ntype: decision\nstatus: Accepted\namends: "[[a]]"\namended_by: "[[c]]"\n---\nB.';
+  for (const preset of [undefined, "codebase"]) {
+    test(`amends and amended_by are links ${preset ? `in the ${preset} preset` : "by default"}`, async () => {
+      expect(await cli("init", ...(preset ? ["--preset", preset] : []))).toBe(0);
+      const config = parseConfig(read("accreta.config.yaml"));
+      const { frontmatter, body } = parsePage(page, "b");
+      const kinds = extractLinks(frontmatter, body, config).map((l) => `${l.kind}:${l.target}`);
+      expect(kinds).toEqual(["amends:a", "amended_by:c"]);
+    });
+  }
+
+  test("the default vocabulary declares them", () => {
+    expect(DEFAULT_CONFIG.linkFields).toContain("amends");
+    expect(DEFAULT_CONFIG.linkFields).toContain("amended_by");
+  });
+});
+
 describe("init with several presets", () => {
   test("the config is the union, in the order given and then each preset's own", async () => {
     expect(await cli("init", "--preset", "research,codebase")).toBe(0);
@@ -134,7 +155,9 @@ describe("init with several presets", () => {
     expect(config.pageTypes).toEqual(`${types} usecase decision integration`.split(" "));
     const fields = "cites cited_by supports contradicts supersedes superseded_by related";
     expect(config.linkFields).toEqual(
-      `${fields} discussed_in consumers consumed_by delegates_to implements`.split(" "),
+      `${fields} discussed_in consumers consumed_by delegates_to implements amends amended_by`.split(
+        " ",
+      ),
     );
     expect(read("accreta.config.yaml")).toStartWith(
       `# The vocabulary of this knowledge base — the "research" and "codebase" presets.\n`,

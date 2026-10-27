@@ -43,7 +43,7 @@ export function openKb(): { db: Database; config: ReturnType<typeof parseConfig>
 }
 
 export const bm25 = (db: Database, query: string, limit: number) =>
-  searchPages(db, { query: ftsQuery(query), limit }).map((h) => h.path);
+  searchPages(db, { query: ftsQuery(query), syntax: "fts5", limit }).map((h) => h.path);
 
 export function summary(db: Database, config: ReturnType<typeof parseConfig>, path: string) {
   const p = getPage(db, path, config);

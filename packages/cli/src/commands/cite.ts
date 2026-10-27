@@ -1,4 +1,10 @@
-import { cite as citeAt, parseCitation } from "@accreta/core";
+import {
+  cite as citeAt,
+  parseCitation,
+  type Citation,
+  type ParsedCitation,
+  type SourceAdapter,
+} from "@accreta/core";
 import { findWorkspace } from "../workspace.ts";
 import {
   loadSources,
@@ -10,17 +16,74 @@ import {
 
 const CITE_FIELDS = ["location.detail"] as const;
 
+const USAGE =
+  "Usage: accreta cite <source>:<path>[#locator]... [--expect-revision <rev>] [--json | --format text|footnote|json]";
+
+export type CiteFormat = "text" | "footnote" | "json";
+
+/**
+ * `--format`'s value in the raw arguments, and the positionals left once it is taken out.
+ * `COMMAND_ARGS` has already refused any flag cite does not take. A string is a refusal.
+ */
+export function citeArguments(
+  args: readonly string[],
+  positional: readonly string[],
+  json: boolean,
+): { format: CiteFormat; targets: string[] } | string {
+  let given: string | undefined;
+  let separate = false;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (arg === "--") break;
+    if (arg !== "--format" && !arg.startsWith("--format=")) continue;
+    // A second value would be left behind as a target.
+    if (given !== undefined) return "--format is given more than once.";
+    separate = arg === "--format";
+    given = separate ? (args[++i] ?? "") : arg.slice("--format=".length);
+  }
+  if (given === undefined) return { format: json ? "json" : "text", targets: [...positional] };
+  if (given !== "text" && given !== "footnote" && given !== "json") {
+    return `--format takes text, footnote or json, not "${given}".`;
+  }
+  if (json && given !== "json") return `--json and --format ${given} ask for different output.`;
+  const targets = [...positional];
+  // No target can be named text, footnote or json: each lacks the "source:" part.
+  if (separate) targets.splice(targets.indexOf(given), 1);
+  return { format: given, targets };
+}
+
 export async function cite(
   ctx: CommandContext,
-  raw: string,
+  args: readonly string[],
+  positional: readonly string[],
   options: { json?: boolean; expectRevision?: string } = {},
 ): Promise<number> {
-  const target = parseCitation(raw);
-  if (!target) {
+  const parsed = citeArguments(args, positional, options.json ?? false);
+  if (typeof parsed === "string") {
+    ctx.err(parsed);
+    return 2;
+  }
+  const { format } = parsed;
+  if (parsed.targets.length === 0) {
+    ctx.err(USAGE);
+    return 2;
+  }
+  const targets: ParsedCitation[] = [];
+  for (const raw of parsed.targets) {
+    const target = parseCitation(raw);
+    if (!target) {
+      ctx.err(
+        `"${raw}" is not source:path[#locator]; a path with "#" or whitespace in it cannot be cited.`,
+      );
+      return 2;
+    }
+    targets.push(target);
+  }
+  const named = [...new Set(targets.map((t) => t.sourceId))];
+  // One revision cannot vouch for two sources; the check would fail as a misleading "moved".
+  if (options.expectRevision !== undefined && named.length > 1) {
     ctx.err(
-      raw
-        ? `"${raw}" is not source:path[#locator]; a path with "#" or whitespace in it cannot be cited.`
-        : "Usage: accreta cite <source>:<path>[#locator] [--expect-revision <rev>] [--json]",
+      `--expect-revision is one source's revision, but the targets name ${named.join(", ")}. Cite each source in its own call.`,
     );
     return 2;
   }
@@ -28,69 +91,118 @@ export async function cite(
   // No index: a citation asks the source, never the pages.
   const workspace = findWorkspace(ctx.cwd);
   const loaded = loadSources(workspace);
-  const broken = loaded.unloaded.find((u) => u.id === target.sourceId);
-  if (broken) {
-    throw new Error(
-      `Source "${target.sourceId}" is declared in ${broken.file} but did not load: ${broken.reason}`,
-    );
-  }
-  const sources = new Map(loaded.sources.map((adapter) => [adapter.id, adapter]));
-  // Input errors exit 2, not 1 like a refusal; the sentences are core's, which MCP returns.
-  if (!sources.has(target.sourceId)) {
-    const known = [...sources.keys()].toSorted().join(", ") || "none";
-    ctx.err(`Unknown source "${target.sourceId}". Configured sources: ${known}.`);
-    return 2;
-  }
-  if (target.path.split("/").some((part) => part === "" || part === "." || part === "..")) {
-    ctx.err(`Path "${target.path}" is not canonical: it has an empty, "." or ".." segment`);
-    return 2;
+  const sources = new Map(loaded.sources.map((adapter) => [adapter.id, revisionOnce(adapter)]));
+  // Every target is checked before any is cited, so bad input prints no partial answer.
+  for (const target of targets) {
+    const broken = loaded.unloaded.find((u) => u.id === target.sourceId);
+    if (broken) {
+      throw new Error(
+        `Source "${target.sourceId}" is declared in ${broken.file} but did not load: ${broken.reason}`,
+      );
+    }
+    // Input errors exit 2, not 1 like a refusal; the sentences are core's, which MCP returns.
+    if (!sources.has(target.sourceId)) {
+      const known = [...sources.keys()].toSorted().join(", ") || "none";
+      ctx.err(`Unknown source "${target.sourceId}". Configured sources: ${known}.`);
+      return 2;
+    }
+    if (target.path.split("/").some((part) => part === "" || part === "." || part === "..")) {
+      ctx.err(`Path "${target.path}" is not canonical: it has an empty, "." or ".." segment`);
+      return 2;
+    }
   }
 
-  const citation = await citeAt(sources, workspace.config.provenanceFormat, target);
+  const citations: Citation[] = [];
+  for (const target of targets) {
+    citations.push(await citeAt(sources, workspace.config.provenanceFormat, target));
+  }
+  // One target off the expected revision refuses them all, before anything is printed.
   const expected = options.expectRevision;
-  if (expected !== undefined && citation.revision !== expected) {
-    throw new Error(
-      citation.revision !== null
-        ? `Source "${target.sourceId}" is at ${citation.revision}, not ${expected}: it moved since you read it, or ${expected} did not come from cite. Re-read ${citation.canonicalSource}, then cite again.`
-        : citation.delegated
-          ? `Cannot confirm source "${target.sourceId}" is still at ${expected}: it is read through ${citation.delegated.via}, and accreta cannot tell its revision.`
-          : `Cannot confirm source "${target.sourceId}" is still at ${expected}: accreta could not check this place. Cite it without an expected revision to see why.`,
-    );
+  if (expected !== undefined) {
+    for (const [i, citation] of citations.entries()) {
+      if (citation.revision !== expected) throw new Error(moved(targets[i]!, citation, expected));
+    }
   }
   // A place that is not there must not look like a citation to paste.
-  const code = citation.location.verdict === "missing" ? 1 : 0;
+  const code = citations.some((c) => c.location.verdict === "missing") ? 1 : 0;
 
-  if (options.json) {
-    printJson(ctx, {
-      canonical_source: citation.canonicalSource,
-      footnote: citation.footnote,
-      revision: citation.revision,
-      location: citation.location,
-      ...(citation.delegated
-        ? { delegated: { via: citation.delegated.via, scope: citation.delegated.guidance } }
-        : {}),
-      _provenance: provenance(CITE_FIELDS, SOURCE_NOTICE),
-    });
+  if (format === "json") {
+    const shaped = citations.map(toJson);
+    // One target stays an object, field for field the MCP tool's.
+    printJson(ctx, shaped.length === 1 ? shaped[0] : shaped);
+    return code;
+  }
+  if (format === "footnote") {
+    // All or nothing: line N is always target N, and a missing place leaves stdout empty.
+    for (const { canonicalSource, location } of citations) {
+      if (location.verdict === "missing") {
+        ctx.err(`${canonicalSource}: missing ${location.part}: ${location.detail}`);
+      }
+    }
+    if (code === 0) for (const citation of citations) ctx.out(citation.footnote);
     return code;
   }
 
-  const { location } = citation;
-  // Missing leads with why and prints no footnote, so `| head -1` never yields one to paste.
-  if (location.verdict === "missing") {
-    ctx.out(`location: missing ${location.part}: ${location.detail}`);
-  } else {
-    ctx.out(citation.footnote);
-  }
-  ctx.out(`canonical_source: ${citation.canonicalSource}`);
-  ctx.out(`revision: ${citation.revision ?? "none, so the footnote is unpinned"}`);
-  if (location.verdict !== "missing") {
-    ctx.out(
-      location.verdict === "found" ? "location: found" : `location: unknown: ${location.detail}`,
-    );
-  }
-  if (citation.delegated) {
-    ctx.out(`delegated: read through ${citation.delegated.via}; scope:`);
-    ctx.out(citation.delegated.guidance.trimEnd());
+  for (const [i, citation] of citations.entries()) {
+    if (i > 0) ctx.out("");
+    printBlock(ctx, citation);
   }
   return code;
+}
+
+function moved(target: ParsedCitation, citation: Citation, expected: string): string {
+  return citation.revision !== null
+    ? `Source "${target.sourceId}" is at ${citation.revision}, not ${expected}: it moved since you read it, or ${expected} did not come from cite. Re-read ${citation.canonicalSource}, then cite again.`
+    : citation.delegated
+      ? `Cannot confirm source "${target.sourceId}" is still at ${expected}: it is read through ${citation.delegated.via}, and accreta cannot tell its revision.`
+      : `Cannot confirm source "${target.sourceId}" is still at ${expected}: accreta could not check this place. Cite it without an expected revision to see why.`;
+}
+
+function toJson(citation: Citation) {
+  return {
+    canonical_source: citation.canonicalSource,
+    footnote: citation.footnote,
+    revision: citation.revision,
+    location: citation.location,
+    ...(citation.delegated
+      ? { delegated: { via: citation.delegated.via, scope: citation.delegated.guidance } }
+      : {}),
+    _provenance: provenance(CITE_FIELDS, SOURCE_NOTICE),
+  };
+}
+
+/** The same keys in the same order whatever the verdict, so a script reads them by label. */
+function printBlock(ctx: CommandContext, citation: Citation): void {
+  const missing = citation.location.verdict === "missing";
+  ctx.out(`footnote: ${missing ? "none: location missing" : citation.footnote}`);
+  ctx.out(`canonical_source: ${citation.canonicalSource}`);
+  ctx.out(`revision: ${citation.revision ?? "none, so the footnote is unpinned"}`);
+  ctx.out(continued(locationLine(citation)));
+  if (citation.delegated) {
+    const { via, guidance } = citation.delegated;
+    ctx.out(continued(`delegated: read through ${via}; scope:\n${guidance.trimEnd()}`));
+  }
+}
+
+function locationLine({ location }: Citation): string {
+  if (location.verdict === "found") return "location: found";
+  if (location.verdict === "unknown") return `location: unknown: ${location.detail}`;
+  return `location: missing ${location.part}: ${location.detail}`;
+}
+
+/** Indents every line after the first, a blank one as two spaces, so none can pose as a label. */
+function continued(text: string): string {
+  return text.split(/\r?\n/).join("\n  ");
+}
+
+/** One revision per source per call, so a batch never reports two for the same source. */
+export function revisionOnce(adapter: SourceAdapter): SourceAdapter {
+  let revision: Promise<string> | undefined;
+  return new Proxy(adapter, {
+    get(target, prop) {
+      if (prop === "revision") return () => (revision ??= target.revision());
+      const value: unknown = Reflect.get(target, prop);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
 }

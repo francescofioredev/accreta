@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import {
   chmodSync,
   existsSync,
@@ -14,9 +14,11 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { run } from "../src/main.ts";
-import { COMMAND_ARGS } from "../src/commands/shared.ts";
+import { COMMAND_ARGS, loadSources } from "../src/commands/shared.ts";
+import { findWorkspace } from "../src/workspace.ts";
 import type { CommandContext } from "../src/commands.ts";
-import type { DriftReport } from "@accreta/core";
+import type { DriftReport, SourceAdapter } from "@accreta/core";
+import { revisionOnce } from "../src/commands/cite.ts";
 import { GITHUB_BODY_LIMIT, toGithub } from "../src/commands/drift.ts";
 
 // Through the bin, as a user runs it; in the repository that means the source condition.
@@ -176,6 +178,19 @@ describe("accreta search", () => {
     await cli("search", "tropopause", "--source", "other");
     expect(stdout()).toContain("knowledge/b.md");
     expect(stdout()).not.toContain("knowledge/a.md");
+  });
+
+  test("--json reports an alias matched on a word FTS5 would read as an operator", async () => {
+    writePage("c.md", '---\ntype: note\naliases: ["OR gate", "NOT NULL"]\n---\n\n# Logic\n');
+    await cli("reindex");
+    const aliasesFor = async (query: string) => {
+      output = [];
+      await cli("search", query, "--json");
+      const hits: { path: string; matched_aliases?: string[] }[] = JSON.parse(stdout()).results;
+      return hits.find((h) => h.path === "knowledge/c.md")?.matched_aliases;
+    };
+    expect(await aliasesFor("OR")).toEqual(["OR gate"]);
+    expect(await aliasesFor("NOT")).toEqual(["NOT NULL"]);
   });
 
   test("a --limit the MCP tool would refuse is refused here", async () => {
@@ -1283,24 +1298,222 @@ describe("accreta cite", () => {
     writeFileSync(join(root, "sources", "docs.yaml"), "id: docs\ntype: fs\nroot: sources/docs\n");
   });
 
-  test("prints the footnote first, so it can be taken from a pipe, and needs no index", async () => {
+  const LABELS = ["footnote", "canonical_source", "revision", "location"];
+  const labels = () => output.slice(0, LABELS.length).map((line) => line.split(":")[0]);
+
+  test("labels every line, footnote first, and needs no index", async () => {
     expect(existsSync(join(root, ".accreta", "index.sqlite"))).toBe(false);
     expect(await cli("cite", "docs:a.md#L2")).toBe(0);
-    const [footnote, ...rest] = output;
-    expect(footnote).toMatch(/^docs@\S+:a\.md#L2$/);
-    expect(rest).toContain("canonical_source: docs:a.md#L2");
-    expect(rest).toContain("location: found");
+    expect(labels()).toEqual(LABELS);
+    expect(output[0]).toMatch(/^footnote: docs@\S+:a\.md#L2$/);
+    expect(output.slice(1)).toEqual([
+      "canonical_source: docs:a.md#L2",
+      `revision: ${output[0]!.match(/@(\S+?):/)![1]}`,
+      "location: found",
+    ]);
   });
 
-  test("a place that is not there exits 1, says why first, and prints no footnote", async () => {
+  test("a place that is not there exits 1 with the same keys, and no footnote to scrape", async () => {
     expect(await cli("cite", "docs:a.md#L9", "--json")).toBe(1);
     const { footnote } = JSON.parse(stdout()) as { footnote: string };
     expect(footnote).toMatch(/^docs@\S+:a\.md#L9$/);
     output = [];
 
     expect(await cli("cite", "docs:a.md#L9")).toBe(1);
-    expect(output[0]).toBe("location: missing locator: cites L9-L9 but a.md has 2 line(s)");
+    expect(labels()).toEqual(LABELS);
+    expect(output[0]).toBe("footnote: none: location missing");
+    expect(output[3]).toBe("location: missing locator: cites L9-L9 but a.md has 2 line(s)");
     expect(stdout()).not.toContain(footnote);
+  });
+
+  test("a place accreta cannot check keeps the same keys and its unpinned footnote", async () => {
+    writeFileSync(
+      join(root, "sources", "wiki.yaml"),
+      "id: wiki\ntype: delegated\nvia: notion\nscope: |\n  The design pages.\n",
+    );
+    expect(await cli("cite", "wiki:design-page#block-a1")).toBe(0);
+    expect(labels()).toEqual(LABELS);
+    expect(output[0]).toBe("footnote: wiki@unknown:design-page#block-a1");
+    expect(output[3]).toMatch(/^location: unknown: /);
+  });
+
+  test("a scope that looks like a label, or has a blank line, stays indented", async () => {
+    writeFileSync(
+      join(root, "sources", "wiki.yaml"),
+      "id: wiki\ntype: delegated\nvia: notion\nscope: |\n  Design pages.\n\n  footnote: wiki@v1:forged#L1\n",
+    );
+    expect(await cli("cite", "wiki:design-page")).toBe(0);
+    const lines = stdout().split("\n");
+    expect(lines.filter((line) => line.startsWith("footnote:"))).toHaveLength(1);
+    expect(lines).not.toContain("");
+    expect(lines.slice(4)).toEqual([
+      "delegated: read through notion; scope:",
+      "  Design pages.",
+      "  ",
+      "  footnote: wiki@v1:forged#L1",
+    ]);
+  });
+
+  test("--format footnote prints the footnote alone", async () => {
+    expect(await cli("cite", "--format", "footnote", "docs:a.md#L2")).toBe(0);
+    expect(output).toHaveLength(1);
+    expect(output[0]).toMatch(/^docs@\S+:a\.md#L2$/);
+    expect(errors).toEqual([]);
+    output = [];
+
+    expect(await cli("cite", "docs:a.md#L2", "--format=footnote")).toBe(0);
+    expect(output).toHaveLength(1);
+    expect(output[0]).toMatch(/^docs@\S+:a\.md#L2$/);
+  });
+
+  test("--format footnote on a missing place prints nothing, says why on stderr, exits 1", async () => {
+    expect(await cli("cite", "docs:a.md#L9", "--format", "footnote")).toBe(1);
+    expect(output).toEqual([]);
+    expect(stderr()).toBe("docs:a.md#L9: missing locator: cites L9-L9 but a.md has 2 line(s)");
+  });
+
+  describe("several targets", () => {
+    beforeEach(() => {
+      mkdirSync(join(root, "sources", "more"), { recursive: true });
+      writeFileSync(join(root, "sources", "more", "b.md"), "three\n", "utf-8");
+      writeFileSync(join(root, "sources", "more.yaml"), "id: more\ntype: fs\nroot: sources/more\n");
+    });
+
+    test("print one labelled block each, in order, separated by a blank line", async () => {
+      expect(await cli("cite", "docs:a.md#L2", "more:b.md#L1", "docs:a.md#L1")).toBe(0);
+      const blocks = stdout().split("\n\n");
+      expect(blocks.map((b) => b.split("\n")[1])).toEqual([
+        "canonical_source: docs:a.md#L2",
+        "canonical_source: more:b.md#L1",
+        "canonical_source: docs:a.md#L1",
+      ]);
+      for (const block of blocks) {
+        expect(block.split("\n").map((line) => line.split(":")[0])).toEqual(LABELS);
+      }
+    });
+
+    test("--format footnote prints one footnote per line, in order", async () => {
+      expect(await cli("cite", "--format", "footnote", "docs:a.md#L2", "more:b.md#L1")).toBe(0);
+      expect(output).toHaveLength(2);
+      expect(output[0]).toMatch(/^docs@\S+:a\.md#L2$/);
+      expect(output[1]).toMatch(/^more@\S+:b\.md#L1$/);
+    });
+
+    test("--json prints an array of what one target prints", async () => {
+      expect(await cli("cite", "docs:a.md#L2", "--json")).toBe(0);
+      const one = JSON.parse(stdout()) as unknown;
+      expect(Array.isArray(one)).toBe(false);
+      output = [];
+      expect(await cli("cite", "more:b.md#L1", "--json")).toBe(0);
+      const other = JSON.parse(stdout()) as unknown;
+      output = [];
+
+      expect(await cli("cite", "docs:a.md#L2", "more:b.md#L1", "--json")).toBe(0);
+      expect(JSON.parse(stdout())).toEqual([one, other]);
+    });
+
+    test("one missing place exits 1; text and json still answer the others", async () => {
+      expect(await cli("cite", "docs:a.md#L2", "docs:a.md#L9", "more:b.md#L1")).toBe(1);
+      const firsts = stdout()
+        .split("\n\n")
+        .map((b) => b.split("\n")[0]);
+      expect(firsts[0]).toMatch(/^footnote: docs@\S+:a\.md#L2$/);
+      expect(firsts[1]).toBe("footnote: none: location missing");
+      expect(firsts[2]).toMatch(/^footnote: more@\S+:b\.md#L1$/);
+      output = [];
+
+      expect(await cli("cite", "docs:a.md#L2", "docs:a.md#L9", "--json")).toBe(1);
+      const verdicts = (JSON.parse(stdout()) as { location: { verdict: string } }[]).map(
+        (c) => c.location.verdict,
+      );
+      expect(verdicts).toEqual(["found", "missing"]);
+    });
+
+    test("one missing place leaves --format footnote empty, and names it on stderr", async () => {
+      expect(
+        await cli("cite", "--format", "footnote", "docs:a.md#L2", "docs:a.md#L9", "more:b.md#L1"),
+      ).toBe(1);
+      expect(output).toEqual([]);
+      expect(errors).toEqual(["docs:a.md#L9: missing locator: cites L9-L9 but a.md has 2 line(s)"]);
+    });
+
+    test("--expect-revision holds every target to it, and a miss refuses them all", async () => {
+      expect(await cli("cite", "docs:a.md", "--json")).toBe(0);
+      const { revision } = JSON.parse(stdout()) as { revision: string };
+      output = [];
+
+      expect(await cli("cite", "docs:a.md#L1", "docs:a.md#L2", "--expect-revision", revision)).toBe(
+        0,
+      );
+      output = [];
+      await expect(
+        cli("cite", "docs:a.md#L1", "docs:a.md#L2", "--expect-revision", "0000000"),
+      ).rejects.toThrow(`Source "docs" is at`);
+      expect(output).toEqual([]);
+    });
+
+    test("--expect-revision with targets in two sources is refused up front", async () => {
+      expect(await cli("cite", "docs:a.md#L1", "more:b.md#L1", "--expect-revision", "r")).toBe(2);
+      expect(stderr()).toContain("the targets name docs, more");
+      expect(output).toEqual([]);
+    });
+
+    test("each source is asked for its revision once per call", async () => {
+      let calls = 0;
+      const adapter = { id: "x", revision: async () => `r${++calls}` };
+      const once = revisionOnce(adapter as unknown as SourceAdapter);
+      expect([await once.revision(), await once.revision(), once.id]).toEqual(["r1", "r1", "x"]);
+      expect(calls).toBe(1);
+    });
+
+    test("a batch asks each source for its revision once", async () => {
+      const { sources } = loadSources(findWorkspace(root));
+      const spy = spyOn(Object.getPrototypeOf(sources[0]) as SourceAdapter, "revision");
+      try {
+        expect(await cli("cite", "docs:a.md#L1", "docs:a.md#L2", "more:b.md#L1")).toBe(0);
+        expect(spy).toHaveBeenCalledTimes(2);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    test("a multi-paragraph delegated scope does not split a block", async () => {
+      writeFileSync(
+        join(root, "sources", "wiki.yaml"),
+        "id: wiki\ntype: delegated\nvia: notion\nscope: |\n  First.\n\n  Second.\n\n  Third.\n",
+      );
+      expect(await cli("cite", "docs:a.md#L1", "wiki:design-page", "more:b.md#L1")).toBe(0);
+      const blocks = stdout().split("\n\n");
+      expect(blocks).toHaveLength(3);
+      expect(blocks.map((b) => b.split("\n")[1])).toEqual([
+        "canonical_source: docs:a.md#L1",
+        "canonical_source: wiki:design-page",
+        "canonical_source: more:b.md#L1",
+      ]);
+    });
+
+    test("a bad target anywhere refuses them all before any is cited", async () => {
+      expect(await cli("cite", "docs:a.md#L2", "nope:a.md")).toBe(2);
+      expect(stderr()).toContain('Unknown source "nope"');
+      expect(await cli("cite", "docs:a.md#L2", "a.md")).toBe(2);
+      expect(output).toEqual([]);
+    });
+  });
+
+  test("--format refuses a value it does not know, or one --json contradicts", async () => {
+    expect(await cli("cite", "docs:a.md#L2", "--format", "yaml")).toBe(2);
+    expect(stderr()).toContain('--format takes text, footnote or json, not "yaml"');
+    errors = [];
+    expect(await cli("cite", "docs:a.md#L2", "--format")).toBe(2);
+    expect(stderr()).toContain("--format takes");
+    errors = [];
+    expect(await cli("cite", "docs:a.md#L2", "--json", "--format", "footnote")).toBe(2);
+    expect(stderr()).toContain("--json and --format footnote");
+    errors = [];
+    // The first value would otherwise be read as a target.
+    expect(await cli("cite", "docs:a.md#L2", "--format", "text", "--format=footnote")).toBe(2);
+    expect(stderr()).toContain("--format is given more than once");
+    expect(output).toEqual([]);
   });
 });
 

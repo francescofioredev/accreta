@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { MAX_PAGE_LIMIT } from "@accreta/core";
+import { DEFAULT_CONFIG, extractLinks, MAX_PAGE_LIMIT, parsePage } from "@accreta/core";
 import { COMMAND_ARGS } from "../src/commands/shared.ts";
 import { composeConstitution, isPreset, PRESETS } from "../src/constitution.ts";
 
@@ -99,6 +99,54 @@ describe("composeConstitution", () => {
         "the revision of the page's own `source`",
       ]) {
         expect({ preset, has: text.includes(phrase) }).toEqual({ preset, has: true });
+      }
+    }
+  });
+
+  test("every rendering covers the gaps writers hit (#271)", () => {
+    for (const { preset, text } of RENDERINGS) {
+      for (const phrase of [
+        "Quote each target",
+        "A field reads from the page it is on",
+        "in the page whose claim is contested; that page's writer does",
+        "Search for one first; if none\nexists, the first writer to find the disagreement writes it",
+        "An absence has no locator",
+        "cite the document that would list\nit",
+      ]) {
+        expect({ preset, phrase, has: text.includes(phrase) }).toEqual({
+          preset,
+          phrase,
+          has: true,
+        });
+      }
+    }
+    const codebase = composeConstitution({ preset: "codebase" });
+    expect(codebase).toContain("consumed_by # what this page's subject calls");
+    const research = composeConstitution({ preset: "research" });
+    expect(research).toContain("link back to it with `discussed_in`");
+  });
+
+  test("the page example links two targets (#271)", () => {
+    const text = composeConstitution();
+    const example = text.slice(text.indexOf("## What a page is"), text.indexOf("## Links"));
+    const page = example.slice(example.indexOf("```markdown\n") + 12, example.lastIndexOf("```"));
+    const { frontmatter, body, frontmatterError } = parsePage(page, "example");
+    expect(frontmatterError).toBeUndefined();
+    const related = extractLinks(frontmatter, body, DEFAULT_CONFIG).filter(
+      (link) => link.kind === "related",
+    );
+    expect(related.length).toBe(2);
+  });
+
+  test("every frontmatter example reads as strings to any YAML reader (#271)", () => {
+    // Unquoted, `related: [[x]]` is a nested list to every reader but accreta's.
+    for (const { preset, text } of RENDERINGS) {
+      for (const [, yaml] of text.matchAll(/```markdown\n---\n([\s\S]*?)\n---\n/g)) {
+        const loaded = Bun.YAML.parse(yaml!) as Record<string, unknown>;
+        for (const [field, value] of Object.entries(loaded)) {
+          const nested = Array.isArray(value) && value.some((item) => Array.isArray(item));
+          expect({ preset, field, nested }).toEqual({ preset, field, nested: false });
+        }
       }
     }
   });

@@ -17,6 +17,7 @@ jobs:
   drift:
     name: pages in doubt
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       # Citations name the commit they were verified at; a shallow clone cannot place it.
       - uses: actions/checkout@v4

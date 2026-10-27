@@ -103,7 +103,7 @@ interface Result {
 
 function evaluate(db: Database, queries: Query[]): Result[] {
   return queries.map((q) => {
-    const hits = searchPages(db, { query: toFtsQuery(q.query), limit: 10 });
+    const hits = searchPages(db, { query: toFtsQuery(q.query), syntax: "fts5", limit: 10 });
     const index = hits.findIndex((h) => h.path === q.relevant);
     return { ...q, rank: index === -1 ? null : index + 1 };
   });
