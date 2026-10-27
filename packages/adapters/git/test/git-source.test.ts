@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   buildIndex,
+  cite,
   DEFAULT_CONFIG,
   detectDrift,
   lintCitations,
@@ -1273,5 +1274,176 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
   test("at the top level the revision is still HEAD, even when HEAD changed nothing", async () => {
     await run(["commit", "-q", "--allow-empty", "-m", "empty"]);
     expect(await source().revision()).toBe(await head());
+  });
+});
+
+describe("a revision that names a ref, not a commit", () => {
+  let kb = "";
+  let first = "";
+
+  beforeEach(async () => {
+    kb = mkdtempSync(join(tmpdir(), "accreta-git-kb-"));
+    write("a.md", "one\ntwo\n");
+    await commit("first");
+    first = await source().revision();
+    write("a.md", "one\nchanged\n");
+    await commit("second");
+  });
+
+  afterEach(() => {
+    rmSync(kb, { recursive: true, force: true });
+  });
+
+  /** A branch named like hex that abbreviates no commit, so it can only be read as a ref. */
+  async function hexBranch(): Promise<string> {
+    for (const name of ["cafe1234", "beef5678", "f00dfeed"]) {
+      if ((await output(["rev-parse", `--disambiguate=${name}`])) === "") {
+        await run(["branch", name]);
+        return name;
+      }
+    }
+    throw new Error("every candidate name abbreviates a commit");
+  }
+
+  async function withPage<T>(
+    frontmatter: string,
+    footnote: string,
+    ask: (db: ReturnType<typeof openIndex>) => Promise<T>,
+  ): Promise<T> {
+    mkdirSync(join(kb, "knowledge"), { recursive: true });
+    writeFileSync(
+      join(kb, "knowledge", "page.md"),
+      `---\ntype: note\n${frontmatter}---\n\nA claim.[^a]\n\n[^a]: ${footnote}\n`,
+    );
+    const indexPath = join(kb, "index.sqlite");
+    buildIndex({ root: kb, config: DEFAULT_CONFIG, indexPath });
+    const db = openIndex(indexPath);
+    try {
+      return await ask(db);
+    } finally {
+      db.close();
+    }
+  }
+
+  const refAt = async (ref: string) => (ref === "a hex-named branch" ? await hexBranch() : ref);
+
+  for (const ref of ["HEAD", "HEAD~0", "a hex-named branch"]) {
+    test(`lint reports a footnote pinned at ${ref}`, async () => {
+      const at = await refAt(ref);
+      const git = source();
+      const { findings } = await withPage("", `repo @ ${at} · a.md#L1-L2`, (db) =>
+        lintCitations(db, new Map([["repo", git]])),
+      );
+      expect(findings.map((f) => f.kind)).toEqual(["citation-revision-unknown"]);
+      expect(findings[0]?.detail).toContain("names a ref");
+      expect(findings[0]?.detail).not.toContain("does not have");
+    });
+
+    test(`lint reports last_verified_revision at ${ref}`, async () => {
+      const at = await refAt(ref);
+      const git = source();
+      const head = await git.revision();
+      const { findings } = await withPage(
+        `source: repo\nlast_verified_revision: ${at}\n`,
+        `repo @ ${head} · a.md#L1-L2`,
+        (db) => lintCitations(db, new Map([["repo", git]])),
+      );
+      expect(findings.map((f) => f.kind)).toEqual(["verified-revision-unknown"]);
+      expect(findings[0]?.detail).toContain("names a ref");
+    });
+
+    test(`drift cannot place last_verified_revision at ${ref}, rather than call it current`, async () => {
+      const at = await refAt(ref);
+      const report = await withPage(
+        `source: repo\nlast_verified_revision: ${at}\n`,
+        `repo @ ${first} · a.md#L1-L2`,
+        (db) => detectDrift(db, source()),
+      );
+      expect(report.unresolvable).toEqual([{ revision: at, pages: ["knowledge/page.md"] }]);
+    });
+
+    test(`drift cannot place another source's footnote pinned at ${ref}`, async () => {
+      const at = await refAt(ref);
+      const report = await withPage(
+        `source: other\nlast_verified_revision: x\n`,
+        `repo @ ${at} · a.md#L1-L2`,
+        (db) => detectDrift(db, source()),
+      );
+      expect(report.unresolvable).toEqual([
+        { revision: at, pages: ["knowledge/page.md"], citedOnly: ["knowledge/page.md"] },
+      ]);
+    });
+  }
+
+  test("changedSince and touchedSince refuse a ref", async () => {
+    const git = source();
+    for (const ref of ["HEAD", "HEAD~0", "main", await hexBranch()]) {
+      await expect(git.changedSince(ref)).rejects.toThrow(UnknownRevisionError);
+      await expect(git.touchedSince(ref, "a.md", ["L1-L2"])).rejects.toThrow(UnknownRevisionError);
+    }
+  });
+
+  test("a branch named like a commit's prefix does not shadow the commit", async () => {
+    // git itself reads the name as the branch, warning only that "refname is ambiguous".
+    const prefix = first.slice(0, 7);
+    await run(["branch", prefix]);
+    const git = source();
+    expect(await git.changedSince(prefix)).toEqual(["a.md"]);
+    expect((await git.touchedSince(prefix, "a.md", ["L2"])).get("L2")).toEqual({
+      status: "touched",
+    });
+    const report = await withPage(
+      `source: repo\nlast_verified_revision: "${prefix}"\n`,
+      `repo @ ${first} · a.md#L2`,
+      (db) => detectDrift(db, git),
+    );
+    expect(report.stale.map((entry) => [entry.revision, entry.changedPaths])).toEqual([
+      [prefix, ["a.md"]],
+    ]);
+  });
+
+  test("cite refuses a ref as one, as lint reports it, and reads a shadowed prefix as the commit", async () => {
+    const git = source();
+    const at = (expectRevision: string) =>
+      cite(
+        new Map([["repo", git]]),
+        DEFAULT_CONFIG.provenanceFormat,
+        {
+          sourceId: "repo",
+          path: "a.md",
+          locator: "L1-L2",
+        },
+        { expectRevision },
+      );
+    for (const ref of ["HEAD", "HEAD~0", await hexBranch()]) {
+      await expect(at(ref)).rejects.toThrow(`${ref} names a ref of source "repo"`);
+    }
+    // The branch points at HEAD, but the prefix abbreviates the first commit, which is not current.
+    const prefix = first.slice(0, 7);
+    await run(["branch", prefix]);
+    const head = await git.revision();
+    await expect(at(prefix)).rejects.toThrow(`is at ${head}, not ${prefix}`);
+  });
+
+  test("lint names the full revision for an abbreviated last_verified_revision", async () => {
+    const git = source();
+    const { findings } = await withPage(
+      `source: repo\nlast_verified_revision: "${first.slice(0, 7)}"\n`,
+      `repo @ ${first} · a.md#L1-L2`,
+      (db) => lintCitations(db, new Map([["repo", git]])),
+    );
+    expect(findings.map((f) => f.kind)).toEqual(["verified-revision-abbreviated"]);
+    expect(findings[0]?.detail).toContain(`record ${first}`);
+  });
+
+  test("lint asks for lowercase when last_verified_revision is written in uppercase", async () => {
+    const git = source();
+    const { findings } = await withPage(
+      `source: repo\nlast_verified_revision: "${first.toUpperCase()}"\n`,
+      `repo @ ${first} · a.md#L1-L2`,
+      (db) => lintCitations(db, new Map([["repo", git]])),
+    );
+    expect(findings.map((f) => f.kind)).toEqual(["verified-revision-abbreviated"]);
+    expect(findings[0]?.detail).toContain("uppercase");
   });
 });

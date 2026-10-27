@@ -29,7 +29,8 @@ export interface SourceAdapter {
    * difference — it is less useful, not incorrect. Throwing `UnknownRevision`
    * is the right answer when the revision is not one this source can reason
    * about, so drift detection can report "cannot tell" rather than "nothing
-   * changed", which are very different claims.
+   * changed", which are very different claims. A ref such as `HEAD` is one:
+   * it moves with the source, so diffing from it finds nothing ever changed.
    */
   changedSince(revision: string): Promise<string[]>;
 
@@ -52,14 +53,15 @@ export interface SourceAdapter {
 
   /**
    * The full revision an abbreviated one names. Absent, revisions are compared exactly.
-   * A `resolved` answer implies the source has that revision; lint relies on it.
+   * A `resolved` answer implies the source has that revision; lint relies on it. A ref is
+   * `unknown` even when `knowsRevision` says yes, and lint reports that pair as a ref.
    */
   resolveRevision?(revision: string): Promise<RevisionResolution>;
 
   /**
    * What the change from `revision` to now did to each locator in `path`. Optional: a source
    * that cannot diff contents leaves it out, and drift stays per file. Throws
-   * `UnknownRevisionError` for a revision it cannot place.
+   * `UnknownRevisionError` for a revision it cannot place, a ref included.
    */
   touchedSince?(
     revision: string,

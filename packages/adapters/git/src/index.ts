@@ -307,6 +307,7 @@ export class GitSource implements SourceAdapter {
   /**
    * `cat-file -e` is the cheap way to ask whether this repository has ever heard of the
    * revision. A shallow clone, a rewritten history or another repository's revision all say no.
+   * It also says yes to a ref, which `resolveRevision` refuses: lint reads that pair as a ref.
    */
   async knowsRevision(revision: string): Promise<boolean> {
     try {
@@ -343,16 +344,24 @@ export class GitSource implements SourceAdapter {
     return commits[0] ? { status: "resolved", revision: commits[0] } : { status: "unknown" };
   }
 
+  /**
+   * The commit a recorded revision names, or `UnknownRevisionError`. A ref moves, so diffing
+   * from `HEAD` finds nothing ever changed; and git reads a branch named like a prefix as the branch.
+   */
+  private async commitOf(revision: string): Promise<string> {
+    const resolved = await this.resolveRevision(revision);
+    if (resolved.status !== "resolved") throw new UnknownRevisionError(this.id, revision);
+    return resolved.revision;
+  }
+
   async changedSince(revision: string): Promise<string[]> {
     // Answering "nothing changed" for a revision this repository cannot place
     // would be a lie that drift detection cannot detect.
-    if (!(await this.knowsRevision(revision))) {
-      throw new UnknownRevisionError(this.id, revision);
-    }
+    const commit = await this.commitOf(revision);
 
     // Citations name a renamed file's old path; -z stops git quoting a non-ASCII one.
     // --relative: citations name paths from the root, not the repository top.
-    const args = ["diff", "--name-only", "-z", "--no-renames", "--relative", revision, "HEAD"];
+    const args = ["diff", "--name-only", "-z", "--no-renames", "--relative", commit, "HEAD"];
     if (this.paths.length > 0) args.push("--", ...this.paths);
     const out = await git(this.root, args);
     return out.split("\0").filter(Boolean).toSorted();
@@ -367,7 +376,7 @@ export class GitSource implements SourceAdapter {
     path: string,
     locators: readonly string[],
   ): Promise<Map<string, LocatorChange>> {
-    if (!(await this.knowsRevision(revision))) throw new UnknownRevisionError(this.id, revision);
+    const commit = await this.commitOf(revision);
     const out = new Map<string, LocatorChange>();
     const ranges = locators.map((locator) => [locator, parseLineLocator(locator)] as const);
     // Only a line range is judged from the diff, and a large file's diff is expensive.
@@ -390,7 +399,7 @@ export class GitSource implements SourceAdapter {
       "--no-textconv",
       // A `-diff` attribute or a NUL byte would print "Binary files differ" and no hunks.
       "--text",
-      revision,
+      commit,
       "HEAD",
       "--",
       path,
