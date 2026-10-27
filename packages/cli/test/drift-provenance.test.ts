@@ -101,9 +101,9 @@ function taint<T>(value: T, key = ""): T {
   }
   if (Array.isArray(value)) return value.map((item) => taint(item)) as T;
   if (value !== null && typeof value === "object") {
-    // citedPaths is keyed by page path, so its keys must match the tainted pages.
+    // citedPaths and refused are keyed by page path, so their keys must match the tainted pages.
     const entries = Object.entries(value).map(([k, v]) => [
-      key === "citedPaths" ? taint(k) : k,
+      key === "citedPaths" || key === "refused" ? taint(k) : k,
       taint(v, k),
     ]);
     return Object.fromEntries(entries) as T;

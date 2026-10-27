@@ -438,7 +438,7 @@ const DRIFT_FIELDS = [
   "sources[].in_doubt[].citations[].path",
   "sources[].in_doubt[].citations[].locator",
   "sources[].in_doubt[].citations[].cited_at",
-  // locate's reason names the cited path back.
+  // locate's reason names the cited path back, so `refused` is page-derived too.
   "sources[].in_doubt[].citations[].refused",
   "sources[].in_doubt[].refused[].footnote",
   "sources[].in_doubt[].refused[].path",
