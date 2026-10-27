@@ -804,6 +804,76 @@ describe("lint over GitSource asks a symlink citation to name its target", () =>
   });
 });
 
+// #303: drift never ran lint, so a citation the diff could not see ranked its page "uncited".
+describe("drift over GitSource does not clear a citation locate refuses", () => {
+  let kb = "";
+
+  beforeEach(async () => {
+    kb = mkdtempSync(join(tmpdir(), "accreta-git-kb-"));
+    write("docs/real.md", lines(12));
+    write("other/b.md", lines(3));
+    symlinkSync("real.md", join(root, "docs", "link.md"));
+    await commit("first");
+  });
+
+  afterEach(() => {
+    rmSync(kb, { recursive: true, force: true });
+  });
+
+  /** Cite `cited` at HEAD, edit line 6 of docs/real.md, and rank the citing page as drift does. */
+  async function driftAfterEdit(cited: string, git = source()) {
+    const from = await git.revision();
+    mkdirSync(join(kb, "knowledge"), { recursive: true });
+    writeFileSync(
+      join(kb, "knowledge", "page.md"),
+      `---\ntype: note\nsource: repo\nlast_verified_revision: ${from}\n---\n\nA claim.[^a]\n\n[^a]: repo @ ${from} · ${cited}\n`,
+    );
+    write("docs/real.md", lines(12, { 6: "changed" }));
+    await commit("edit line 6");
+
+    const indexPath = join(kb, "index.sqlite");
+    buildIndex({ root: kb, config: DEFAULT_CONFIG, indexPath });
+    const db = openIndex(indexPath);
+    try {
+      const [entry] = (await detectDrift(db, git)).stale;
+      expect(entry?.changedPaths).toEqual(["docs/real.md"]);
+      return { rank: pageChanges(entry!)?.get("knowledge/page.md"), entry: entry! };
+    } finally {
+      db.close();
+    }
+  }
+
+  test("a symlink to the edited file", async () => {
+    const { rank, entry } = await driftAfterEdit("docs/link.md#L5-L8");
+    expect(rank).toBe("changed");
+    expect(entry.citations?.[0]?.refused).toContain('cite "docs/real.md" instead');
+  });
+
+  test("a case variant of the edited file", async () => {
+    expect((await driftAfterEdit("docs/REAL.md#L5-L8")).rank).toBe("changed");
+  });
+
+  test("a path outside the declared paths", async () => {
+    const scoped = new GitSource({
+      id: "repo",
+      root,
+      citationFormat: "{source} @ {rev} · {path}#{locator}",
+      paths: ["docs"],
+    });
+    const { rank, entry } = await driftAfterEdit("other/b.md#L1-L2", scoped);
+    expect(rank).toBe("changed");
+    expect(entry.citations?.[0]?.refused).toContain("outside the declared paths");
+  });
+
+  test("the target's unedited lines still rank untouched", async () => {
+    expect((await driftAfterEdit("docs/real.md#L1-L2")).rank).toBe("untouched");
+  });
+
+  test("a file the commit left alone still ranks uncited", async () => {
+    expect((await driftAfterEdit("other/b.md#L1-L2")).rank).toBe("uncited");
+  });
+});
+
 describe("GitSource rooted in a subdirectory of the repository", () => {
   let kb = "";
 
