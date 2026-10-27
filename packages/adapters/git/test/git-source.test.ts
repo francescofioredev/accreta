@@ -1330,22 +1330,24 @@ describe("GitSource spawn hardening", () => {
       process.env.ACCRETA_GIT_TIMEOUT_MS = "3000";
 
       const pid = () => (existsSync(pidFile) ? Number(readFileSync(pidFile, "utf-8")) : 0);
+      const alive = () =>
+        pid() > 0 &&
+        new RegExp(`\\b${pid()}\\b`).test(
+          Bun.spawnSync(["tasklist", "/FI", `PID eq ${pid()}`, "/NH"]).stdout.toString(),
+        );
       try {
         expect(await source().locate("a.md", "L1")).toEqual({
           verdict: "unknown",
           detail: "git could not run: git status did not finish within 3000 ms",
         });
         expect(pid()).toBeGreaterThan(0);
-        const alive = () =>
-          new RegExp(`\\b${pid()}\\b`).test(
-            Bun.spawnSync(["tasklist", "/FI", `PID eq ${pid()}`, "/NH"]).stdout.toString(),
-          );
         const deadline = Date.now() + 5_000;
         while (alive() && Date.now() < deadline) await Bun.sleep(200);
         expect(alive()).toBe(false);
       } finally {
         try {
-          if (pid() > 0) process.kill(pid(), "SIGKILL");
+          // Only a helper still listed is ours; a dead one's pid may already be another process's.
+          if (alive()) process.kill(pid(), "SIGKILL");
         } catch {
           // Gone, as it should be.
         }

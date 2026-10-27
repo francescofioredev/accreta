@@ -183,13 +183,16 @@ export function run(
     });
     const pid = child.pid;
     if (pid !== undefined) guard(pid);
+    // A Windows pid is free for reuse once git exits, though a helper may still hold the pipes.
+    const exited = () => !group && (child.exitCode !== null || child.signalCode !== null);
+    if (!group && pid !== undefined) child.once("exit", () => release(pid));
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     let settled = false;
     const timer = setTimeout(() => {
       settled = true;
       try {
-        if (pid !== undefined) kill(pid);
+        if (pid !== undefined && !exited()) kill(pid);
         else child.kill("SIGKILL");
       } catch {
         // Already gone.

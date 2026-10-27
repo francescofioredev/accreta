@@ -98,7 +98,7 @@ describe("treeKill", () => {
   });
 
   test("answers nothing without a SystemRoot rooted at a drive", () => {
-    for (const root of ["", "Windows", ".\\Windows", "\\Windows", "\\\\host\\share\\Windows"]) {
+    for (const root of ["", "Windows", ".\\Windows", "\\Windows", "C:Windows", "\\\\host\\share"]) {
       expect(treeKill(1, { SystemRoot: root })).toBeUndefined();
     }
     expect(treeKill(1, {})).toBeUndefined();
