@@ -97,6 +97,8 @@ describe("composeConstitution", () => {
         "re-cite every existing footnote with `accreta cite`",
         "unless\nthat source is delegated",
         "the revision of the page's own `source`",
+        "A citation covers its whole sentence.",
+        "re-open the source lines cited by each footnote you added",
       ]) {
         expect({ preset, has: text.includes(phrase) }).toEqual({ preset, has: true });
       }

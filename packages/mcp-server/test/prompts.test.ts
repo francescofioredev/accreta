@@ -182,6 +182,8 @@ describe("MCP prompts", () => {
         }
         // The page field and the footnote value the prompts name; the server declares neither.
         for (const extra of ["last_verified_revision", "unknown"]) known.add(extra);
+        // A check_drift field only a refused citation emits; injection.test.ts sees it emitted.
+        known.add("refused");
         for (const name of Object.keys(ARGS)) {
           const text = await render(client, name);
           const quoted = [...text.matchAll(/`([a-z][a-z_.]*)`/g)].map((m) => m[1]!);
@@ -222,6 +224,15 @@ describe("MCP prompts", () => {
   test("ingest records a revision on a new page only", async () => {
     const text = await withClient(false, (c) => render(c, "ingest_source"));
     expect(text).toContain("On a page you extended, leave its revision alone");
+  });
+
+  test("ingest and reverify check that each cited sentence is in its lines", async () => {
+    const ingest = await withClient(false, (c) => render(c, "ingest_source"));
+    expect(ingest).toContain("re-open the source lines cited by each footnote you added");
+    expect(ingest).toContain("never widen a range to cover it");
+    expect(await reverify()).toContain(
+      "check every fact in each re-cited sentence is in its lines",
+    );
   });
 
   test("reverify with no source checks all of them", async () => {

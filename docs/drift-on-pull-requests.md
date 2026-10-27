@@ -99,15 +99,29 @@ Run the same comparison locally with `accreta drift --format github --base base.
 - A new comment appears only when a page is newly in doubt, newly at a revision nobody can
   place, or a source declaration newly did not load, unless `comment-when-clean` is set. An existing
   comment is always updated, so it turns clean when the pages are re-verified.
-- `fail-on-drift` keys on the same three counts, not on drift's exit code, so drift the base
-  branch already had does not fail every pull request.
+- `fail-on-drift` keys on the exit code of `accreta drift --base`, which fails only on those same
+  three, so drift the base branch already had does not fail every pull request.
 - A source declaration that did not load counts as new unless the base branch already failed to
   load the same file with the same `id` and at least as many pages citing it. Its error can change and it
   stays inherited; a new `id` or more citing pages make it new. One page removed and another added
   keeps the count, so that swap goes unnoticed. Inherited ones are still listed, in the headline
   and folded, because nothing citing them is checked until the declaration is fixed.
-- `accreta drift` itself still exits 1 on any declaration that did not load, with or without
-  `--base`.
+
+## The exit code with `--base`
+
+`accreta drift --base base.json` exits 1 only on what the change put in doubt: a page newly in
+doubt, a page newly at a revision nobody can place, or a source declaration newly not loading.
+Pages behind their source whose cited lines only moved or stayed untouched are still reported
+(`repin`, `other_stale_pages`) but no longer fail. Under `--strict` it also fails on a page that
+newly records no revision, or newly waits on the agent for a delegated source. Those are compared
+by page, so a page that gains a revision, or is re-verified at a new one, is not new. In text,
+a first line says how many pages are newly in doubt and how many the base branch already had.
+
+Without `--base`, nothing changes: drift exits 1 on every page behind its source, moved and
+untouched ones included, and on every unplaceable revision and unloaded declaration.
+
+With no base to compare with, the action passes an empty report, so every page counts as new and
+the exit code agrees with the counts.
 
 ## Pull requests from forks
 

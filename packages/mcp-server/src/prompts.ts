@@ -22,6 +22,7 @@ export function ingestSourceText(target: string): string {
     "4. For each claim, call `cite` with the exact place as `target` and the revision from step 1 as `expect_revision`, and paste the `footnote` it returns. Never compose one. If it says the source is at another revision, the source moved: re-read and cite again. `location.verdict: missing` means the target is wrong.",
     "5. On a new page, record that revision of its own `source` in `last_verified_revision` (for a delegated source, the revision you read through the connector). On a page you extended, leave its revision alone unless you re-verified the whole page against this one.",
     "6. Ask for `accreta reindex`, then call `lint_knowledge_base` and fix what it reports.",
+    "7. Before you stop, re-open the source lines cited by each footnote you added, re-pinned, or whose sentence you changed, and only those. Every fact in the sentence (a name, a value, a sequence, a condition, a cause) must be in them. Give any that is not its own footnote from `cite`, or drop it; never widen a range to cover it. Mark an inference as yours and cite the lines it rests on. Then repeat step 6.",
     "",
     UNREACHABLE,
     DATA,
@@ -39,9 +40,10 @@ export function reverifyStalePagesText(source: string | undefined, writesEnabled
     "",
     `1. Call \`check_drift\`${source === undefined ? "" : ` with \`source: ${JSON.stringify(source)}\``}. For each report, work through its reply:`,
     "- `stale`, `unresolvable` and `delegated.pending` group pages by revision. A page in a group's `cited_only` only cites this source at that revision: re-check its cited lines, re-pin those footnotes with `cite` (a delegated source's cannot be pinned: leave them), and record no revision on it.",
-    "- `stale`, every other page: re-read what changed for it (its `citations`, else the `changed_paths`; also for a page in `pages_by_change.untouched` or `pages_by_change.uncited`), correct the page, re-cite each claim with `cite` and `expect_revision` set to the report's `current_revision`, then " +
+    "- `stale`, every other page: re-read what changed for it (its `citations`, else the `changed_paths`; also for a page in `pages_by_change.untouched` or `pages_by_change.uncited`), correct the page, re-cite each claim with `cite` and `expect_revision` set to the report's `current_revision`, check every fact in each re-cited sentence is in its lines (split off or drop any that is not), then " +
       record +
       ". If `cite` says the source is at a newer revision, start again from step 1.",
+    "- A citation with `refused`, or a page in a group's `refused`: the source will not vouch for that place, so re-reading cannot clear it. Fix the citation instead, for example re-cite the path the reason names with `cite`.",
     "- `unresolvable`, every other page: its recorded revision cannot be found. Re-verify the whole page against `current_revision`, then " +
       record +
       ".",
