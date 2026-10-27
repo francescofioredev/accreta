@@ -252,6 +252,18 @@ test("doctor reads Claude Code's local scope, under CLAUDE_CONFIG_DIR when set",
   expect(stdout()).toContain("claude mcp remove --scope local accreta");
 });
 
+test("doctor offers no remove command for a local-scope name a shell would split", async () => {
+  accretaIn(join(home, "bin"));
+  const stale = { command: "bun", args: ["run", "node_modules/@accreta/mcp-server/src/main.ts"] };
+  write(
+    join(home, ".claude.json"),
+    JSON.stringify({ projects: { [root]: { mcpServers: { "accreta;echo pwned": stale } } } }),
+  );
+  expect(await cli("doctor")).toBe(1);
+  expect(stdout()).not.toContain("claude mcp remove");
+  expect(stdout()).toContain("remove `accreta;echo pwned` from ~/.claude.json by hand");
+});
+
 test("a JSON rewrite keeps the file's indent", async () => {
   for (const indent of ["    ", "\t"]) {
     const path = join(root, ".mcp.json");

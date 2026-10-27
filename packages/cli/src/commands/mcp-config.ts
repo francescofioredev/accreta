@@ -70,6 +70,7 @@ function shellQuote(value: string): string {
 }
 
 // JSON already doubles every literal backslash, so printable's own doubling is undone.
+// Display only: an astral escape such as `\u{e0041}` is not valid JSON.
 function printableJson(value: unknown): string {
   return printable(JSON.stringify(value)).replaceAll("\\\\", "\\");
 }
@@ -608,9 +609,13 @@ interface Found {
 function checkEntry(ctx: CommandContext, found: Found): boolean {
   const { entry, client, scope, root } = found;
   const label = `${found.label} \`${printable(found.name)}\``;
+  // The name is pasted into a shell, so only one no shell would split or read as a flag is offered.
+  const remove = /^[\w.][\w.-]*$/.test(found.name)
+    ? `run \`claude mcp remove --scope local ${found.name}\``
+    : `remove \`${printable(found.name)}\` from ${printable(targetFor("claude", "user", root).shown)} by hand`;
   const reinstall =
     scope === "local"
-      ? `run \`claude mcp remove --scope local ${printable(found.name)}\`, then \`${installCommand(client, "project")}\``
+      ? `${remove}, then \`${installCommand(client, "project")}\``
       : `re-run \`${installCommand(client, scope)} --force\``;
   const command = isTable(entry) && typeof entry.command === "string" ? entry.command : undefined;
   const args =
