@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { parse as parseToml } from "smol-toml";
 import { run } from "../src/main.ts";
-import { stripJsonc, targetFor } from "../src/commands/mcp-config.ts";
+import { slashed, stripJsonc, targetFor } from "../src/commands/mcp-config.ts";
 import type { CommandContext } from "../src/commands/shared.ts";
 
 const ENV = ["HOME", "PATH", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "XDG_CONFIG_HOME", "APPDATA"];
@@ -317,7 +317,7 @@ describe("doctor reads what mcp install writes", () => {
       }),
     );
     expect(await cli("doctor")).toBe(0);
-    expect(stdout()).toContain(`for the knowledge base at ${other}`);
+    expect(stdout()).toContain(`for the knowledge base at ${slashed(other)}`);
   });
 
   test("the old server path is stale, with the fix", async () => {
@@ -372,4 +372,10 @@ describe("doctor reads what mcp install writes", () => {
     expect(await cli("doctor")).toBe(0);
     expect(stdout()).toContain("ok: .vscode/mcp.json (VS Code, project)");
   });
+});
+
+test("a path label uses / on every platform, so printable never doubles a separator", () => {
+  expect(slashed("~\\.cursor\\mcp.json", "\\")).toBe("~/.cursor/mcp.json");
+  expect(slashed("C:\\Users\\kb", "\\")).toBe("C:/Users/kb");
+  expect(slashed("~/.cursor/mcp.json", "/")).toBe("~/.cursor/mcp.json");
 });
