@@ -1,5 +1,5 @@
 import type { Database } from "../index-db/db.ts";
-import { compileCitationTemplate } from "../citations.ts";
+import { compileCitationTemplate, footnoteKey } from "../citations.ts";
 import type { AccretaConfig } from "../config.ts";
 import {
   formatCanonicalSource,
@@ -25,7 +25,10 @@ export const LINT_FINDING_KINDS = [
   "citation-locator-missing",
   "citation-unpinned",
   "citation-revision-unknown",
+  "verified-revision-unknown",
   "duplicate-footnote",
+  "undefined-footnote",
+  "unused-footnote",
   "unreadable-provenance-format",
   "unpinned-provenance-format",
   "unloaded-source",
@@ -101,6 +104,7 @@ function byTarget<T extends { src_path: string; target: string; kind: string; re
  */
 export function lint(db: Database, config: AccretaConfig): LintReport {
   requireTable(db, "aliases");
+  requireTable(db, "footnote_orphans");
   const findings: LintFinding[] = [];
 
   // Links the indexer could not resolve to a path inside the knowledge base.
@@ -206,6 +210,7 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
     }
   }
 
+  findings.push(...orphanFootnoteFindings(db));
   findings.push(...supersessionFindings(db, config));
   findings.push(...sharedAliasFindings(db));
 
@@ -252,9 +257,54 @@ function sharedAliasFindings(db: Database): LintFinding[] {
   });
 }
 
+interface OrphanRow {
+  page_path: string;
+  footnote: string;
+  line: number;
+  role: "reference" | "definition";
+}
+
+// Undefined references first: the claim reads as cited and is not, where an unused definition only clutters.
+function orphanFootnoteFindings(db: Database): LintFinding[] {
+  const rows = db
+    .prepare(
+      `SELECT page_path, footnote, line, role FROM footnote_orphans
+       ORDER BY page_path, line, footnote`,
+    )
+    .all() as OrphanRow[];
+  const undefinedRefs = new Map<string, { path: string; id: string; lines: number[] }>();
+  const unused: LintFinding[] = [];
+  for (const row of rows) {
+    if (row.role === "definition") {
+      unused.push({
+        kind: "unused-footnote",
+        path: row.page_path,
+        detail: `[^${row.footnote}] (line ${row.line}) is defined but no claim on the page leads to it`,
+      });
+      continue;
+    }
+    const key = `${row.page_path}\0${footnoteKey(row.footnote)}`;
+    const group = undefinedRefs.get(key);
+    if (group) group.lines.push(row.line);
+    else undefinedRefs.set(key, { path: row.page_path, id: row.footnote, lines: [row.line] });
+  }
+  const undefinedFindings = [...undefinedRefs.values()].map(({ path, id, lines }) => ({
+    kind: "undefined-footnote" as const,
+    path,
+    detail: `[^${id}] (${lines.length === 1 ? "line" : "lines"} ${lines.join(", ")}) is referenced but defined nowhere on the page, so its claim reads as cited and is not`,
+  }));
+  return [...undefinedFindings, ...unused];
+}
+
 interface CitationRow {
   path: string;
   canonical_source: string;
+}
+
+interface VerifiedRow {
+  path: string;
+  source: string;
+  last_verified_revision: string;
 }
 
 interface FootnoteRow {
@@ -391,10 +441,31 @@ export async function lintCitations(
     return known;
   };
 
+  // Drift reads this field only against the page's own source, so that is the history to ask.
+  const verified = db
+    .prepare(
+      `SELECT path, source, last_verified_revision FROM pages
+       WHERE source IS NOT NULL AND last_verified_revision IS NOT NULL
+       ORDER BY path`,
+    )
+    .all() as VerifiedRow[];
+  for (const page of verified) {
+    const adapter = sources.get(page.source);
+    if (!adapter) continue;
+    checkedPages.add(page.path);
+    if ((await knows(adapter, page.last_verified_revision)) === false) {
+      findings.push({
+        kind: "verified-revision-unknown",
+        path: page.path,
+        detail: `source "${adapter.id}" cannot place last_verified_revision ${page.last_verified_revision} (history rewritten, shallow clone, or a different repository); re-verify against "${adapter.id}" before recording a revision`,
+      });
+    }
+  }
+
   const firstLine = new Map<string, number>();
   for (const row of footnotes) {
     checkedPages.add(row.page_path);
-    const id = `${row.page_path}\0${row.footnote}`;
+    const id = `${row.page_path}\0${footnoteKey(row.footnote)}`;
     const first = firstLine.get(id);
     if (first !== undefined) {
       findings.push({
