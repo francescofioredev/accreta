@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
-  detectDrift,
   openIndex,
   pageChanges,
   type CitedChange,
@@ -13,6 +12,7 @@ import {
 } from "@accreta/core";
 import {
   countUnchecked,
+  detectDriftEach,
   noSourceNamed,
   uncheckedPages,
   type UncheckedSource,
@@ -119,8 +119,9 @@ export async function drift(
   if (loaded.sources.length > 0 || loaded.unloaded.length > 0) {
     const db = openIndex(workspace.indexPath, { readonly: true });
     try {
-      for (const adapter of loaded.sources) reports.push(await detectDrift(db, adapter));
-      unloaded = markUnloaded(countUnchecked(db, loaded.unloaded), base);
+      const each = await detectDriftEach(db, loaded.sources, loaded.files);
+      reports.push(...each.reports);
+      unloaded = markUnloaded(countUnchecked(db, [...loaded.unloaded, ...each.unreadable]), base);
     } finally {
       db.close();
     }
@@ -136,7 +137,7 @@ export async function drift(
     for (const source of unloaded) {
       const when = source.on_base ? " on the base branch either" : "";
       ctx.out(
-        `${printable(source.file)} — did not load${when}, so ${uncheckedPages(source.pages)}`,
+        `${printable(source.file)} — ${unchecked(source)}${when}, so ${uncheckedPages(source.pages)}`,
       );
       ctx.out(`  ${printable(source.reason)}`);
     }
@@ -306,7 +307,10 @@ export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport)
       }
     }
     ctx.out("    a shallow clone or rewritten history does this: fetch the full history,");
-    ctx.out("    or re-verify these pages from scratch");
+    ctx.out("    or re-verify these pages from scratch. So does a ref such as HEAD where a");
+    ctx.out(
+      "    revision belongs, which `accreta lint` names: re-cite a cited page, re-verify a verified one",
+    );
   }
   printUnverifiable(ctx, report);
   if (report.stale.length === 0 && report.unresolvable.length === 0) {
@@ -462,8 +466,7 @@ interface DriftJson {
   _provenance: ReturnType<typeof provenance>;
 }
 
-// check_drift's DRIFT_FIELDS in this shape. `now` is the adapter's; `unloaded_sources` quotes
-// sources/*.yaml and is left out there too, a known gap (#362).
+// check_drift's DRIFT_FIELDS in this shape. `now` is the adapter's.
 const DRIFT_FIELDS = [
   "sources[].in_doubt[].page",
   "sources[].in_doubt[].verified_at",
@@ -496,6 +499,9 @@ const DRIFT_FIELDS = [
   "sources[].delegated.pending[].pages",
   "sources[].delegated.pending[].cited_only",
   "sources[].delegated.via",
+  "unloaded_sources[].file",
+  "unloaded_sources[].id",
+  "unloaded_sources[].reason",
 ] as const;
 
 /** With `--base`, `on_base` says the base branch already failed to load the same declaration. */
@@ -718,7 +724,7 @@ export function toGithub(
   const lines: Line[] = [{ text: "### accreta drift" }, { text: "" }];
   const text = (...values: string[]) => lines.push(...values.map((value) => ({ text: value })));
   const unloadedLine = (source: UnloadedEntry) =>
-    `- ${code(source.file)} did not load, so ${uncheckedPages(source.pages)}: ${code(source.reason)}`;
+    `- ${code(source.file)} ${unchecked(source)}, so ${uncheckedPages(source.pages)}: ${code(source.reason)}`;
   const inherited = json.unloaded_sources.filter((u) => u.on_base);
   // Before the headline, so the counts-only fallback comment still carries them.
   for (const source of json.unloaded_sources) if (!source.on_base) text(unloadedLine(source));
@@ -740,7 +746,7 @@ export function toGithub(
     text(
       "",
       "<details>",
-      `<summary>${inherited.length} source declaration(s) already did not load on the base branch.</summary>`,
+      `<summary>${inherited.length} source declaration(s) already ${uncheckedAll(inherited)} on the base branch.</summary>`,
       "",
       ...inherited.map(unloadedLine),
       "",
@@ -856,17 +862,30 @@ export function toGithub(
   return fit(lines, limit);
 }
 
+/** A source whose revision failed did load; what failed is the check. */
+const unchecked = (u: UnloadedEntry) => (u.unreadable ? "could not be checked" : "did not load");
+const uncheckedAll = (us: readonly UnloadedEntry[]) =>
+  us.some((u) => u.unreadable)
+    ? us.every((u) => u.unreadable)
+      ? "could not be checked"
+      : "did not load or could not be checked"
+    : "did not load";
+
 function headline(json: DriftJson, compared: boolean): string {
   const n = json.sources_newly_unloaded;
   const kept = json.unloaded_sources.length - n;
+  const fresh = json.unloaded_sources.filter((u) => !u.on_base);
+  const still = json.unloaded_sources.filter((u) => u.on_base).every((u) => !u.unreadable)
+    ? "still do not load"
+    : "still cannot be loaded or checked";
   const cause = compared ? " because of this change" : "";
   // In the headline so the counts-only fallback keeps it, though it does not count as new.
   const clauses = [
     n > 0
-      ? `**${n} source declaration(s) did not load${cause}; pages citing them were not checked.**`
+      ? `**${n} source declaration(s) ${uncheckedAll(fresh)}${cause}; pages citing them were not checked.**`
       : "",
     kept > 0
-      ? `**${kept} source declaration(s) still do not load, as on the base branch; pages citing them were not checked.**`
+      ? `**${kept} source declaration(s) ${still}, as on the base branch; pages citing them were not checked.**`
       : "",
   ];
   return [...clauses.filter(Boolean), pagesHeadline(json, compared)].join(" ");

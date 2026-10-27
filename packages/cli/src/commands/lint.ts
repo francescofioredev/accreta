@@ -3,6 +3,7 @@ import { lintKnowledgeBase, openIndex } from "@accreta/core";
 import { countUnchecked, unloadedFindings } from "@accreta/adapters";
 import { findWorkspace } from "../workspace.ts";
 import {
+  DRIFT_NOTICE,
   loadSources,
   printable,
   printJson,
@@ -61,7 +62,8 @@ export async function runLint(
         unchecked_reasons: report.uncheckedReasons,
         findings,
         nextCursor: report.nextCursor,
-        _provenance: provenance(LINT_FIELDS),
+        // An unloaded-source finding quotes sources/*.yaml.
+        _provenance: provenance(LINT_FIELDS, DRIFT_NOTICE),
       });
       // The whole list, not this page: a later page must not read as a clean pass.
       return report.total > 0 ? 1 : 0;

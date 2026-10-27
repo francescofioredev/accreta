@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { SourceRegistry, parseSourceDeclaration } from "../src/source/registry.ts";
+import {
+  SOURCE_ID,
+  SourceDeclarationError,
+  SourceRegistry,
+  parseSourceDeclaration,
+} from "../src/source/registry.ts";
 import type { LocationVerdict, SourceAdapter } from "../src/source/adapter.ts";
 
 class StubSource implements SourceAdapter {
@@ -42,6 +47,30 @@ describe("parseSourceDeclaration", () => {
 
   test("a declaration without an id is rejected", () => {
     expect(() => parseSourceDeclaration("type: fs\n")).toThrow(/non-empty `id`/);
+  });
+
+  // No citation can name such an id, so it would only ever reach an agent as prose (#362).
+  // Format and default-ignorable characters carry text a reader cannot see.
+  test.each([
+    "my docs",
+    "a:b",
+    "tab\there",
+    "bell\u0007",
+    "esc\u001b",
+    "tag\u{e0041}\u{e0042}",
+    `zero${String.fromCharCode(0x200b)}width`,
+    `rlo${String.fromCharCode(0x202e)}`,
+    `soft${String.fromCharCode(0xad)}hyphen`,
+  ])("an id outside the citation grammar is rejected without being quoted: %p", (id) => {
+    const declaration = `id: ${JSON.stringify(id)}\ntype: fs\n`;
+    expect(() => parseSourceDeclaration(declaration)).toThrow(/`id` has whitespace/);
+    expect(SOURCE_ID.test(id)).toBe(false);
+    try {
+      parseSourceDeclaration(declaration);
+    } catch (error) {
+      expect(error).not.toBeInstanceOf(SourceDeclarationError);
+      expect((error as Error).message).not.toContain(id);
+    }
   });
 
   test("a declaration without a type is rejected", () => {

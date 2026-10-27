@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { executable, findOnPath } from "../src/spawn.ts";
+import { executable, findOnPath, treeKill } from "../src/spawn.ts";
 
 let base = "";
 
@@ -77,6 +77,31 @@ describe("findOnPath", () => {
     const exe = dir("with space", { "git.EXE": 0o644 });
     const env = { Path: [bare, scripts, `"${exe}"`].join(";"), PATHEXT: ".CMD;.BAT;.EXE" };
     expect(findOnPath("git", env, "win32")).toBe(join(exe, "git.EXE"));
+  });
+});
+
+describe("treeKill", () => {
+  test("names taskkill under SystemRoot, read in any case, and the whole tree of the pid", () => {
+    const expected = {
+      file: "C:\\Windows\\System32\\taskkill.exe",
+      args: ["/T", "/F", "/PID", "4242"],
+    };
+    expect(treeKill(4242, { SystemRoot: "C:\\Windows" })).toEqual(expected);
+    expect(treeKill(4242, { SYSTEMROOT: "C:\\Windows\\" })).toEqual(expected);
+    expect(treeKill(4242, { systemroot: "C:/Windows" })).toEqual(expected);
+  });
+
+  test("never searches PATH or the cwd", () => {
+    const planted = dir("planted", { "taskkill.exe": 0o755 });
+    const env = { Path: planted, SystemRoot: "D:\\Win" };
+    expect(treeKill(1, env)?.file).toBe("D:\\Win\\System32\\taskkill.exe");
+  });
+
+  test("answers nothing without a SystemRoot rooted at a drive", () => {
+    for (const root of ["", "Windows", ".\\Windows", "\\Windows", "C:Windows", "\\\\host\\share"]) {
+      expect(treeKill(1, { SystemRoot: root })).toBeUndefined();
+    }
+    expect(treeKill(1, {})).toBeUndefined();
   });
 });
 
@@ -158,6 +183,25 @@ describe("run", () => {
     }, 15_000);
   }
 
+  test("the signal listeners are in place before git is spawned", async () => {
+    // Patched before spawn.ts is imported, since its named import binds then.
+    const code = `
+      const cp = require("node:child_process");
+      const spawn = cp.spawn;
+      let listening = -1;
+      cp.spawn = (...args) => { listening = process.listenerCount("SIGINT"); return spawn(...args); };
+      const { run } = await import(${JSON.stringify(join(import.meta.dir, "../src/spawn.ts"))});
+      const before = process.listenerCount("SIGINT");
+      await run(process.execPath, ["-e", "0"], {
+        cwd: ${JSON.stringify(base)}, env: process.env, timeoutMs: 10000, command: "probe",
+      });
+      console.log(JSON.stringify({ before, listening }));`;
+    const host = Bun.spawn([process.execPath, "-e", code], { stdout: "pipe", stderr: "pipe" });
+    const out = await new Response(host.stdout).text();
+    expect(await host.exited).toBe(0);
+    expect(JSON.parse(out)).toEqual({ before: 0, listening: 1 });
+  }, 15_000);
+
   test("a host's own graceful shutdown on SIGINT still runs to the end", async () => {
     const cleaned = join(base, "cleaned");
     const prelude = `import { writeFileSync } from "node:fs";
@@ -167,5 +211,21 @@ describe("run", () => {
       }, 300));`;
     expect(await signalHost("SIGINT", prelude)).toEqual({ beating: false });
     expect(existsSync(cleaned)).toBe(true);
+  }, 15_000);
+
+  test("a spawn that throws leaves no signal listener behind", async () => {
+    const code = `
+      const cp = require("node:child_process");
+      cp.spawn = () => { throw new Error("no spawn"); };
+      const { run } = await import(${JSON.stringify(join(import.meta.dir, "../src/spawn.ts"))});
+      const before = process.listenerCount("SIGINT");
+      const failed = await run("git", [], {
+        cwd: ${JSON.stringify(base)}, env: process.env, timeoutMs: 10000, command: "probe",
+      }).then(() => false, () => true);
+      console.log(JSON.stringify({ before, failed, after: process.listenerCount("SIGINT") }));`;
+    const host = Bun.spawn([process.execPath, "-e", code], { stdout: "pipe", stderr: "pipe" });
+    const out = await new Response(host.stdout).text();
+    expect(await host.exited).toBe(0);
+    expect(JSON.parse(out)).toEqual({ before: 0, failed: true, after: 0 });
   }, 15_000);
 });

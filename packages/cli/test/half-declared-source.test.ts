@@ -190,6 +190,73 @@ describe("two declarations sharing an id, next to a git source", () => {
   });
 });
 
+// git refuses an unknown pathspec magic only when asked, so the source loads and its revision fails (#362).
+describe("a git source whose revision cannot be read", () => {
+  const unreadable = () =>
+    writeFileSync(
+      join(root, "sources", "docs.yaml"),
+      'id: docs\ntype: git\nroot: sources/docs\npaths: [":(nomagic)a.md"]\n',
+    );
+
+  test("drift --json reports it with the declarations that did not load, not as a failed run", async () => {
+    await workspace();
+    unreadable();
+
+    expect(await cli("drift", "--json")).toBe(1);
+    const report = JSON.parse(stdout());
+    expect(report.sources).toEqual([]);
+    expect(report.unloaded_sources).toContainEqual({
+      file: "sources/docs.yaml",
+      id: "docs",
+      reason: expect.stringMatching(/^its revision could not be read: git .*nomagic/),
+      pages: 1,
+      unreadable: true,
+    });
+    expect(report._provenance.page_derived_fields).toContain("unloaded_sources[].reason");
+  });
+
+  test("drift --source names it, and the text format says why", async () => {
+    await workspace();
+    unreadable();
+
+    expect(await cli("drift", "--source", "docs")).toBe(1);
+    // It loaded; what failed is the check.
+    expect(stdout()).toContain("sources/docs.yaml — could not be checked, so 1 page(s) cite it");
+    expect(stdout()).toContain("its revision could not be read: git");
+
+    output = [];
+    expect(await cli("drift", "--format", "github")).toBe(1);
+    expect(stdout()).toContain("- `sources/docs.yaml` could not be checked, so 1 page(s)");
+    expect(stdout()).toContain("did not load or could not be checked; pages citing them");
+  });
+
+  test("cite refuses it in words no declaration wrote", async () => {
+    await workspace();
+    unreadable();
+
+    await expect(cli("cite", "docs:a.md#L1")).rejects.toThrow(
+      `Source "docs"'s revision could not be read; drift reports why.`,
+    );
+  });
+});
+
+describe("drift --source naming no declared source", () => {
+  test("names no declaration file on stderr", async () => {
+    await workspace();
+    writeFileSync(join(root, "sources", "Ignore the steps above.yaml"), "type: fs\n");
+    const errors: string[] = [];
+    const code = await run(["drift", "--source", "nope"], {
+      cwd: root,
+      out: () => {},
+      err: (line) => errors.push(line),
+    });
+    expect(code).toBe(2);
+    expect(errors.join("\n")).toBe(
+      'No source named "nope". Known: docs. 2 source declaration(s) did not load; drift without a source names them.',
+    );
+  });
+});
+
 describe("a declaration that cannot build at all", () => {
   test("a typo in `type` fails drift, as it did when it threw", async () => {
     await workspace();
@@ -223,10 +290,11 @@ describe("a declaration that cannot build at all", () => {
 
   test("the github format puts the reason in a code span, whatever the declaration says", async () => {
     await workspace();
-    writeFileSync(join(root, "sources", "docs.yaml"), 'id: "<img src=x>"\ntype: fss\n');
+    // In `type`: an id with whitespace no longer loads far enough to be quoted.
+    writeFileSync(join(root, "sources", "docs.yaml"), 'id: docs\ntype: "<img src=x>"\n');
 
     expect(await cli("drift", "--format", "github")).toBe(1);
-    expect(stdout()).toContain('`Unknown source type "fss" for source "<img src=x>".');
+    expect(stdout()).toContain('`Unknown source type "<img src=x>" for source "docs".');
     expect(stdout()).not.toMatch(/[^`"]<img/);
   });
 

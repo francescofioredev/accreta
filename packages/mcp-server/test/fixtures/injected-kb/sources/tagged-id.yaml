@@ -1,0 +1,4 @@
+id: "CANARY-TAGID\U000E0049\U000E0047\U000E004E\U000E004F\U000E0052\U000E0045"
+type: fs
+root: sources/docs
+extensions: [".md"]

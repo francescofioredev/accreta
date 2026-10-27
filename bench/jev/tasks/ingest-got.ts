@@ -41,7 +41,7 @@ const prompt = (rev: string) => `Ingest one source into the knowledge base in kb
 The method is kb/AGENTS.md, which is also in your system prompt; the vocabulary is kb/accreta.config.yaml. Follow both.
 
 Source to ingest: the got HTTP client library's source code, the directory repo/source/, source id \`got\`, revision ${rev}.
-Paths in citations are relative to the repository root, for example: \`got @ ${rev.slice(0, 7)} · source/core/options.ts#L120-L134\`.
+Paths in citations are relative to the repository root, for example: \`got @ ${rev} · source/core/options.ts#L120-L134\`.
 
 Write pages under kb/knowledge/. Never edit anything under repo/.
 When the source is ingested, stop and reply with one line listing the pages you wrote.`;

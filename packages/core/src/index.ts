@@ -55,6 +55,7 @@ export {
   countLines,
   formatCanonicalSource,
   formatCitation,
+  namesRef,
   parseCitation,
   parseLineLocator,
   resolveCitedFile,
@@ -75,6 +76,7 @@ export type {
 export { detectDrift, pageChanges } from "./source/drift.ts";
 export type { SourceDeclaration, SourceFactory } from "./source/registry.ts";
 export {
+  SOURCE_ID,
   SourceDeclarationError,
   SourceRegistry,
   parseSourceDeclaration,

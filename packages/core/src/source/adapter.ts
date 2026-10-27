@@ -29,7 +29,8 @@ export interface SourceAdapter {
    * difference — it is less useful, not incorrect. Throwing `UnknownRevision`
    * is the right answer when the revision is not one this source can reason
    * about, so drift detection can report "cannot tell" rather than "nothing
-   * changed", which are very different claims.
+   * changed", which are very different claims. A ref such as `HEAD` is one:
+   * it moves with the source, so diffing from it finds nothing ever changed.
    */
   changedSince(revision: string): Promise<string[]>;
 
@@ -52,14 +53,16 @@ export interface SourceAdapter {
 
   /**
    * The full revision an abbreviated one names. Absent, revisions are compared exactly.
-   * A `resolved` answer implies the source has that revision; lint relies on it.
+   * A `resolved` answer implies the source has that revision; lint relies on it. Every revision
+   * `revision()` gives, in whatever form the source uses, must resolve to itself: lint reports a
+   * revision `knowsRevision` accepts but this leaves `unknown` as a ref, a name that moves.
    */
   resolveRevision?(revision: string): Promise<RevisionResolution>;
 
   /**
    * What the change from `revision` to now did to each locator in `path`. Optional: a source
    * that cannot diff contents leaves it out, and drift stays per file. Throws
-   * `UnknownRevisionError` for a revision it cannot place.
+   * `UnknownRevisionError` for a revision it cannot place, a ref included.
    */
   touchedSince?(
     revision: string,
@@ -95,6 +98,14 @@ export interface SourceAdapter {
 /** What a possibly abbreviated revision names: exactly one revision, several, or none. */
 export type RevisionResolution =
   { status: "resolved"; revision: string } | { status: "ambiguous" } | { status: "unknown" };
+
+/** Whether the source knows `revision` but cannot resolve it to one: a ref, a name that moves. */
+export async function namesRef(adapter: SourceAdapter, revision: string): Promise<boolean> {
+  if (!adapter.resolveRevision || !adapter.knowsRevision) return false;
+  const resolved = await adapter.resolveRevision(revision).catch(() => undefined);
+  if (resolved?.status !== "unknown") return false;
+  return adapter.knowsRevision(revision).catch(() => false);
+}
 
 /**
  * What a change did to one cited place. `moved` means the lines are intact but renumbered, so

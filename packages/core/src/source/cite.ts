@@ -140,6 +140,9 @@ async function abbreviating(
     );
   }
   if (resolved?.status === "unknown") {
+    if (await Promise.resolve(adapter.knowsRevision?.(expected)).catch(() => false)) {
+      throw new Error(`${expected} names a ref of source "${sourceId}", not a revision: ${again}`);
+    }
     throw new Error(
       `Source "${sourceId}" has no revision ${expected} (or its history was rewritten): ${again}`,
     );

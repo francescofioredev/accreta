@@ -58,7 +58,7 @@ The only token is the workflow's own `GITHUB_TOKEN`, with `pull-requests: write`
 | `pages-in-doubt` | All pages whose cited lines changed, including those. |
 | `pages-unplaceable` | Pages verified at a revision the source cannot place. |
 | `pages-newly-unplaceable` | Those the base branch did not have at the same revision. |
-| `sources-unloaded` | Source declarations that did not load, so nothing citing them was checked. |
+| `sources-unloaded` | Source declarations that did not load, or loaded but could not be checked because their revision could not be read, so nothing citing them was checked. |
 | `sources-newly-unloaded` | Those the base branch did not already fail to load with the same `id` and at least as many citing pages. |
 
 With a token other than the workflow's, set `comment-author` to the login it posts as. The action
