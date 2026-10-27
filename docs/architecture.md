@@ -107,6 +107,10 @@ They are a preset precisely because they are not universal.
 Search is SQLite FTS5 over each page's title, aliases and body, with Porter stemming. It needs
 no dependencies, no keys and no network, and there is no `search` configuration key.
 
+A word joined by underscores is an identifier: `stale_served` matches only pages that contain
+that whole identifier, never `stale serves` or `stale_served_total`, while `stale` alone still
+finds it. Identifiers sit in a second FTS5 table, unstemmed and with `_` as a token character.
+
 Semantic search is **not built**. [ADR-0001](adr/0001-lexical-search-first.md) measured 85%
 recall@1 without it and keeps it optional and unbuilt until a benchmark says otherwise.
 
