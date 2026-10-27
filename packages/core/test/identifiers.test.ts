@@ -45,6 +45,11 @@ describe("visibleText", () => {
     expect(ids("See [text][stale_ref].")).toEqual([]);
   });
 
+  test("drops a footnote reference's id, which renders as a number", () => {
+    expect(ids("Requests are rejected early.[^tenant_guard]")).toEqual([]);
+    expect(ids("Keep `[^code_ref]` and kept_word.[^x]")).toEqual(["code_ref", "kept_word"]);
+  });
+
   test("drops a wikilink target behind a label, and keeps an unlabelled one", () => {
     expect(ids("See [[metrics/stale_served|the counter]].")).toEqual([]);
     expect(ids("See [[metrics/stale_served]].")).toEqual(["stale_served"]);

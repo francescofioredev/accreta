@@ -24,6 +24,8 @@ const LINK_DESTINATION_RE =
   /\]\(\s*(?:<[^>\n]*>|(?:[^()\s]|\([^()\s]*\))*)(?:\s+(?:"[^"]*"|'[^']*'|\([^()]*\)))?\s*\)/g;
 const LINK_REFERENCE_RE = /\]\[[^\]\n]*\]/g;
 const LABELLED_WIKILINK_RE = /\[\[[^\]|\n]*\|([^\]\n]*)\]\]/g;
+// A reader sees a footnote reference as a number, never its id.
+const FOOTNOTE_REFERENCE_RE = /\[\^[^\]\s]+\]/g;
 const SPAN = /\0(\d+)\0/g;
 
 /** The body as a reader sees it, for identifier extraction: fenced and inline code kept. */
@@ -80,6 +82,7 @@ function visibleInline(text: string): string {
   return text
     .replace(CODE_SPAN_RE, (code) => `\0${spans.push(code) - 1}\0`)
     .replace(COMMENT_RE, "")
+    .replace(FOOTNOTE_REFERENCE_RE, "")
     .replace(LINK_DESTINATION_RE, "]")
     .replace(LINK_REFERENCE_RE, "]")
     .replace(LABELLED_WIKILINK_RE, "$1")
