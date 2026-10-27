@@ -74,7 +74,7 @@ test.skipIf(process.platform === "win32")(
       new URL("../.github/workflows/publish.yml", import.meta.url),
     ).text();
     expect(workflow).toContain('npm publish --access public --tag "$tag"');
-    const choice = /case "\$version" in[\s\S]*?esac/.exec(workflow)?.[0];
+    const choice = /case "\$\{version%%\+\*\}" in[\s\S]*?esac/.exec(workflow)?.[0];
     expect(choice).toBeDefined();
     const tagFor = (version: string) =>
       Bun.spawnSync(["bash", "-c", `version=${version}\n${choice}\necho "$tag"`])
@@ -82,5 +82,6 @@ test.skipIf(process.platform === "win32")(
         .trim();
     expect(tagFor("0.2.0-rc.1")).toBe("next");
     expect(tagFor("0.2.0")).toBe("latest");
+    expect(tagFor("0.2.0+build-5")).toBe("latest");
   },
 );
