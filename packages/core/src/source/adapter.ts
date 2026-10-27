@@ -51,6 +51,12 @@ export interface SourceAdapter {
   knowsRevision?(revision: string): Promise<boolean>;
 
   /**
+   * The full revision an abbreviated one names. Absent, revisions are compared exactly.
+   * A `resolved` answer implies the source has that revision; lint relies on it.
+   */
+  resolveRevision?(revision: string): Promise<RevisionResolution>;
+
+  /**
    * What the change from `revision` to now did to each locator in `path`. Optional: a source
    * that cannot diff contents leaves it out, and drift stays per file. Throws
    * `UnknownRevisionError` for a revision it cannot place.
@@ -85,6 +91,10 @@ export interface SourceAdapter {
    */
   pinRevision(revision: string): void;
 }
+
+/** What a possibly abbreviated revision names: exactly one revision, several, or none. */
+export type RevisionResolution =
+  { status: "resolved"; revision: string } | { status: "ambiguous" } | { status: "unknown" };
 
 /**
  * What a change did to one cited place. `moved` means the lines are intact but renumbered, so

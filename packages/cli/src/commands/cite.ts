@@ -16,7 +16,7 @@ import {
   type CommandContext,
 } from "./shared.ts";
 
-const CITE_FIELDS = ["location.detail"] as const;
+const CITE_FIELDS = ["location.detail", "delegated.via", "delegated.scope"] as const;
 
 const USAGE =
   "Usage: accreta cite <source>:<path>[#locator]... [--expect-revision <rev>] [--json | --format text|footnote|json]";
@@ -116,16 +116,28 @@ export async function cite(
     }
   }
 
+  // One target off the expected revision refuses them all, before anything is printed.
   const citations: Citation[] = [];
   for (const target of targets) {
-    citations.push(await citeAt(sources, workspace.config.provenanceFormat, target));
-  }
-  // One target off the expected revision refuses them all, before anything is printed.
-  const expected = options.expectRevision;
-  if (expected !== undefined) {
-    for (const [i, citation] of citations.entries()) {
-      if (citation.revision !== expected) throw new Error(moved(targets[i]!, citation, expected));
+    try {
+      citations.push(
+        await citeAt(sources, workspace.config.provenanceFormat, target, {
+          expectRevision: options.expectRevision,
+        }),
+      );
+    } catch (error) {
+      // The refusal echoes --expect-revision and the cited path, both caller text.
+      throw new Error(printable(error instanceof Error ? error.message : String(error)), {
+        cause: error,
+      });
     }
+  }
+  // On stderr, so stdout stays the footnotes or the labelled lines; one source, so one note.
+  const prefixed = citations.find((c) => c.matchedPrefix !== undefined);
+  if (prefixed?.matchedPrefix !== undefined && prefixed.revision !== null && format !== "json") {
+    ctx.err(
+      `--expect-revision ${printable(prefixed.matchedPrefix)} matched ${printable(prefixed.revision)} as a prefix; the footnote names it in full.`,
+    );
   }
   // A place that is not there must not look like a citation to paste.
   const code = citations.some((c) => c.location.verdict === "missing") ? 1 : 0;
@@ -156,16 +168,6 @@ export async function cite(
   return code;
 }
 
-function moved(target: ParsedCitation, citation: Citation, expected: string): string {
-  const id = printable(target.sourceId);
-  const at = printable(expected);
-  return citation.revision !== null
-    ? `Source "${id}" is at ${printable(citation.revision)}, not ${at}: it moved since you read it, or ${at} did not come from cite. Re-read ${printable(citation.canonicalSource)}, then cite again.`
-    : citation.delegated
-      ? `Cannot confirm source "${id}" is still at ${at}: it is read through ${printable(citation.delegated.via)}, and accreta cannot tell its revision.`
-      : `Cannot confirm source "${id}" is still at ${at}: accreta could not check this place. Cite it without an expected revision to see why.`;
-}
-
 function toJson(citation: Citation) {
   return {
     canonical_source: citation.canonicalSource,
@@ -175,6 +177,7 @@ function toJson(citation: Citation) {
     ...(citation.delegated
       ? { delegated: { via: citation.delegated.via, scope: citation.delegated.guidance } }
       : {}),
+    ...(citation.matchedPrefix !== undefined ? { matched_prefix: citation.matchedPrefix } : {}),
     _provenance: provenance(CITE_FIELDS, SOURCE_NOTICE),
   };
 }

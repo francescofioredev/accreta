@@ -43,8 +43,9 @@ checked.
 **A citation covers its whole sentence.** Every fact in a cited sentence — a name, a value, a
 sequence, a condition, a cause — must be in the cited lines, in your words or theirs. Split off
 any that is not and give it its own footnote from `cite`, or drop it; never widen a range to
-cover it. Mark an inference as yours ("this suggests") and cite the lines it rests on; it never
-settles a disagreement (rule 3).
+cover it. Only what follows from a cited fact may stay as an inference: yours ("this suggests"),
+in a sentence of its own with no footnote, right after that fact. It never settles a
+disagreement (rule 3).
 
 ```markdown
 Before: The assessed likely range is 2.5 to 4.0 degrees Celsius, narrowed by paleoclimate evidence.[^ecs]
@@ -114,6 +115,15 @@ Two fields do most of the work:
 - **`last_verified_revision`** makes drift detectable. A page without it renders fine and
   cannot be checked — `accreta lint` will tell you so.
 
+**A page drawn from two sources still names one.** `source` and `last_verified_revision` each
+hold a single value: the source the page is mainly about, and the revision of it you verified.
+Cite every other source in footnotes; drift checks the pinned ones (`{rev}`). A list in either
+field is not supported, and lint reports it.
+
+**A contradiction page has no main source.** Either side may be named in `source`; the choice
+carries no authority and does not make that side the winner. Give both sides a pinned footnote,
+since only pinned footnotes are drift-checked.
+
 **`aliases` are not decoration.** They are how a reader who knows a concept by another name
 finds it, and search consults them alongside the title and the body. A page that declares
 `aliases: ["ECS"]`, where "ECS" appears in neither its title nor its text, is reachable by
@@ -170,7 +180,7 @@ With a shell, use the CLI. Without one, the MCP tool beside it does the same.
 |---|---|---|
 | `accreta search <query>` | `search_pages` | pages matching in title, aliases or body |
 | `accreta show <path>` | `get_page` | one page, by path or wikilink |
-| `accreta consumers <path>` | `find_consumers` | what links to a page, and what it links to |
+| `accreta consumers <path>` | `find_consumers` | what links to a page, and what it links to (direction = which page declares the link; `kind` gives the meaning) |
 | `accreta canonical <term>` | `find_canonical` | the page that defines a term |
 | `accreta cite <source>:<path>[#locator]` | `cite` | the citation for a place, at the source's current revision |
 | `accreta drift` | `check_drift` | the pages their sources moved under |
@@ -206,7 +216,8 @@ With a shell, use the CLI. Without one, the MCP tool beside it does the same.
 6. **`accreta reindex`**, then **`accreta lint`**. Fix what it reports.
 7. **Before you stop, re-open the source lines cited by each footnote you added, re-pinned, or
    whose sentence you changed — only those.** Lint checks that they exist, not what they say. Fix
-   any part they do not show as rule 1 says; if you changed anything, run step 6 again.
+   any part they do not show, and any inference after it that no longer follows, as rule 1 says;
+   if you changed anything, run step 6 again.
 
 A citation `cite` cannot pin comes back with `unknown` where the revision belongs, and lint
 reports it as `citation-unpinned`. Paste it as returned: never write a revision into it. For an
@@ -217,6 +228,14 @@ If lint reports that `provenance.format` has no `{rev}`, or you change the forma
 in `accreta.config.yaml` first, then re-cite every existing footnote with `accreta cite`. Lint
 lists each old footnote with a #locator as `unparseable-citation`, but one without a #locator can
 read as prose and drop out of lint and drift, so do not rely on lint to find them all.
+
+### Verifying citations
+
+After an ingest, a session that did not write the pages checks them. Skip a page `accreta drift`
+lists as in doubt, to re-pin, behind the source or on a revision it cannot place, and a delegated
+one unless you read it at its `last_verified_revision`. Re-read the lines each footnote cites and
+fix each part they do not show as rule 1 says, citing new lines as Ingesting 1 and 4 say. Never
+add a claim. End with Ingesting step 6. Over MCP this is the prompt `verify_citations`.
 
 ### Never write a speculative page
 
@@ -284,10 +303,12 @@ an interruption to work around.
 - **missing provenance** — no `canonical_source`
 - **unverified pages** — no `last_verified_revision`, or one the page's own `source` cannot
   place (history rewritten, a shallow clone, or a commit from another repository)
+- **unsupported field values** — a list in `source` or `last_verified_revision`
 - **citations that point at nothing** — a `canonical_source` or footnote naming a path the
   source does not have, or a locator the source cannot place
 - **citations that name no revision, or one the source never had** — `unknown` where a
   revision belongs, or a commit that is not in the history
+- **abbreviated revisions** — a footnote naming a short revision; lint gives the full one to write
 - **footnotes that do not read as the configured format**, and footnote ids defined twice
 - **footnotes that do not pair up** — a reference with no definition, whose claim reads as cited
   and is not, or a definition no claim on the page leads to. Fix `undefined-footnote` by citing

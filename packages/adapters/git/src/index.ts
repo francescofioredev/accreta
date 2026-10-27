@@ -1,7 +1,7 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { constants } from "node:os";
-import { relative, resolve, sep } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import {
   countLines,
   formatCitation,
@@ -11,8 +11,12 @@ import {
   UnknownRevisionError,
   type LocationVerdict,
   type LocatorChange,
+  type RevisionResolution,
   type SourceAdapter,
 } from "@accreta/core";
+import { executable, run } from "./spawn.ts";
+
+export { TimeoutError } from "./spawn.ts";
 
 export interface GitSourceOptions {
   id: string;
@@ -27,32 +31,79 @@ export interface GitSourceOptions {
   paths?: readonly string[];
 }
 
-function gitEnv(): NodeJS.ProcessEnv {
+// 40x the slowest call measured in a 50,000-file, 5,000-commit repo (status, 1.5 s; rev-list 42 ms, warm).
+// A hung filter must not hang `drift`.
+const DEFAULT_TIMEOUT_MS = 60_000;
+
+function timeoutMs(): number {
+  const raw = process.env.ACCRETA_GIT_TIMEOUT_MS;
+  if (raw === undefined || raw === "") return DEFAULT_TIMEOUT_MS;
+  const ms = Number(raw);
+  if (!Number.isInteger(ms) || ms <= 0) {
+    throw new Error(`ACCRETA_GIT_TIMEOUT_MS must be a whole number of milliseconds, not "${raw}"`);
+  }
+  return ms;
+}
+
+// Each points git at another repository, or another repository's objects; a hook sets the first three.
+// GIT_NAMESPACE stays: it scopes only transfer commands, and changed none of these calls' output.
+const FOREIGN_REPOSITORY = [
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_INDEX_FILE",
+  "GIT_COMMON_DIR",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  // These clash with --literal-pathspecs, or change what a declared `paths` pattern matches.
+  "GIT_GLOB_PATHSPECS",
+  "GIT_NOGLOB_PATHSPECS",
+  "GIT_ICASE_PATHSPECS",
+  "GIT_LITERAL_PATHSPECS",
+];
+
+function gitEnv(extraEnv: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   // accreta only reads; without this `status` rewrites .git/index and a user's commit can hit index.lock.
-  const env: NodeJS.ProcessEnv = { ...process.env, GIT_OPTIONAL_LOCKS: "0" };
+  // LC_ALL=C: git's messages reach users and reports, so they read the same on every machine.
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    GIT_OPTIONAL_LOCKS: "0",
+    LC_ALL: "C",
+    ...extraEnv,
+  };
   // GIT_DIFF_OPTS would override the -U0 that hunk parsing depends on.
   delete env.GIT_DIFF_OPTS;
+  for (const name of FOREIGN_REPOSITORY) delete env[name];
   return env;
 }
 
-/** Run a git command in the repository, returning stdout. */
-function git(root: string, args: string[]): Promise<string> {
-  const env = gitEnv();
+// Trust: the source's .git/config, and all it includes, runs as code; the timeout bounds a hang only.
+// fsmonitor runs in status, ls-files and check-attr and only saves time; filters decide what is on disk.
+// safe.bareRepository: a git dir inside the corpus must not lend its config; git before 2.38 ignores it.
+const HARDENED = ["-c", "core.fsmonitor=false", "-c", "safe.bareRepository=explicit"];
 
-  return new Promise((resolveOutput, reject) => {
-    // Streamed, not execFile: its maxBuffer turns a large diff into an error.
-    const child = spawn("git", args, { cwd: root, env, stdio: ["ignore", "pipe", "pipe"] });
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
-    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
-    child.on("error", reject);
-    child.on("close", (code, signal) => {
-      if (code === 0) return resolveOutput(Buffer.concat(stdout).toString("utf-8"));
-      const exitCode = code ?? 128 + (signal ? constants.signals[signal] : 0);
-      reject(new GitCommandError(args, exitCode, Buffer.concat(stderr).toString("utf-8").trim()));
-    });
+/** Run a git command in the repository, returning stdout. */
+async function git(
+  root: string,
+  args: string[],
+  extraEnv: NodeJS.ProcessEnv = {},
+): Promise<string> {
+  const env = gitEnv(extraEnv);
+  const file = executable("git");
+  if (file === undefined) {
+    throw Object.assign(new Error("spawn git ENOENT"), { code: "ENOENT", path: "git" });
+  }
+  // The subcommand only: locate's details must name no path.
+  const command = `git ${args.find((arg) => !arg.startsWith("-")) ?? ""}`;
+  const { exitCode, signal, stdout, stderr } = await run(file, [...HARDENED, ...args], {
+    cwd: root,
+    env,
+    timeoutMs: timeoutMs(),
+    command,
   });
+  // Not a GitCommandError: git said nothing about the repository, so no caller may read it as an answer.
+  if (signal !== null) throw new Error(`${command} was killed by ${signal}`);
+  if (exitCode === 0) return stdout.toString("utf-8");
+  throw new GitCommandError(args, exitCode, stderr.toString("utf-8").trim());
 }
 
 export class GitCommandError extends Error {
@@ -77,18 +128,27 @@ export async function isWorkingTree(root: string): Promise<boolean> {
   try {
     await git(root, ["rev-parse", "--git-dir"]);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    // Git that cannot start or times out has not said the root is no repository.
+    if (error instanceof GitCommandError) return false;
+    throw error;
   }
 }
 
 function gitSync(root: string, args: string[], stdout: "pipe" | "ignore" = "pipe") {
-  const run = spawnSync("git", args, {
+  const file = executable("git");
+  if (file === undefined) return { status: null, out: "" };
+  // No process group, so nothing may outlive git: these read no blob, and a promisor fetch is off.
+  const result = spawnSync(file, [...HARDENED, ...args], {
     cwd: root,
-    env: gitEnv(),
+    env: gitEnv({ GIT_NO_LAZY_FETCH: "1" }),
     stdio: ["ignore", stdout, "ignore"],
+    timeout: timeoutMs(),
+    killSignal: "SIGKILL",
   });
-  return { status: run.status, out: run.stdout?.toString("utf-8") ?? "" };
+  // A timeout or a signal is no answer, like a git that cannot start: null, never an exit code.
+  const status = result.signal === null ? result.status : null;
+  return { status, out: status === null ? "" : (result.stdout?.toString("utf-8") ?? "") };
 }
 
 /**
@@ -105,10 +165,12 @@ export function unmatchedPaths(root: string, paths: readonly string[]): string |
   if (matches(paths) !== 1) return undefined;
   // A deleted entry once matched, and drift must still report the deletion. A shallow clone cannot
   // see past its boundary, so there an entry deleted before it is refused.
-  const dead = paths.filter(
-    (entry) =>
-      matches([entry]) === 1 && gitSync(root, ["rev-list", "-1", "HEAD", "--", entry]).out === "",
-  );
+  const neverTouched = (entry: string) => {
+    const { status, out } = gitSync(root, ["rev-list", "-1", "HEAD", "--", entry]);
+    // A git that timed out or failed has not said no commit touched it.
+    return status === 0 && out === "";
+  };
+  const dead = paths.filter((entry) => matches([entry]) === 1 && neverTouched(entry));
   if (dead.length === 0) return undefined;
 
   const prefix = gitSync(root, ["rev-parse", "--show-prefix"]).out.trim();
@@ -152,6 +214,113 @@ function submoduleAbove(root: string, scope: string): string | undefined {
 }
 
 /**
+ * Why `paths` cannot bound a source at `root`, or undefined when it can. An empty entry fails
+ * every git call, and one outside the root matches no citation, so locate calls everything missing.
+ */
+export function scopeProblem(root: string, paths: unknown): string | undefined {
+  if (paths === undefined || paths === null) return undefined;
+  if (!Array.isArray(paths)) return `declares \`paths\` as a ${typeof paths}, not a list`;
+  // Git works from the real directory, so `..` through a symlinked root lands beside its target.
+  const base = realRoot(root);
+  let positive = false;
+  for (const entry of paths as unknown[]) {
+    if (typeof entry !== "string") {
+      return `declares paths entry ${scalarOrType(entry)}, which is not a string`;
+    }
+    if (entry === "")
+      return `declares paths entry "", which is empty; omit \`paths\` for the whole root`;
+    const { top, exclude, pattern } = pathspecMagic(entry);
+    // Not quoted: reasons reach PR comments, and an absolute path names somebody's machine.
+    if (isAbsolute(entry) || isAbsolute(pattern)) {
+      return "declares a paths entry that is an absolute path; name it relative to `root`";
+    }
+    const shown = JSON.stringify(entry);
+    // Citations are relative to the root, so a top-anchored match is one no citation names.
+    if (top && !exclude) {
+      return `declares paths entry ${shown}, which is relative to the repository top; name it relative to \`root\``;
+    }
+    const target = resolve(base, pattern);
+    if (exclude) {
+      // Nothing left in scope: rev-list finds no commit and the revision falls back to HEAD.
+      if (!escapes(relative(target, base))) {
+        return `declares paths entry ${shown}, which excludes the whole source root`;
+      }
+      continue;
+    }
+    positive = true;
+    if (escapes(relative(base, target))) {
+      return `declares paths entry ${shown}, which resolves outside the source root`;
+    }
+  }
+  // Git reads an exclude-only pathspec from the repository top, widening the source past its root.
+  if (paths.length > 0 && !positive) {
+    return 'declares `paths` with only exclusions; add "." to keep the whole root, or omit `paths`';
+  }
+  return undefined;
+}
+
+const escapes = (rel: string): boolean =>
+  rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel);
+
+function realRoot(root: string): string {
+  try {
+    return realpathSync(root);
+  } catch {
+    return resolve(root);
+  }
+}
+
+const scalarOrType = (value: unknown): string =>
+  value === null || typeof value === "number" || typeof value === "boolean"
+    ? String(value)
+    : Array.isArray(value)
+      ? "a list"
+      : `a ${typeof value}`;
+
+/** The `top` and `exclude` magic of a pathspec, short or long form, and the pattern after it. */
+function pathspecMagic(entry: string): { top: boolean; exclude: boolean; pattern: string } {
+  if (!entry.startsWith(":")) return { top: false, exclude: false, pattern: entry };
+  const long = /^:\(([^)]*)\)/.exec(entry);
+  if (long) {
+    const words = long[1]!.split(",").map((word) => word.trim().split(/[:=]/)[0]);
+    return {
+      top: words.includes("top"),
+      exclude: words.includes("exclude"),
+      pattern: entry.slice(long[0].length),
+    };
+  }
+  const short = /^:([/!^]*):?/.exec(entry)!;
+  const signs = short[1]!;
+  return {
+    top: signs.includes("/"),
+    exclude: /[!^]/.test(signs),
+    pattern: entry.slice(short[0].length),
+  };
+}
+
+/**
+ * What git itself makes of `paths` from `root`: its refusal of the pathspec, or a match outside the
+ * root. Run by preflight, since the loader cannot run git and cannot read every kind of magic.
+ */
+export async function scopeRefusal(
+  root: string,
+  paths: readonly string[],
+): Promise<string | undefined> {
+  if (paths.length === 0) return undefined;
+  let out: string;
+  try {
+    out = await git(root, ["ls-files", "-z", "--", ...paths]);
+  } catch (error) {
+    if (!(error instanceof GitCommandError)) throw error;
+    return `git refuses \`paths\`: ${error.stderr.split("\n")[0]}`;
+  }
+  const outside = out.split("\0").find((path) => path.startsWith("../"));
+  return outside === undefined
+    ? undefined
+    : `\`paths\` matches files outside the source root, such as ${outside}`;
+}
+
+/**
  * A git repository as a source.
  *
  * The natural implementation: a revision is a commit SHA, and what changed
@@ -166,6 +335,9 @@ export class GitSource implements SourceAdapter {
   private readonly paths: readonly string[];
 
   constructor(options: GitSourceOptions) {
+    // `loadSources` turns this throw into an unloaded source naming the entry.
+    const problem = scopeProblem(options.root, options.paths);
+    if (problem) throw new Error(`Source "${options.id}" ${problem}`);
     this.id = options.id;
     this.root = options.root;
     this.citationFormat = options.citationFormat;
@@ -198,11 +370,40 @@ export class GitSource implements SourceAdapter {
    */
   async knowsRevision(revision: string): Promise<boolean> {
     try {
-      await git(this.root, ["cat-file", "-e", `${revision}^{commit}`]);
+      // A promisor remote would fetch a frontmatter revision. Env var, not the flag: an older git ignores it
+      // instead of failing; there is no guard on a git without it.
+      await git(this.root, ["cat-file", "-e", `${revision}^{commit}`], { GIT_NO_LAZY_FETCH: "1" });
       return true;
-    } catch {
-      return false;
+    } catch (error) {
+      if (error instanceof GitCommandError) return false;
+      throw error;
     }
+  }
+
+  /** Only a commit id or a prefix of one: hex, so git never reads it as a ref, an expression or an option. */
+  async resolveRevision(input: string): Promise<RevisionResolution> {
+    const revision = input.toLowerCase();
+    if (!/^[0-9a-f]{4,64}$/.test(revision)) return { status: "unknown" };
+    try {
+      const commit = (
+        await git(this.root, ["rev-parse", "--verify", "--quiet", `${revision}^{commit}`])
+      ).trim();
+      // A branch named like the prefix, or a tag object, resolves to a commit it does not abbreviate.
+      // git prefers a ref named like the prefix, so the answer is a real candidate but maybe not flagged ambiguous.
+      if (commit.startsWith(revision)) return { status: "resolved", revision: commit };
+    } catch {
+      // --quiet fails ambiguous and unknown alike, so the candidates below tell them apart.
+    }
+    const commits: string[] = [];
+    const named = await git(this.root, ["rev-parse", `--disambiguate=${revision}`]);
+    for (const id of named.split("\n").filter(Boolean)) {
+      const commit = await git(this.root, ["rev-parse", "--verify", "--quiet", `${id}^{commit}`])
+        .then((out) => out.trim())
+        .catch(() => "");
+      if (commit === id) commits.push(id);
+      if (commits.length > 1) return { status: "ambiguous" };
+    }
+    return commits[0] ? { status: "resolved", revision: commits[0] } : { status: "unknown" };
   }
 
   async changedSince(revision: string): Promise<string[]> {
@@ -214,7 +415,17 @@ export class GitSource implements SourceAdapter {
 
     // Citations name a renamed file's old path; -z stops git quoting a non-ASCII one.
     // --relative: citations name paths from the root, not the repository top.
-    const args = ["diff", "--name-only", "-z", "--no-renames", "--relative", revision, "HEAD"];
+    // --end-of-options: the revision comes from page frontmatter, so it must never read as a flag.
+    const args = [
+      "diff",
+      "--name-only",
+      "-z",
+      "--no-renames",
+      "--relative",
+      "--end-of-options",
+      revision,
+      "HEAD",
+    ];
     if (this.paths.length > 0) args.push("--", ...this.paths);
     const out = await git(this.root, args);
     return out.split("\0").filter(Boolean).toSorted();
@@ -252,6 +463,7 @@ export class GitSource implements SourceAdapter {
       "--no-textconv",
       // A `-diff` attribute or a NUL byte would print "Binary files differ" and no hunks.
       "--text",
+      "--end-of-options",
       revision,
       "HEAD",
       "--",

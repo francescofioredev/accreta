@@ -3,6 +3,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mkdirSync, readFileSync } from "node:fs";
 import { UNSUPPORTED_RUNTIME } from "../runtime.ts";
+import { StaleIndexError } from "../query/tables.ts";
+import { requireIndexFormat } from "./format.ts";
 
 const SCHEMA_PATH = join(dirname(fileURLToPath(import.meta.url)), "schema.sql");
 
@@ -31,6 +33,14 @@ export class UnsupportedRuntimeError extends Error {
   constructor() {
     super(UNSUPPORTED_RUNTIME);
     this.name = "UnsupportedRuntimeError";
+  }
+}
+
+/** A reader opened the index file but could not read it; a rebuild replaces it. */
+export class IndexUnreadableError extends Error {
+  constructor(reason: string, options?: ErrorOptions) {
+    super(`Cannot read the index (${reason}); run \`accreta reindex\`.`, options);
+    this.name = "IndexUnreadableError";
   }
 }
 
@@ -72,17 +82,19 @@ export function openIndex(path: string, opts: OpenOptions = {}): Database {
     if (!opts.readonly) {
       db.exec("PRAGMA journal_mode = WAL");
       db.exec(readFileSync(SCHEMA_PATH, "utf-8"));
+    } else {
+      // Here rather than per query: every reader opens through this, including a reopen after a swap.
+      requireIndexFormat(db);
     }
 
     db.exec("PRAGMA foreign_keys = ON");
     return db;
   } catch (error) {
     db.close();
-    if (!opts.readonly || error instanceof UnsupportedRuntimeError) throw error;
+    const own = error instanceof UnsupportedRuntimeError || error instanceof StaleIndexError;
+    if (!opts.readonly || own) throw error;
     const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(`Cannot read the index (${reason}); run \`accreta reindex\`.`, {
-      cause: error,
-    });
+    throw new IndexUnreadableError(reason, { cause: error });
   }
 }
 

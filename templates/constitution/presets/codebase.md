@@ -18,7 +18,7 @@ page_types:
 
 link_fields:
   - consumers # what calls this page's subject
-  - consumed_by # what this page's subject calls (the name reads backwards); the inverse of `consumers`
+  - consumes # what this page's subject calls; the inverse of `consumers`; declare it on either page, `consumers` shows both
   - delegates_to # what this page's subject hands work to
   - implements # the interface or contract this page's subject realizes
   - supersedes
@@ -55,12 +55,13 @@ of lines. Cite the definition, not the file:
 ```markdown
 Requests are rejected before authentication when the tenant header is absent.[^guard]
 
-[^guard]: billing-service @ 3f9a2b1 · src/middleware/tenant.ts#L34-L51
+[^guard]: billing-service @ 3f9a2b1c7d4e8f05a6b2c9d1e3f7a8b4c6d0e2f9 · src/middleware/tenant.ts#L34-L51
 ```
 
 ## Revisions are commit SHAs
 
-With a git source, `last_verified_revision` is the commit the page was checked against.
+With a git source, `last_verified_revision` is the commit the page was checked against, as the
+full SHA `cite` prints.
 `accreta drift` then reports exactly which files changed since — and a page whose module was
 untouched by a hundred commits is not stale.
 

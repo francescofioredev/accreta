@@ -680,6 +680,33 @@ describe("lint", () => {
     reindex();
     expect(lint(db, config).findings).toEqual([]);
   });
+
+  test("a list in last_verified_revision is named, not called missing (#262)", () => {
+    writePage(
+      "a.md",
+      '---\ntype: note\nsource: a\ncanonical_source: "a:doc.md#L1"\nlast_verified_revision: [r1, r2]\n---\n\n# A\n',
+    );
+    reindex();
+    const findings = lint(db, config).findings;
+    expect(findings.map((f) => [f.kind, f.path])).toEqual([
+      ["unsupported-field-type", "knowledge/a.md"],
+    ]);
+    expect(findings[0]?.detail).toContain("last_verified_revision is a list");
+    expect(findings[0]?.detail).toContain("not supported");
+    expect(findings[0]?.detail).toContain("footnotes");
+  });
+
+  test("a list in source is reported (#262)", () => {
+    writePage(
+      "a.md",
+      '---\ntype: note\nsource: [a, b]\ncanonical_source: "a:doc.md#L1"\nlast_verified_revision: r1\n---\n\n# A\n',
+    );
+    reindex();
+    const findings = lint(db, config).findings;
+    expect(findings.map((f) => f.kind)).toEqual(["unsupported-field-type"]);
+    expect(findings[0]?.detail).toContain("source is a list");
+    expect(findings[0]?.detail).toContain("not supported");
+  });
 });
 
 // The body starts on line 9, after five frontmatter lines, a blank, the title and a blank.
@@ -1066,6 +1093,43 @@ describe("lintCitations on footnotes", () => {
     expect(findings).toEqual([]);
   });
 
+  describe("an abbreviated revision", () => {
+    const FULL = "5b824c5e0f1a2b3c4d5e6f708192a3b4c5d6e7f8";
+    const prefixed: SourceAdapter = {
+      ...withHistory([FULL, "5b824c5"]),
+      resolveRevision: async (revision) =>
+        FULL.startsWith(revision) ? { status: "resolved", revision: FULL } : { status: "unknown" },
+    };
+
+    // #259: a short footnote revision passed lint while cite refused it.
+    test("is reported with the full revision to write instead", async () => {
+      writePage("a.md", page(["[^a]: s @ 5b824c5 · doc.md#L1"]));
+      reindex();
+      const { findings } = await lintCitations(db, sources(prefixed));
+      expect(findings).toEqual([
+        {
+          kind: "citation-revision-abbreviated",
+          path: "knowledge/a.md",
+          detail: expect.stringContaining(`[^a] (line 9) cites 5b824c5`),
+        },
+      ]);
+      expect(findings[0]?.detail).toContain(`write ${FULL}`);
+    });
+
+    test("is not reported once written in full", async () => {
+      writePage("a.md", page([`[^a]: s @ ${FULL} · doc.md#L1`]));
+      reindex();
+      expect((await lintCitations(db, sources(prefixed))).findings).toEqual([]);
+    });
+
+    test("is not judged by a source without prefixes", async () => {
+      writePage("a.md", page(["[^a]: s @ 5b824c5 · doc.md#L1"]));
+      reindex();
+      const exact = withHistory(["5b824c5"]);
+      expect((await lintCitations(db, sources(exact))).findings).toEqual([]);
+    });
+  });
+
   test("a mangled citation is reported, a prose footnote is not", async () => {
     writePage("a.md", page(["[^a]: s @ r1 · ", "[^note]: See the design notes for the history."]));
     reindex();
@@ -1173,6 +1237,24 @@ describe("lintCitations on last_verified_revision", () => {
       twoSources(withHistory("a", ["rev-of-a"]), withHistory("b", ["rev-of-b"])),
     );
     expect(findings).toEqual([]);
+  });
+
+  test("a prefix that names several revisions says so, not that it is missing", async () => {
+    writePage("a.md", verified("a", "5b8a"));
+    reindex();
+    const ambiguous: SourceAdapter = {
+      ...withHistory("a", []),
+      resolveRevision: async () => ({ status: "ambiguous" }),
+    };
+    const { findings } = await lintCitations(db, twoSources(ambiguous, withHistory("b", [])));
+    expect(findings).toEqual([
+      {
+        kind: "verified-revision-unknown",
+        path: "knowledge/a.md",
+        detail:
+          'last_verified_revision 5b8a now names several commits of source "a"; re-verify and record the full revision',
+      },
+    ]);
   });
 
   test("a source that keeps no history, or is not loaded, is not asked", async () => {

@@ -20,11 +20,13 @@ export const LINT_FINDING_KINDS = [
   "unverified-page",
   "dangling-link",
   "unparseable-frontmatter",
+  "unsupported-field-type",
   "unparseable-citation",
   "citation-path-missing",
   "citation-locator-missing",
   "citation-unpinned",
   "citation-revision-unknown",
+  "citation-revision-abbreviated",
   "verified-revision-unknown",
   "duplicate-footnote",
   "undefined-footnote",
@@ -76,7 +78,37 @@ interface PageRow {
   type: string;
   canonical_source: string | null;
   last_verified_revision: string | null;
+  frontmatter_json: string;
   frontmatter_error: string | null;
+}
+
+// Fields accreta reads as one string; the indexer stores anything else as absent.
+const SINGLE_VALUE_FIELDS = ["source", "last_verified_revision"] as const;
+
+/** How a value loaded and what to write instead, when it is not the string its field needs. */
+function unsupportedValue(value: unknown): { loadedAs: string; fix: string } | null {
+  if (Array.isArray(value)) {
+    return {
+      loadedAs: "a list",
+      fix: "lists are not supported: name one source in `source` and its revision in `last_verified_revision`, and cite the others in footnotes",
+    };
+  }
+  return null;
+}
+
+function unsupportedFields(path: string, frontmatterJson: string): Map<string, LintFinding> {
+  const frontmatter = JSON.parse(frontmatterJson) as Record<string, unknown>;
+  const findings = new Map<string, LintFinding>();
+  for (const field of SINGLE_VALUE_FIELDS) {
+    const unsupported = unsupportedValue(frontmatter[field]);
+    if (!unsupported) continue;
+    findings.set(field, {
+      kind: "unsupported-field-type",
+      path,
+      detail: `${field} is ${unsupported.loadedAs}, so accreta reads it as absent; ${unsupported.fix}`,
+    });
+  }
+  return findings;
 }
 
 /** One entry per (page, target), naming every kind it is linked as: a field and the body are one fault, not two. */
@@ -143,7 +175,8 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
 
   const pages = db
     .prepare(
-      `SELECT path, type, canonical_source, last_verified_revision, frontmatter_error
+      `SELECT path, type, canonical_source, last_verified_revision, frontmatter_json,
+              frontmatter_error
        FROM pages ORDER BY path`,
     )
     .all() as PageRow[];
@@ -201,7 +234,10 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
         detail: "no canonical_source: this page cites nothing",
       });
     }
-    if (!page.last_verified_revision) {
+    // A field that is there but unreadable gets its own finding, not one saying it is absent.
+    const unsupported = unsupportedFields(page.path, page.frontmatter_json);
+    findings.push(...unsupported.values());
+    if (!page.last_verified_revision && !unsupported.has("last_verified_revision")) {
       findings.push({
         kind: "unverified-page",
         path: page.path,
@@ -427,18 +463,29 @@ export async function lintCitations(
     }
   }
 
-  // One question per revision, for the same reason as per location.
-  const revisions = new Map<string, Promise<boolean | null>>();
-  const knows = (adapter: SourceAdapter, revision: string) => {
+  // One question per revision, for the same reason as per location; the resolver goes first because it settles the common case alone.
+  type RevisionState = { known: boolean | null; full: string | null; ambiguous: boolean };
+  const revisions = new Map<string, Promise<RevisionState>>();
+  const revisionState = (adapter: SourceAdapter, revision: string) => {
     const key = `${adapter.id}\0${revision}`;
-    let known = revisions.get(key);
-    if (known === undefined) {
-      known = adapter.knowsRevision
-        ? adapter.knowsRevision(revision).catch(() => null)
-        : Promise.resolve(null);
-      revisions.set(key, known);
+    let state = revisions.get(key);
+    if (state === undefined) {
+      state = (async (): Promise<RevisionState> => {
+        const resolved = await Promise.resolve(adapter.resolveRevision?.(revision)).catch(
+          () => undefined,
+        );
+        if (resolved?.status === "resolved") {
+          return { known: true, full: resolved.revision, ambiguous: false };
+        }
+        if (resolved?.status === "ambiguous") return { known: false, full: null, ambiguous: true };
+        const known = adapter.knowsRevision
+          ? await adapter.knowsRevision(revision).catch(() => null)
+          : null;
+        return { known, full: null, ambiguous: false };
+      })();
+      revisions.set(key, state);
     }
-    return known;
+    return state;
   };
 
   // Drift reads this field only against the page's own source, so that is the history to ask.
@@ -453,11 +500,14 @@ export async function lintCitations(
     const adapter = sources.get(page.source);
     if (!adapter) continue;
     checkedPages.add(page.path);
-    if ((await knows(adapter, page.last_verified_revision)) === false) {
+    const state = await revisionState(adapter, page.last_verified_revision);
+    if (state.known === false) {
       findings.push({
         kind: "verified-revision-unknown",
         path: page.path,
-        detail: `source "${adapter.id}" cannot place last_verified_revision ${page.last_verified_revision} (history rewritten, shallow clone, or a different repository); re-verify against "${adapter.id}" before recording a revision`,
+        detail: state.ambiguous
+          ? `last_verified_revision ${page.last_verified_revision} now names several commits of source "${adapter.id}"; re-verify and record the full revision`
+          : `source "${adapter.id}" cannot place last_verified_revision ${page.last_verified_revision} (history rewritten, shallow clone, or a different repository); re-verify against "${adapter.id}" before recording a revision`,
       });
     }
   }
@@ -511,11 +561,23 @@ export async function lintCitations(
     }
 
     if (row.revision && row.revision !== UNPINNED_REVISION) {
-      if ((await knows(adapter, row.revision)) === false) {
+      const state = await revisionState(adapter, row.revision);
+      if (state.known === false) {
         findings.push({
           kind: "citation-revision-unknown",
           path: row.page_path,
-          detail: `${label} cites revision ${row.revision}, which source "${adapter.id}" does not have`,
+          detail: state.ambiguous
+            ? `${label} cites ${row.revision}, which now names several commits of source "${adapter.id}"; cite the full revision again`
+            : `${label} cites revision ${row.revision}, which source "${adapter.id}" does not have`,
+        });
+      } else if (state.full !== null && state.full !== row.revision) {
+        findings.push({
+          kind: "citation-revision-abbreviated",
+          path: row.page_path,
+          detail:
+            state.full.length === row.revision.length && state.full === row.revision.toLowerCase()
+              ? `${label} cites ${row.revision}, written in uppercase; write the lowercase form ${state.full}`
+              : `${label} cites ${row.revision}, an abbreviation that can turn ambiguous as source "${adapter.id}" grows; write ${state.full}`,
         });
       }
     }

@@ -98,6 +98,8 @@ describe("composeConstitution", () => {
         "unless\nthat source is delegated",
         "the revision of the page's own `source`",
         "A citation covers its whole sentence.",
+        "### Verifying citations",
+        "the prompt `verify_citations`",
         "re-open the source lines cited by each footnote you added",
       ]) {
         expect({ preset, has: text.includes(phrase) }).toEqual({ preset, has: true });
@@ -123,7 +125,7 @@ describe("composeConstitution", () => {
       }
     }
     const codebase = composeConstitution({ preset: "codebase" });
-    expect(codebase).toContain("consumed_by # what this page's subject calls");
+    expect(codebase).toContain("consumes # what this page's subject calls");
     const research = composeConstitution({ preset: "research" });
     expect(research).toContain("link back to it with `discussed_in`");
   });

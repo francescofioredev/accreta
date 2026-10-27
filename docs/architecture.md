@@ -78,7 +78,7 @@ invented for source code. Vocabulary is configuration:
 
 ```yaml
 page_types: [note, source, concept, decision, synthesis]
-link_fields: [related, consumed_by, supersedes, discussed_in]
+link_fields: [related, consumes, supersedes, discussed_in]
 provenance:
   format: "{source} @ {rev} · {path}#{locator}"
 ```

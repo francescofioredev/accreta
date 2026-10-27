@@ -33,16 +33,19 @@ export type { BuildOptions, BuildResult } from "./index-db/build.ts";
 export { buildIndex } from "./index-db/build.ts";
 export type { Database, OpenOptions, Statement } from "./index-db/db.ts";
 export {
+  IndexUnreadableError,
   openIndex,
   sealForReading,
   sqliteSupport,
   UnsupportedRuntimeError,
 } from "./index-db/db.ts";
+export { INDEX_FORMAT } from "./index-db/format.ts";
 
 export type {
   LocationVerdict,
   LocatorChange,
   ParsedCitation,
+  RevisionResolution,
   SourceAdapter,
 } from "./source/adapter.ts";
 export {

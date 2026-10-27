@@ -3,11 +3,12 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  IndexUnreadableError,
   openIndex,
   sealForReading,
   sqliteSupport,
-  UnsupportedRuntimeError,
 } from "../src/index-db/db.ts";
+import { INDEX_FORMAT, INDEX_FORMAT_KEY } from "../src/index-db/format.ts";
 
 let root = "";
 let indexPath = "";
@@ -15,8 +16,12 @@ let indexPath = "";
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "accreta-db-"));
   indexPath = join(root, "index.sqlite");
-  // Sealed as the build seals it: a reader cannot open a WAL index once its `-shm` is gone.
   const writer = openIndex(indexPath);
+  // A reader refuses an index with no format, and this one is built by hand.
+  writer
+    .prepare("INSERT INTO meta (key, value) VALUES ($key, $value)")
+    .run({ $key: INDEX_FORMAT_KEY, $value: String(INDEX_FORMAT) });
+  // Sealed as the build seals it: a reader cannot open a WAL index once its `-shm` is gone.
   sealForReading(writer);
   writer.close();
 });
@@ -63,7 +68,7 @@ test("a reader that cannot open the file gets SQLite's reason and the remedy, no
   } catch (error) {
     failure = error;
   }
-  expect(failure).not.toBeInstanceOf(UnsupportedRuntimeError);
+  expect(failure).toBeInstanceOf(IndexUnreadableError);
   expect((failure as Error).message).toContain("file is not a database");
   expect((failure as Error).message).toContain("run `accreta reindex`");
 });
