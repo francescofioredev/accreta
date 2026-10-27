@@ -85,7 +85,7 @@ export function targetFor(client: Client, scope: Scope, root: string): Target {
   const h = home();
   const at = (path: string) => ({
     path,
-    shown: scope === "project" ? relative(root, path) : tilde(path, h),
+    shown: slashed(scope === "project" ? relative(root, path) : tilde(path, h)),
   });
   switch (client) {
     case "claude": {
@@ -169,6 +169,11 @@ export function targetFor(client: Client, scope: Scope, root: string): Target {
 
 function tilde(path: string, h: string): string {
   return path === h || path.startsWith(h + sep) ? `~${path.slice(h.length)}` : path;
+}
+
+/** `/` on every platform: a Windows `\` would print doubled by `printable`. */
+export function slashed(path: string, separator: string = sep): string {
+  return separator === "/" ? path : path.split(separator).join("/");
 }
 
 /** Comments and trailing commas out, strings untouched: VS Code and Cursor read JSONC. */
@@ -646,7 +651,9 @@ function checkEntry(ctx: CommandContext, found: Found): boolean {
   }
   const elsewhere = servesElsewhere(entry, root);
   if (elsewhere) {
-    ctx.out(`  ok: ${label} runs \`${shown}\`, for the knowledge base at ${printable(elsewhere)}`);
+    ctx.out(
+      `  ok: ${label} runs \`${shown}\`, for the knowledge base at ${printable(slashed(elsewhere))}`,
+    );
     return false;
   }
   ctx.out(`  ok: ${label} runs \`${shown}\``);
