@@ -140,18 +140,22 @@ export const printable = (value: string) =>
     escaped,
   );
 
-// Prose keeps its lines, tabs, joiners and other non-bidi format characters. A terminal escape,
-// a bidi control or a U+2028 line no caller would indent still shows; CRLF is one line break.
+// Prose keeps its lines, tabs, joiners and emoji flags. A terminal escape, a bidi control, an
+// invisible or tag character (text a model reads and a human cannot) or a U+2028 line still shows.
 export const printableBlock = (value: string) =>
   value
     .replaceAll("\r\n", "\n")
     .replaceAll(
-      /[^\P{Cc}\n\t]|[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069\u2028\u2029]/gu,
-      escaped,
+      /(\u{1f3f4}[\u{e0020}-\u{e007e}]+\u{e007f})|[^\P{Cc}\n\t]|[\u00ad\u061c\u180e\u200b\u200e\u200f\u202a-\u202e\u2028\u2029\u2060-\u2064\u2066-\u2069\ufeff\u{e0000}-\u{e007f}]/gu,
+      (c, flag?: string) => flag ?? escaped(c),
     );
 
 // A source's error output may run over several lines: the breaks stay, each line is escaped.
 export const printableLines = (text: string) => text.split(/\r?\n/).map(printable).join("\n");
+
+// A marked continuation line cannot pose as a line of its own, or as a CI runner's `::` command.
+export const printableMessage = (text: string, indent = "") =>
+  printableLines(text).replaceAll("\n", `\n${indent}  | `);
 
 const PROVENANCE_NOTICE =
   "Fields listed in page_derived_fields were written by whoever authored the page, not by " +
@@ -225,11 +229,11 @@ export function reportPage(
 
 export function reportPreflight(ctx: CommandContext, preflight: Preflight, indent: string): void {
   const label = preflight.reachable === "yes" ? "ok" : preflight.reachable;
-  ctx.out(`${indent}${label}: ${printable(preflight.detail)}`);
-  if (preflight.remedy) ctx.out(`${indent}  → ${printable(preflight.remedy)}`);
+  ctx.out(`${indent}${label}: ${printableMessage(preflight.detail, indent)}`);
+  if (preflight.remedy) ctx.out(`${indent}  → ${printableMessage(preflight.remedy, indent)}`);
   if (preflight.agentAccess) {
     const { connector, hint } = preflight.agentAccess;
     ctx.out(`${indent}your agent needs: ${printable(connector)} — unverified`);
-    ctx.out(`${indent}  → ${printable(hint)}`);
+    ctx.out(`${indent}  → ${printableMessage(hint, indent)}`);
   }
 }

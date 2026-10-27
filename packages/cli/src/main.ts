@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import {
   COMMAND_ARGS,
-  printableLines,
+  printableMessage,
   refuseArguments,
   type CommandContext,
   type ParsedArgs,
@@ -325,7 +325,7 @@ export async function main(): Promise<number> {
     // A message, not a stack trace: these are conditions a user can act on
     // ("no index, run reindex"), not internal failures.
     // They quote declarations and adapter stderr: escaped here once, never at the throw.
-    ctx.err(printableLines(error instanceof Error ? error.message : String(error)));
+    ctx.err(printableMessage(error instanceof Error ? error.message : String(error)));
     return 1;
   }
 }

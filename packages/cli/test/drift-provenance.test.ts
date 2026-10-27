@@ -97,9 +97,7 @@ const canaries = (text: string) => [...text.matchAll(CANARY)].map((m) => m[1]!.t
 function taint<T>(value: T, key = ""): T {
   if (typeof value === "string") {
     // `status` is accreta's own vocabulary, and drift branches on it.
-    if (key === "status") return value;
-    // The scope is prose that keeps a zero-width space, as cite prints it; a bidi override must not.
-    return `${value}\u001b[0m${key === "guidance" ? "\u202e" : "\u200b"}` as T;
+    return (key === "status" ? value : `${value}\u001b[0m\u200b`) as T;
   }
   if (Array.isArray(value)) return value.map((item) => taint(item)) as T;
   if (value !== null && typeof value === "object") {

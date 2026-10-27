@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { printable, printableBlock } from "../src/commands/shared.ts";
+import { printable, printableBlock, printableMessage } from "../src/commands/shared.ts";
 
 describe("printable", () => {
   test("escapes the backslash, every control and format character, and the line separators", () => {
@@ -22,9 +22,22 @@ describe("printable", () => {
 });
 
 describe("printableBlock", () => {
-  test("keeps lines, tabs, backslashes and format characters other than bidi controls", () => {
-    const prose = "one\n\ttwo \\n\nthree\u200b\u200d\u{e0041}";
+  test("keeps lines, tabs, backslashes, joiners and presentation selectors", () => {
+    const prose = "one\n\ttwo \\n\nthree\u200d\u200c \u26a0\ufe0f \u2705\ufe0e";
     expect(printableBlock(prose)).toBe(prose);
+  });
+
+  test("keeps a flag's tag sequence and escapes a tag character anywhere else", () => {
+    const england = "\u{1f3f4}\u{e0067}\u{e0062}\u{e0065}\u{e006e}\u{e0067}\u{e007f}";
+    expect(printableBlock(`${england} a\u{e0041}\u{e0042} \u{1f3f4}\u{e0041}`)).toBe(
+      `${england} a\\u{e0041}\\u{e0042} \u{1f3f4}\\u{e0041}`,
+    );
+  });
+
+  test("escapes invisible characters a model reads and a human cannot", () => {
+    expect(printableBlock("a\u200b\u2060\u2061\u2062\u2063\u2064\ufeff\u00ad\u180eb")).toBe(
+      "a\\u200b\\u2060\\u2061\\u2062\\u2063\\u2064\\ufeff\\u00ad\\u180eb",
+    );
   });
 
   test("reads CRLF as one line break", () => {
@@ -37,6 +50,14 @@ describe("printableBlock", () => {
     expect(printableBlock(hostile)).toBe(
       "\\u001b[2J\\u000d\\u0085\\u000b\\u061c\\u200e\\u200f\\u202a\\u202b\\u202c\\u202d\\u202e" +
         "\\u2066\\u2067\\u2068\\u2069\\u2028\\u2029",
+    );
+  });
+});
+
+describe("printableMessage", () => {
+  test("escapes each line and marks every line after the first", () => {
+    expect(printableMessage("one\r\n::warning::x\u001b\nok: y", "  ")).toBe(
+      "one\n    | ::warning::x\\u001b\n    | ok: y",
     );
   });
 });

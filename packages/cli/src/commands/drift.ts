@@ -23,7 +23,7 @@ import {
   loadSources,
   printable,
   printableBlock,
-  printableLines,
+  printableMessage,
   provenance,
   type CommandContext,
 } from "./shared.ts";
@@ -92,7 +92,7 @@ export async function drift(
     base = options.base ? readBase(resolve(ctx.cwd, options.base), options.source) : undefined;
   } catch (error) {
     // 2, as for any refused argument: 1 already means drift found something.
-    ctx.err(printableLines(error instanceof Error ? error.message : String(error)));
+    ctx.err(printableMessage(error instanceof Error ? error.message : String(error)));
     return 2;
   }
 
@@ -253,7 +253,7 @@ export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport)
     }
     printUnverifiable(ctx, report);
     ctx.out("  in scope:");
-    for (const line of printableBlock(work.guidance.trim()).split("\n")) ctx.out(`    ${line}`);
+    for (const line of printableBlock(work.guidance.trimEnd()).split("\n")) ctx.out(`    ${line}`);
     return;
   }
 
