@@ -22,7 +22,7 @@ export function ingestSourceText(target: string): string {
     "4. For each claim, call `cite` with the exact place as `target` and the revision from step 1 as `expect_revision`, and paste the `footnote` it returns. Never compose one. If it says the source is at another revision, the source moved: re-read and cite again. `location.verdict: missing` means the target is wrong.",
     "5. On a new page, record that revision of its own `source` in `last_verified_revision` (for a delegated source, the revision you read through the connector). On a page you extended, leave its revision alone unless you re-verified the whole page against this one.",
     "6. Ask for `accreta reindex`, then call `lint_knowledge_base` and fix what it reports.",
-    "7. Before you stop, re-open the source lines cited by each footnote you added, re-pinned, or whose sentence you changed, and only those. Every fact in the sentence (a name, a value, a sequence, a condition, a cause) must be in them. Give any that is not its own footnote from `cite`, or drop it; never widen a range to cover it. Write an inference as yours, in a sentence of its own with no footnote. Then repeat step 6.",
+    "7. Before you stop, re-open the source lines cited by each footnote you added, re-pinned, or whose sentence you changed, and only those. Every fact in the sentence (a name, a value, a sequence, a condition, a cause) must be in them. Give any that is not its own footnote from `cite`, or drop it; never widen a range to cover it. Write an inference only if it follows from the cited lines: as yours, in a sentence of its own right after the cited one, with no footnote. Then repeat step 6.",
     "",
     UNREACHABLE,
     DATA,
@@ -40,7 +40,7 @@ export function reverifyStalePagesText(source: string | undefined, writesEnabled
     "",
     `1. Call \`check_drift\`${source === undefined ? "" : ` with \`source: ${JSON.stringify(source)}\``}. For each report, work through its reply:`,
     "- `stale`, `unresolvable` and `delegated.pending` group pages by revision. A page in a group's `cited_only` only cites this source at that revision: re-check its cited lines, re-pin those footnotes with `cite` (a delegated source's cannot be pinned: leave them), and record no revision on it.",
-    "- `stale`, every other page: re-read what changed for it (its `citations`, else the `changed_paths`; also for a page in `pages_by_change.untouched` or `pages_by_change.uncited`), correct the page, re-cite each claim with `cite` and `expect_revision` set to the report's `current_revision`, check every fact in each re-cited sentence is in its lines (split off or drop any that is not), then " +
+    "- `stale`, every other page: re-read what changed for it (its `citations`, else the `changed_paths`; also for a page in `pages_by_change.untouched` or `pages_by_change.uncited`), correct the page, re-cite each claim with `cite` and `expect_revision` set to the report's `current_revision`, check every fact in each re-cited sentence, and any inference after it, against its lines (split off or drop what they do not support), then " +
       record +
       ". If `cite` says the source is at a newer revision, start again from step 1.",
     "- A citation with `refused`, or a page in a group's `refused`: the source will not vouch for that place, so re-reading cannot clear it. Fix the citation instead, for example re-cite the path the reason names with `cite`.",
@@ -60,14 +60,14 @@ export function verifyCitationsText(pages: readonly string[]): string {
   return [
     `Verify the citations on ${pages.map((page) => JSON.stringify(page)).join(", ")}.`,
     "",
-    "You did not write these pages: check them as a reviewer would, and change nothing a check does not call for.",
+    "Check these pages as a reviewer who did not write them, and change nothing a check does not call for.",
     "",
-    "1. Call `check_drift`. Skip a page it lists as stale or unresolvable and say so: that is `reverify_stale_pages`' work.",
-    "2. Read each page with `get_page`. For each sentence with a footnote, read the source lines the footnote cites. Every fact in the sentence (a name, a value, a sequence, a condition, a default, a cause) must be in those lines.",
-    '3. Fix each part the lines do not show, one of three ways: remove it; split it into its own sentence, read the lines that show it, and cite them with `cite`; or rewrite it as an inference, in a sentence of its own that says so ("this suggests"), with no footnote. Never add a claim, and never widen a range to cover a part.',
+    "1. Call `check_drift`. Skip a page it lists under `stale` or `unresolvable`: that is `reverify_stale_pages`' work. Check a page in `delegated.pending` only if the revision you read through the connector is its `last_verified_revision`.",
+    "2. Read each page with `get_page`. For each sentence with footnotes, open the lines they cite yourself: no accreta tool returns source text. A footnote's path is inside the root its source declares in sources/*.yaml. Step 1 left only pages whose sources are still at the pinned revision, so read the files as they stand. Every fact in the sentence (a name, a value, a sequence, a condition, a default, a cause) must be in those lines.",
+    '3. Fix each part the lines do not show, in this order. Split it into its own sentence: call `cite` on the file and keep its `revision`, read lines that show it, and cite them with that as `expect_revision`. Failing that, and only if it follows from the cited lines, rewrite it as your inference in a sentence of its own right after the cited one ("this suggests"), with no footnote. Otherwise remove it. A name, value or default the lines do not give is never an inference, and an inference never settles a disagreement between sources. A footnote on the wrong lines is re-cited on the lines that show the sentence. Never add a claim, and never widen a range to cover a part.',
     "4. Leave `last_verified_revision` alone.",
     "5. Ask for `accreta reindex`, then call `lint_knowledge_base` and fix what it reports.",
-    "6. Report, per page, how many footnoted sentences you checked and how many parts you removed, split off or rewrote as inference.",
+    "6. Report the pages you skipped and why; then, per page, how many footnoted sentences you checked and how many parts you split off, rewrote as inference or removed.",
     "",
     UNREACHABLE,
     DATA,
@@ -90,8 +90,9 @@ export function answerWithCitationsText(question: string): string {
 // The same grammar as canonical_source, with no whitespace or control character to start a new line in the message.
 const TARGET = /^[^\s:\p{Cc}]+:[^\s\p{Cc}]+$/u;
 const SOURCE_ID = /^[^\s:\p{Cc}]+$/u;
-// One page, or several separated by commas; no control character to start a new line in the message.
-const PAGES = /^[^,\p{Cc}]+(?:,[^,\p{Cc}]+)*$/u;
+// Pages separated by commas; no line break of any kind, so the list cannot start a new line in the message.
+const PAGE = String.raw`[^\s,\p{Cc}]+(?: [^\s,\p{Cc}]+)*`;
+const PAGES = new RegExp(`^ *${PAGE}(?: *, *${PAGE})* *,? *$`, "u");
 
 export function registerPrompts(server: McpServer, writesEnabled: boolean): void {
   server.registerPrompt(
@@ -125,7 +126,12 @@ export function registerPrompts(server: McpServer, writesEnabled: boolean): void
       description:
         "Check that each footnoted sentence on some pages says only what its cited lines show, and fix what does not. Run it in a fresh session, not the one that wrote the pages.",
       argsSchema: {
-        pages: z.string().regex(PAGES).describe("A page path, or several separated by commas."),
+        pages: z
+          .string()
+          .regex(PAGES)
+          .describe(
+            "Page paths as check_drift lists them (`knowledge/concepts/x.md`), separated by commas.",
+          ),
       },
     },
     ({ pages }) =>

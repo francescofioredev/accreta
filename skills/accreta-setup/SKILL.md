@@ -300,10 +300,10 @@ extended, leave its revision alone unless you re-verified the whole page.
 
 ### Verify citations
 
-In a fresh session, not the one that wrote the pages, check each new page's footnoted sentences
-against the lines they cite, as the constitution's "Verifying citations" says. Remove a part the
-lines do not show, split it off with its own `cite`, or rewrite it as an inference with no
-footnote; never add a claim. Then `accreta reindex` and `accreta lint`.
+In a session that did not write the pages, check each new page's footnoted sentences against the
+lines they cite, as the constitution's "Verifying citations" says. Split off a part the lines do
+not show with its own `cite`; keep it as an inference with no footnote only if it follows from the
+cited lines; otherwise remove it. Never add a claim. Then `accreta reindex` and `accreta lint`.
 
 ### Re-verify after drift
 
