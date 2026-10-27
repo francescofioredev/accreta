@@ -25,6 +25,7 @@ export const LINT_FINDING_KINDS = [
   "citation-locator-missing",
   "citation-unpinned",
   "citation-revision-unknown",
+  "verified-revision-unknown",
   "duplicate-footnote",
   "undefined-footnote",
   "unused-footnote",
@@ -300,6 +301,12 @@ interface CitationRow {
   canonical_source: string;
 }
 
+interface VerifiedRow {
+  path: string;
+  source: string;
+  last_verified_revision: string;
+}
+
 interface FootnoteRow {
   page_path: string;
   footnote: string;
@@ -433,6 +440,27 @@ export async function lintCitations(
     }
     return known;
   };
+
+  // Drift reads this field only against the page's own source, so that is the history to ask.
+  const verified = db
+    .prepare(
+      `SELECT path, source, last_verified_revision FROM pages
+       WHERE source IS NOT NULL AND last_verified_revision IS NOT NULL
+       ORDER BY path`,
+    )
+    .all() as VerifiedRow[];
+  for (const page of verified) {
+    const adapter = sources.get(page.source);
+    if (!adapter) continue;
+    checkedPages.add(page.path);
+    if ((await knows(adapter, page.last_verified_revision)) === false) {
+      findings.push({
+        kind: "verified-revision-unknown",
+        path: page.path,
+        detail: `source "${adapter.id}" cannot place last_verified_revision ${page.last_verified_revision} (history rewritten, shallow clone, or a different repository); re-verify against "${adapter.id}" before recording a revision`,
+      });
+    }
+  }
 
   const firstLine = new Map<string, number>();
   for (const row of footnotes) {
