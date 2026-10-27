@@ -509,13 +509,18 @@ describe("cite", () => {
   });
 
   // A notice that misnames where a field comes from teaches the reader to skip it.
-  test("the notice names the source and the target, not a page author", async () => {
+  test("the notice names the source, its declaration and the target, not a page author", async () => {
     const fromCli = (await cited(["cite", "repo:dirty.md"]))._provenance;
     const fromMcp = JSON.parse((await mcp("cite", { target: "repo:dirty.md" })).text)._provenance;
     for (const block of [fromCli, fromMcp]) {
-      expect(block.page_derived_fields).toEqual(["location.detail"]);
+      expect(block.page_derived_fields).toEqual([
+        "location.detail",
+        "delegated.via",
+        "delegated.scope",
+      ]);
       expect(block.notice).not.toContain("authored the page");
       expect(block.notice).toContain("the source");
+      expect(block.notice).toContain("the source declaration");
       expect(block.notice).toContain("the target you passed");
       expect(block.notice).toContain("does not prevent");
     }

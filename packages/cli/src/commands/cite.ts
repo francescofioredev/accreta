@@ -16,7 +16,7 @@ import {
   type CommandContext,
 } from "./shared.ts";
 
-const CITE_FIELDS = ["location.detail"] as const;
+const CITE_FIELDS = ["location.detail", "delegated.via", "delegated.scope"] as const;
 
 const USAGE =
   "Usage: accreta cite <source>:<path>[#locator]... [--expect-revision <rev>] [--json | --format text|footnote|json]";

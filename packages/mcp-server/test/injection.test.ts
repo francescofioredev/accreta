@@ -46,6 +46,7 @@ const PROBES: Record<string, Probe[]> = {
     { target: "docs:ch01.md#L1" },
     { target: "docs:ch01.md#L999" },
     { target: "quoting:p#b1" },
+    { target: "agent:ticket-1" },
   ],
   [WRITE_TOOL]: [
     // Refused: the page's own source is page text, echoed back.
@@ -126,7 +127,7 @@ const PLAIN_SOURCE: SourceAdapter = {
 const DELEGATED_SOURCE: SourceAdapter = {
   id: "agent",
   revision: async () => {
-    throw new DelegatedSourceError("agent", "a connector", "every ticket the notes cite");
+    throw new DelegatedSourceError("agent", "a CANARY-VIA connector", "every ticket; CANARY-SCOPE");
   },
   changedSince: async () => [],
   locate: async () => ({ verdict: "unknown", detail: "only the agent can read this source" }),
