@@ -231,10 +231,11 @@ read as prose and drop out of lint and drift, so do not rely on lint to find the
 
 ### Verifying citations
 
-After an ingest, a session that did not write the pages checks them; skip a page `accreta drift`
-has in doubt or cannot place. Re-read the lines each footnote cites and fix each part they do not
-show as rule 1 says, citing new lines as Ingesting 1 and 4 say. Never add a claim. End with
-Ingesting step 6. Over MCP this is the prompt `verify_citations`.
+After an ingest, a session that did not write the pages checks them. Skip a page `accreta drift`
+lists as in doubt, to re-pin, behind the source or on a revision it cannot place, and a delegated
+one unless you read it at its `last_verified_revision`. Re-read the lines each footnote cites and
+fix each part they do not show as rule 1 says, citing new lines as Ingesting 1 and 4 say. Never
+add a claim. End with Ingesting step 6. Over MCP this is the prompt `verify_citations`.
 
 ### Never write a speculative page
 
