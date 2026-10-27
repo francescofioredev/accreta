@@ -11,7 +11,7 @@ import {
 } from "@accreta/adapters";
 import { CONFIG_FILENAME, findWorkspace } from "../workspace.ts";
 import { reportMcp } from "./mcp-config.ts";
-import { reportPreflight, type CommandContext } from "./shared.ts";
+import { printable, printableMessage, reportPreflight, type CommandContext } from "./shared.ts";
 import { compareVersions, findInstalledSkills, SKILL_NAME } from "./skill-floor.ts";
 
 /**
@@ -29,7 +29,7 @@ export async function doctor(ctx: CommandContext, version: string): Promise<numb
     // Everything else reads this file through `parseConfig`, which degrades to
     // the defaults rather than throwing. That is the right trade there and it
     // means a knowledge base can lint against page types nobody chose.
-    ctx.out(`  broken: ${CONFIG_FILENAME} did not parse — ${check.error}`);
+    ctx.out(`  broken: ${CONFIG_FILENAME} did not parse — ${printableMessage(check.error, "  ")}`);
     ctx.out("    → every command is running on the default vocabulary, silently");
     exitCode = 1;
   } else {
@@ -37,7 +37,7 @@ export async function doctor(ctx: CommandContext, version: string): Promise<numb
   }
   const format = compileCitationTemplate(workspace.config.provenanceFormat);
   if (!format.ok) {
-    ctx.out(`  unreadable: ${format.reason}`);
+    ctx.out(`  unreadable: ${printable(format.reason)}`);
     ctx.out("    → footnote citations cannot be checked until it separates each placeholder");
     exitCode = 1;
   }
@@ -83,14 +83,16 @@ export async function doctor(ctx: CommandContext, version: string): Promise<numb
     const declaration = "error" in entry ? undefined : entry.declaration;
     const kind = declaration && kindFor(declaration.type);
     if ("error" in entry) {
-      ctx.out(`  ${file}`);
-      ctx.out(`    no: not a source declaration — ${entry.error}`);
+      ctx.out(`  ${printable(file)}`);
+      ctx.out(`    no: not a source declaration — ${printable(entry.error)}`);
     } else {
-      ctx.out(`  ${entry.declaration.id} — ${entry.declaration.type} — ${file}`);
+      const { id: declared, type } = entry.declaration;
+      ctx.out(`  ${printable(declared)} — ${printable(type)} — ${printable(file)}`);
       if (!kind) ctx.out(`    no: unknown source type. Known: ${KNOWN_TYPES.join(", ")}.`);
     }
     if (others.length > 0) {
-      ctx.out(`    no: id \`${id}\` is also declared in ${others.join(", ")}`);
+      const shown = others.map(printable).join(", ");
+      ctx.out(`    no: id \`${printable(id ?? "")}\` is also declared in ${shown}`);
       ctx.out("      → give each a distinct id or remove all but one");
     }
     if (!declaration || !kind || others.length > 0) {
@@ -136,7 +138,7 @@ function reportSkill(ctx: CommandContext, version: string): void {
   for (const skill of search.installed) {
     const order = skill.floor.ok ? compareVersions(skill.floor.requires, version) : null;
     if (!skill.floor.ok) {
-      ctx.out(`  unknown: ${skill.where} found, but ${skill.floor.reason}`);
+      ctx.out(`  unknown: ${skill.where} found, but ${printable(skill.floor.reason)}`);
       ctx.out(`    → reinstall it pinned to this release: ${pinned}`);
     } else if (order === null) {
       ctx.out(

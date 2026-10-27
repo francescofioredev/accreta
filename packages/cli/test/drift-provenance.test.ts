@@ -285,8 +285,8 @@ describe("drift's other formats, against the same pages", () => {
       "agent\\u001b[2J — read through a connector\\u0007 by the agent, not by accreta",
     );
     expect(lines).toContain("    p\\u200b.md (verified at r\\u061c)");
-    expect(lines).toContain("    every ticket\\u202e");
-    expect(lines).toContain("    up to date\\u2028done");
+    expect(lines).toContain("    | every ticket\\u202e");
+    expect(lines).toContain("    | up to date\\u2028done");
     expect(lines.filter((line) => UNSAFE.test(line))).toEqual([]);
   });
 

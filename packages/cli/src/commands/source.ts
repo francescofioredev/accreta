@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { parseSourceDeclaration } from "@accreta/core";
 import { KNOWN_TYPES, kindFor, stateDirFor } from "@accreta/adapters";
 import { findWorkspace } from "../workspace.ts";
-import { reportPreflight, type CommandContext } from "./shared.ts";
+import { printable, reportPreflight, type CommandContext } from "./shared.ts";
 
 /**
  * Write a source declaration, then say whether anything can reach it. `--set` pairs go in
@@ -23,7 +23,7 @@ export async function sourceAdd(
 
   const kind = kindFor(type);
   if (!kind) {
-    ctx.err(`Unknown source type "${type}". Known: ${KNOWN_TYPES.join(", ")}.`);
+    ctx.err(`Unknown source type "${printable(type)}". Known: ${KNOWN_TYPES.join(", ")}.`);
     return 2;
   }
 
@@ -33,12 +33,12 @@ export async function sourceAdd(
 
   const path = join(dir, `${id}.yaml`);
   if (existsSync(path)) {
-    ctx.err(`sources/${id}.yaml already exists. Leaving it alone.`);
+    ctx.err(`sources/${printable(id)}.yaml already exists. Leaving it alone.`);
     return 1;
   }
 
   writeFileSync(path, applyOverrides(kind.template(id), overrides), "utf-8");
-  ctx.out(`Wrote sources/${id}.yaml`);
+  ctx.out(`Wrote sources/${printable(id)}.yaml`);
 
   const preflight = await kind.preflight(
     { id, type, options: parseSourceDeclaration(readFileSync(path, "utf-8")).options },

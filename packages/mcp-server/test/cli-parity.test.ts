@@ -6,6 +6,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 // Relative on purpose: neither package depends on the other, and this test is the bridge.
 import { run } from "../../cli/src/main.ts";
+import { printableMessage } from "../../cli/src/commands/shared.ts";
 import { composeConstitution, PRESETS } from "../../cli/src/constitution.ts";
 import { createContext, createServer, type ToolContext } from "../src/index.ts";
 
@@ -182,7 +183,9 @@ async function cli(argv: string[]) {
     err: (line: string) => err.push(line),
   };
   // As main.ts does outside `run`: a thrown refusal is its message on stderr and exit 1.
-  const code = await run(argv, io).catch((error: Error) => (io.err(error.message), 1));
+  const code = await run(argv, io).catch(
+    (error: Error) => (io.err(printableMessage(error.message)), 1),
+  );
   return { code, stdout: out.join("\n"), stderr: err.join("\n") };
 }
 
