@@ -114,6 +114,15 @@ Two fields do most of the work:
 - **`last_verified_revision`** makes drift detectable. A page without it renders fine and
   cannot be checked — `accreta lint` will tell you so.
 
+**A page drawn from two sources still names one.** `source` and `last_verified_revision` each
+hold a single value: the source the page is mainly about, and the revision of it you verified.
+Cite every other source in footnotes; drift checks the pinned ones (`{rev}`). A list in either
+field is not supported, and lint reports it.
+
+**A contradiction page has no main source.** Either side may be named in `source`; the choice
+carries no authority and does not make that side the winner. Give both sides a pinned footnote,
+since only pinned footnotes are drift-checked.
+
 **`aliases` are not decoration.** They are how a reader who knows a concept by another name
 finds it, and search consults them alongside the title and the body. A page that declares
 `aliases: ["ECS"]`, where "ECS" appears in neither its title nor its text, is reachable by
@@ -170,7 +179,7 @@ With a shell, use the CLI. Without one, the MCP tool beside it does the same.
 |---|---|---|
 | `accreta search <query>` | `search_pages` | pages matching in title, aliases or body |
 | `accreta show <path>` | `get_page` | one page, by path or wikilink |
-| `accreta consumers <path>` | `find_consumers` | what links to a page, and what it links to |
+| `accreta consumers <path>` | `find_consumers` | what links to a page, and what it links to (direction = which page declares the link; `kind` gives the meaning) |
 | `accreta canonical <term>` | `find_canonical` | the page that defines a term |
 | `accreta cite <source>:<path>[#locator]` | `cite` | the citation for a place, at the source's current revision |
 | `accreta drift` | `check_drift` | the pages their sources moved under |
@@ -284,6 +293,7 @@ an interruption to work around.
 - **missing provenance** — no `canonical_source`
 - **unverified pages** — no `last_verified_revision`, or one the page's own `source` cannot
   place (history rewritten, a shallow clone, or a commit from another repository)
+- **unsupported field values** — a list in `source` or `last_verified_revision`
 - **citations that point at nothing** — a `canonical_source` or footnote naming a path the
   source does not have, or a locator the source cannot place
 - **citations that name no revision, or one the source never had** — `unknown` where a

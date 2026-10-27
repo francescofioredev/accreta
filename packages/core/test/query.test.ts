@@ -556,6 +556,33 @@ describe("lint", () => {
     reindex();
     expect(lint(db, config).findings).toEqual([]);
   });
+
+  test("a list in last_verified_revision is named, not called missing (#262)", () => {
+    writePage(
+      "a.md",
+      '---\ntype: note\nsource: a\ncanonical_source: "a:doc.md#L1"\nlast_verified_revision: [r1, r2]\n---\n\n# A\n',
+    );
+    reindex();
+    const findings = lint(db, config).findings;
+    expect(findings.map((f) => [f.kind, f.path])).toEqual([
+      ["unsupported-field-type", "knowledge/a.md"],
+    ]);
+    expect(findings[0]?.detail).toContain("last_verified_revision is a list");
+    expect(findings[0]?.detail).toContain("not supported");
+    expect(findings[0]?.detail).toContain("footnotes");
+  });
+
+  test("a list in source is reported (#262)", () => {
+    writePage(
+      "a.md",
+      '---\ntype: note\nsource: [a, b]\ncanonical_source: "a:doc.md#L1"\nlast_verified_revision: r1\n---\n\n# A\n',
+    );
+    reindex();
+    const findings = lint(db, config).findings;
+    expect(findings.map((f) => f.kind)).toEqual(["unsupported-field-type"]);
+    expect(findings[0]?.detail).toContain("source is a list");
+    expect(findings[0]?.detail).toContain("not supported");
+  });
 });
 
 // The body starts on line 9, after five frontmatter lines, a blank, the title and a blank.

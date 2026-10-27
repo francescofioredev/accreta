@@ -415,6 +415,13 @@ describe("drift --source checks what check_drift {source} checks", () => {
     });
   }
 
+  test("both carry the same notice, naming the source declaration", async () => {
+    const fromCli = JSON.parse((await cli(["drift", "--json"])).stdout)._provenance;
+    const fromMcp = JSON.parse((await mcp("check_drift", {})).text)._provenance;
+    expect(fromCli.notice).toBe(fromMcp.notice);
+    expect(fromMcp.notice).toContain("the page or the source declaration");
+  });
+
   // Fixture guard: the comparison above must have a page in doubt and a cross-source page to differ on.
   test("repo has a page in doubt and one it cannot place, cited only", async () => {
     const json = JSON.parse((await cli(["drift", "--source", "repo", "--json"])).stdout);
@@ -509,13 +516,18 @@ describe("cite", () => {
   });
 
   // A notice that misnames where a field comes from teaches the reader to skip it.
-  test("the notice names the source and the target, not a page author", async () => {
+  test("the notice names the source, its declaration and the target, not a page author", async () => {
     const fromCli = (await cited(["cite", "repo:dirty.md"]))._provenance;
     const fromMcp = JSON.parse((await mcp("cite", { target: "repo:dirty.md" })).text)._provenance;
     for (const block of [fromCli, fromMcp]) {
-      expect(block.page_derived_fields).toEqual(["location.detail"]);
+      expect(block.page_derived_fields).toEqual([
+        "location.detail",
+        "delegated.via",
+        "delegated.scope",
+      ]);
       expect(block.notice).not.toContain("authored the page");
       expect(block.notice).toContain("the source");
+      expect(block.notice).toContain("the source declaration");
       expect(block.notice).toContain("the target you passed");
       expect(block.notice).toContain("does not prevent");
     }
@@ -548,7 +560,7 @@ describe("cite", () => {
     {
       name: "a delegated source cannot confirm a revision",
       args: { target: "wiki:design-page", expect_revision: "v7" },
-      says: "read through notion, and accreta cannot tell its revision",
+      says: "it is delegated, and accreta cannot tell its revision",
       code: 1,
     },
     {
@@ -593,6 +605,8 @@ describe("cite", () => {
       expect(fromCli.stdout).toBe("");
       expect(fromCli.stderr).toBe(fromMcp.text);
       expect(fromMcp.text).toContain(r.says);
+      // `via` is declaration text, and an error carries no label.
+      expect(fromMcp.text).not.toContain("notion");
     });
   }
 });
