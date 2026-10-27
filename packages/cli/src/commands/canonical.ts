@@ -1,5 +1,6 @@
 import { findCanonical, findCanonicalPage, type CanonicalMatch } from "@accreta/core";
 import {
+  printable,
   printJson,
   provenance,
   readPage,
@@ -51,12 +52,14 @@ export function canonical(
       return 0;
     }
     if (found.total === 0) {
-      ctx.out(`Nothing is canonical for "${term}".`);
+      ctx.out(`Nothing is canonical for "${printable(term)}".`);
       return 0;
     }
     for (const match of matches) {
-      ctx.out(`${match.path}  [${match.type}]  (matched on ${match.matchedOn})`);
-      if (match.canonicalSource) ctx.out(`  source: ${match.canonicalSource}`);
+      ctx.out(
+        `${printable(match.path)}  [${printable(match.type)}]  (matched on ${match.matchedOn})`,
+      );
+      if (match.canonicalSource) ctx.out(`  source: ${printable(match.canonicalSource)}`);
     }
     if (page) reportPage(ctx, matches.length, found.total, "match(es)", found.nextCursor);
     return 0;
