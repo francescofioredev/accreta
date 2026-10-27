@@ -1481,6 +1481,55 @@ describe("GitSource spawn hardening", () => {
     await expect(isWorkingTree(root)).rejects.toBeInstanceOf(TimeoutError);
   });
 
+  // Windows has no process groups, so this is the case where killing git alone left the filter.
+  test.skipIf(process.platform !== "win32")(
+    "on Windows a timeout also ends the clean filter git started",
+    async () => {
+      write(".gitattributes", "a.md filter=slow\n");
+      await commit("attributes");
+      const helper = join(outside, "slow-filter.js");
+      const pidFile = join(outside, "slow-filter.pid");
+      writeFileSync(
+        helper,
+        `require("node:fs").writeFileSync(process.argv[2], String(process.pid));\nsetTimeout(() => {}, 60_000);\n`,
+      );
+      // git runs the filter through its sh, which reads a backslash as an escape.
+      const command = [process.execPath, helper, pidFile].map(
+        (p) => `"${p.replaceAll("\\", "/")}"`,
+      );
+      await run(["config", "filter.slow.clean", command.join(" ")]);
+      // A newer mtime at the same size makes status re-hash the file through its clean filter.
+      const later = new Date(Date.now() + 60_000);
+      utimesSync(join(root, "a.md"), later, later);
+      process.env.ACCRETA_GIT_TIMEOUT_MS = "3000";
+
+      const pid = () => (existsSync(pidFile) ? Number(readFileSync(pidFile, "utf-8")) : 0);
+      const alive = () =>
+        pid() > 0 &&
+        new RegExp(`\\b${pid()}\\b`).test(
+          Bun.spawnSync(["tasklist", "/FI", `PID eq ${pid()}`, "/NH"]).stdout.toString(),
+        );
+      try {
+        expect(await source().locate("a.md", "L1")).toEqual({
+          verdict: "unknown",
+          detail: "git could not run: git status did not finish within 3000 ms",
+        });
+        expect(pid()).toBeGreaterThan(0);
+        const deadline = Date.now() + 5_000;
+        while (alive() && Date.now() < deadline) await Bun.sleep(200);
+        expect(alive()).toBe(false);
+      } finally {
+        try {
+          // Only a helper still listed is ours; a dead one's pid may already be another process's.
+          if (alive()) process.kill(pid(), "SIGKILL");
+        } catch {
+          // Gone, as it should be.
+        }
+      }
+    },
+    20_000,
+  );
+
   test("pathspec settings in the environment neither kill git nor change what paths match", async () => {
     const from = await source().revision();
     write("a.md", lines(3, { 2: "changed" }));
