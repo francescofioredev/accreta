@@ -2,7 +2,12 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openIndex, sqliteSupport } from "../src/index-db/db.ts";
+import {
+  openIndex,
+  sealForReading,
+  sqliteSupport,
+  UnsupportedRuntimeError,
+} from "../src/index-db/db.ts";
 
 let root = "";
 let indexPath = "";
@@ -10,7 +15,10 @@ let indexPath = "";
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "accreta-db-"));
   indexPath = join(root, "index.sqlite");
-  openIndex(indexPath).close();
+  // Sealed as the build seals it: a reader cannot open a WAL index once its `-shm` is gone.
+  const writer = openIndex(indexPath);
+  sealForReading(writer);
+  writer.close();
 });
 
 afterEach(() => {
@@ -44,6 +52,21 @@ test("no row is undefined, not null", () => {
   } finally {
     db.close();
   }
+});
+
+test("a reader that cannot open the file gets SQLite's reason, not a missing FTS5", () => {
+  const writer = openIndex(indexPath);
+  writer.close();
+  // Bun 1.4.4 removes these on close; older runtimes leave them, so remove them here.
+  for (const suffix of ["-wal", "-shm"]) rmSync(indexPath + suffix, { force: true });
+  let failure: unknown;
+  try {
+    openIndex(indexPath, { readonly: true }).close();
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).not.toBeInstanceOf(UnsupportedRuntimeError);
+  expect((failure as Error).message).toContain("unable to open database file");
 });
 
 test("the runtime running this suite has FTS5", () => {

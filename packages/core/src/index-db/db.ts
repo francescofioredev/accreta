@@ -38,8 +38,10 @@ function hasFts5(db: Database): boolean {
   try {
     db.prepare("SELECT fts5(NULL)").get();
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    // Any other failure is the file's, such as a read-only open of a WAL index with no `-shm`.
+    if (error instanceof Error && error.message.includes("no such function: fts5")) return false;
+    throw error;
   }
 }
 
@@ -61,7 +63,14 @@ export function openIndex(path: string, opts: OpenOptions = {}): Database {
 
   // node:sqlite silently ignores Bun's old spelling, `readonly`, and leaves the reader writable.
   const db = new DatabaseSync(path, { readOnly: opts.readonly === true });
-  if (!hasFts5(db)) {
+  let fts5: boolean;
+  try {
+    fts5 = hasFts5(db);
+  } catch (error) {
+    db.close();
+    throw error;
+  }
+  if (!fts5) {
     db.close();
     throw new UnsupportedRuntimeError();
   }
