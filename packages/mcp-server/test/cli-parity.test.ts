@@ -299,7 +299,8 @@ describe("every MCP tool has a CLI twin", () => {
 
   test("every MCP field the Commands and cycle sections quote is one a tool declares or describes", async () => {
     const { tools } = await client.listTools();
-    const declared = JSON.stringify(tools);
+    const { prompts } = await client.listPrompts();
+    const declared = JSON.stringify([tools, prompts]);
     const text = composeConstitution();
     const sections = text.slice(text.indexOf("## Commands"), text.indexOf("## What not to do"));
     const quoted = new Set(

@@ -43,8 +43,8 @@ checked.
 **A citation covers its whole sentence.** Every fact in a cited sentence — a name, a value, a
 sequence, a condition, a cause — must be in the cited lines, in your words or theirs. Split off
 any that is not and give it its own footnote from `cite`, or drop it; never widen a range to
-cover it. Mark an inference as yours ("this suggests") and cite the lines it rests on; it never
-settles a disagreement (rule 3).
+cover it. Write an inference as yours ("this suggests"), in a sentence of its own with no
+footnote, after the cited fact it rests on; it never settles a disagreement (rule 3).
 
 ```markdown
 Before: The assessed likely range is 2.5 to 4.0 degrees Celsius, narrowed by paleoclimate evidence.[^ecs]
@@ -226,6 +226,14 @@ If lint reports that `provenance.format` has no `{rev}`, or you change the forma
 in `accreta.config.yaml` first, then re-cite every existing footnote with `accreta cite`. Lint
 lists each old footnote with a #locator as `unparseable-citation`, but one without a #locator can
 read as prose and drop out of lint and drift, so do not rely on lint to find them all.
+
+### Verifying citations
+
+After an ingest, a fresh session, not the writer's, checks each page it wrote. For each footnoted
+sentence, read the cited lines and test every fact in it against them, as rule 1 says. A part they
+do not show is removed, split off with its own footnote from `cite` once you have read the lines
+that show it, or rewritten as an inference. Never add a claim. Skip a page `accreta drift` lists;
+end with Ingesting step 6. Over MCP this is the prompt `verify_citations`.
 
 ### Never write a speculative page
 

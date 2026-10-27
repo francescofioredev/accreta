@@ -22,7 +22,7 @@ export function ingestSourceText(target: string): string {
     "4. For each claim, call `cite` with the exact place as `target` and the revision from step 1 as `expect_revision`, and paste the `footnote` it returns. Never compose one. If it says the source is at another revision, the source moved: re-read and cite again. `location.verdict: missing` means the target is wrong.",
     "5. On a new page, record that revision of its own `source` in `last_verified_revision` (for a delegated source, the revision you read through the connector). On a page you extended, leave its revision alone unless you re-verified the whole page against this one.",
     "6. Ask for `accreta reindex`, then call `lint_knowledge_base` and fix what it reports.",
-    "7. Before you stop, re-open the source lines cited by each footnote you added, re-pinned, or whose sentence you changed, and only those. Every fact in the sentence (a name, a value, a sequence, a condition, a cause) must be in them. Give any that is not its own footnote from `cite`, or drop it; never widen a range to cover it. Mark an inference as yours and cite the lines it rests on. Then repeat step 6.",
+    "7. Before you stop, re-open the source lines cited by each footnote you added, re-pinned, or whose sentence you changed, and only those. Every fact in the sentence (a name, a value, a sequence, a condition, a cause) must be in them. Give any that is not its own footnote from `cite`, or drop it; never widen a range to cover it. Write an inference as yours, in a sentence of its own with no footnote. Then repeat step 6.",
     "",
     UNREACHABLE,
     DATA,
@@ -56,6 +56,24 @@ export function reverifyStalePagesText(source: string | undefined, writesEnabled
   ].join("\n");
 }
 
+export function verifyCitationsText(pages: readonly string[]): string {
+  return [
+    `Verify the citations on ${pages.map((page) => JSON.stringify(page)).join(", ")}.`,
+    "",
+    "You did not write these pages: check them as a reviewer would, and change nothing a check does not call for.",
+    "",
+    "1. Call `check_drift`. Skip a page it lists as stale or unresolvable and say so: that is `reverify_stale_pages`' work.",
+    "2. Read each page with `get_page`. For each sentence with a footnote, read the source lines the footnote cites. Every fact in the sentence (a name, a value, a sequence, a condition, a default, a cause) must be in those lines.",
+    '3. Fix each part the lines do not show, one of three ways: remove it; split it into its own sentence, read the lines that show it, and cite them with `cite`; or rewrite it as an inference, in a sentence of its own that says so ("this suggests"), with no footnote. Never add a claim, and never widen a range to cover a part.',
+    "4. Leave `last_verified_revision` alone.",
+    "5. Ask for `accreta reindex`, then call `lint_knowledge_base` and fix what it reports.",
+    "6. Report, per page, how many footnoted sentences you checked and how many parts you removed, split off or rewrote as inference.",
+    "",
+    UNREACHABLE,
+    DATA,
+  ].join("\n");
+}
+
 export function answerWithCitationsText(question: string): string {
   return [
     `Answer from the knowledge base: ${question}`,
@@ -72,6 +90,8 @@ export function answerWithCitationsText(question: string): string {
 // The same grammar as canonical_source, with no whitespace or control character to start a new line in the message.
 const TARGET = /^[^\s:\p{Cc}]+:[^\s\p{Cc}]+$/u;
 const SOURCE_ID = /^[^\s:\p{Cc}]+$/u;
+// One page, or several separated by commas; no control character to start a new line in the message.
+const PAGES = /^[^,\p{Cc}]+(?:,[^,\p{Cc}]+)*$/u;
 
 export function registerPrompts(server: McpServer, writesEnabled: boolean): void {
   server.registerPrompt(
@@ -98,6 +118,25 @@ export function registerPrompts(server: McpServer, writesEnabled: boolean): void
       },
     },
     ({ source }) => user(reverifyStalePagesText(source, writesEnabled)),
+  );
+  server.registerPrompt(
+    "verify_citations",
+    {
+      description:
+        "Check that each footnoted sentence on some pages says only what its cited lines show, and fix what does not. Run it in a fresh session, not the one that wrote the pages.",
+      argsSchema: {
+        pages: z.string().regex(PAGES).describe("A page path, or several separated by commas."),
+      },
+    },
+    ({ pages }) =>
+      user(
+        verifyCitationsText(
+          pages
+            .split(",")
+            .map((page) => page.trim())
+            .filter((page) => page !== ""),
+        ),
+      ),
   );
   server.registerPrompt(
     "answer_with_citations",
