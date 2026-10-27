@@ -3,6 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import {
   openIndex,
   parseConfig,
+  sqliteSupport,
   StaleIndexError,
   UnsupportedRuntimeError,
   type Database,
@@ -47,6 +48,8 @@ function inodeOf(path: string): string | null {
  * and asks for a reindex, since an index updated in place would drift from the pages it derives from.
  */
 export function createContext(cwd: string = process.cwd()): ToolContext {
+  // The runtime, unlike the index, cannot be mended by a reindex: refuse to start.
+  if (sqliteSupport() !== null) throw new UnsupportedRuntimeError();
   const root = findRoot(cwd);
   const config = parseConfig(readFileSync(join(root, CONFIG_FILENAME), "utf-8"));
 
