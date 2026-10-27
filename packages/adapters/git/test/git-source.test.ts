@@ -20,7 +20,7 @@ import {
   pageChanges,
   UnknownRevisionError,
 } from "@accreta/core";
-import { GitCommandError, GitSource } from "../src/index.ts";
+import { GitCommandError, GitSource, scopeRefusal, unmatchedPaths } from "../src/index.ts";
 
 let root = "";
 
@@ -971,6 +971,70 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
     expect(await sub(["../sub/other"]).locate("docs/a.md")).toMatchObject({ verdict: "missing" });
   });
 
+  test("a scope path is refused only when it ends up outside the root", async () => {
+    expect(await sub(["../sub/docs"]).revision()).toBe(await head());
+    expect(await sub([".", "./"]).revision()).toBe(await head());
+    expect(() => sub(["../other.md"])).toThrow('"../other.md"');
+    expect(() => sub(["docs/../../other.md"])).toThrow('"docs/../../other.md"');
+    expect(() => sub([""])).toThrow('""');
+    expect(() => sub([":(glob)../*.md"])).toThrow("outside the source root");
+  });
+
+  test("an absolute scope path is refused without quoting it, inside the root or not", () => {
+    for (const path of [join(root, "other.md"), join(root, "sub", "docs")]) {
+      expect(() => sub([path])).toThrow("an absolute path; name it relative to `root`");
+      expect(() => sub([path])).not.toThrow(root);
+    }
+  });
+
+  test("a pathspec anchored at the repository top is refused, an exclusion is not", () => {
+    expect(() => sub([":/docs"])).toThrow('":/docs"');
+    expect(() => sub([":(top)docs"])).toThrow('":(top)docs"');
+    expect(() => sub([":(top,glob)sub/docs/*"])).toThrow("relative to the repository top");
+    expect(() => sub([":(top)sub/docs"])).toThrow("relative to the repository top");
+    expect(() => sub([":(exclude)other.md", "docs"])).not.toThrow();
+    expect(() => sub([":!other.md", "docs"])).not.toThrow();
+  });
+
+  test("a scope made only of exclusions is refused", () => {
+    expect(() => sub([":(exclude)other.md"])).toThrow(
+      'add "." to keep the whole root, or omit `paths`',
+    );
+    expect(() => sub([":!a.md", ":^b.md"])).toThrow("only exclusions");
+  });
+
+  test("an exclusion of the root itself is refused, since it leaves nothing in scope", () => {
+    for (const entry of [":!", ":!.", ":(exclude)", ":(exclude).", ":^", ":^.", ":!.."]) {
+      expect(() => sub(["docs", entry])).toThrow(
+        `${JSON.stringify(entry)}, which excludes the whole source root`,
+      );
+    }
+    expect(() => sub([".", ":!docs"])).not.toThrow();
+  });
+
+  test("a scope path is judged from where the root really is, not through a symlink", async () => {
+    symlinkSync(join(root, "sub"), join(root, "lnk"));
+    const linked = (paths: string[]) =>
+      new GitSource({ id: "repo", root: join(root, "lnk"), citationFormat: "{path}", paths });
+    expect(() => linked(["../lnk/docs"])).toThrow("outside the source root");
+    expect(await linked(["../sub/docs"]).revision()).toBe(await head());
+    expect(
+      () =>
+        new GitSource({
+          id: "repo",
+          root: join(root, "nowhere"),
+          citationFormat: "",
+          paths: ["docs"],
+        }),
+    ).not.toThrow();
+  });
+
+  test("git's own reading of paths is checked: its refusal, or a match outside the root", async () => {
+    expect(await scopeRefusal(join(root, "sub"), ["docs"])).toBeUndefined();
+    expect(await scopeRefusal(join(root, "sub"), [":(bogus)docs"])).toContain("bogus");
+    expect(await scopeRefusal(join(root, "sub"), [":/other.md"])).toContain("../other.md");
+  });
+
   test("paths are relative to the root, and so is what changedSince names", async () => {
     const scoped = sub(["docs"]);
     const from = await scoped.revision();
@@ -995,7 +1059,9 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
     );
     expect(() => sub(["./sub/docs/*.md"])).toThrow('(did you mean "docs/*.md"?)');
     expect(() => sub(["sub"])).toThrow('(did you mean "."?)');
-    expect(() => sub(["docs", "../other.md"])).not.toThrow();
+    // It matches a tracked file, so only the earlier out-of-root check refuses it.
+    expect(unmatchedPaths(join(root, "sub"), ["docs", "../other.md"])).toBeUndefined();
+    expect(() => sub(["docs", "../other.md"])).toThrow("resolves outside the source root");
   });
 
   test("a suggestion is offered only when it matches", () => {
