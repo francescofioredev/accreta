@@ -108,11 +108,17 @@ Search is SQLite FTS5 over each page's title, aliases and body, with Porter stem
 no dependencies, no keys and no network, and there is no `search` configuration key.
 
 A word joined by underscores is an identifier. Identifiers sit in a second FTS5 table, unstemmed
-and with `_` as a token character, and `stale` alone still finds `stale_served`. When some page
-holds the exact identifier, `stale_served` returns those pages only: not `stale serves`, not
-`stale_served_total`, and not a page that spells it `stale-served` or `stale served`. When no
-page holds it, as for a near miss like `stale_serve`, search falls back to the ordinary stemmed
-ranking, so a near miss such as `stale_serves` can still rank the `stale_served` pages first.
+and with `_` as a token character, and `stale` alone still finds `stale_served`. Footnote
+definitions and HTML comments are left out of that table, so a citation path or a hidden comment
+cannot make a page an exact match.
+
+When a page holds the exact identifier and also matches the rest of the query and its filters,
+`stale_served` returns only such pages. A page that spells it `stale-served` or `stale served` is
+then not returned, so before concluding that a concept has one page, or that nothing contradicts
+it, search again with the words separated: `stale served`. Otherwise search falls back to the
+ordinary stemmed ranking. That covers a near miss such as `stale_serve`, and also
+`stale_served dashboards` when the exact page lacks "dashboards". A near miss such as
+`stale_serves` can still rank the `stale_served` pages first (#373).
 
 Semantic search is **not built**. [ADR-0001](adr/0001-lexical-search-first.md) measured 85%
 recall@1 without it and keeps it optional and unbuilt until a benchmark says otherwise.

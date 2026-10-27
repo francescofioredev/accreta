@@ -247,7 +247,7 @@ describe("searchPages on an underscore identifier", () => {
     expect(ranked("stale_serves")).toContain("notes/replica-reads.md");
   });
 
-  test("an identifier written with a leading underscore is still found without it", () => {
+  test("private_helper reaches _private_helper only through the fallback", () => {
     writePage(
       "code/signing.md",
       "---\ntype: note\n---\n\n# Signing\n\n`_private_helper` builds the signature.\n",
@@ -255,6 +255,61 @@ describe("searchPages on an underscore identifier", () => {
     db.close();
     reindex();
     expect(ranked("private_helper")).toEqual(["code/signing.md"]);
+
+    // Once a page holds private_helper exactly, the _private_helper page is no longer returned.
+    writePage(
+      "code/helpers.md",
+      "---\ntype: note\n---\n\n# Helpers\n\n`private_helper` is public.\n",
+    );
+    db.close();
+    reindex();
+    expect(ranked("private_helper")).toEqual(["code/helpers.md"]);
+  });
+
+  test("another query word that the exact page lacks turns the fallback on", () => {
+    expect(ranked("stale_served dashboards")).toEqual(["notes/replica-reads.md"]);
+  });
+
+  test("an identifier only in a citation path does not hide prose about it", () => {
+    writePage(
+      "notes/lag.md",
+      "---\ntype: note\n---\n\n# Lag\n\nLag seconds measure how far a replica trails.\n",
+    );
+    writePage(
+      "notes/cited.md",
+      "---\ntype: note\n---\n\n# Cited\n\nA replica trails.[^1]\n\n[^1]: repo @ abc123 · src/lag_seconds.ts#L3-L9\n",
+    );
+    db.close();
+    reindex();
+    expect(ranked("lag_seconds")).toContain("notes/lag.md");
+  });
+
+  test("an identifier only in an HTML comment does not hide prose about it", () => {
+    writePage(
+      "notes/wait.md",
+      "---\ntype: note\n---\n\n# Wait\n\nQueue wait is how long a message sits.\n",
+    );
+    writePage(
+      "notes/hidden.md",
+      "---\ntype: note\n---\n\n# Hidden\n\nQueue.\n\n<!-- queue_wait\nqueue_wait -->\n",
+    );
+    db.close();
+    reindex();
+    expect(ranked("queue_wait")).toContain("notes/wait.md");
+  });
+
+  test("an identifier in fenced code is still an exact match", () => {
+    writePage(
+      "notes/fenced.md",
+      "---\ntype: note\n---\n\n# Fenced\n\n```\nflush_interval = 5\n```\n",
+    );
+    writePage(
+      "notes/flush.md",
+      "---\ntype: note\n---\n\n# Flush\n\nThe flush interval is five seconds.\n",
+    );
+    db.close();
+    reindex();
+    expect(ranked("flush_interval")).toEqual(["notes/fenced.md"]);
   });
 
   test("a word inside an identifier still finds it", () => {

@@ -129,14 +129,14 @@ export function createServer(ctx: ToolContext): McpServer {
     "search_pages",
     {
       description:
-        "Full-text search across the knowledge base (title, declared aliases, and body), with optional filters on page type and source. The primary discovery tool: use it when you do not already know a page's path. Every word must match, and NOT, OR and AND are searched as words; double quotes make a phrase, and a trailing * matches a prefix. A word joined by underscores, like stale_served, returns only the pages holding exactly that identifier when any does; when none does, the ordinary stemmed search answers instead. stale alone still finds stale_served." +
+        "Full-text search across the knowledge base (title, declared aliases, and body), with optional filters on page type and source. The primary discovery tool: use it when you do not already know a page's path. Every word must match, and NOT, OR and AND are searched as words; double quotes make a phrase, and a trailing * matches a prefix. A word joined by underscores, like stale_served, returns only the pages that hold exactly that identifier when a page holds it and also matches the rest of the query and filters; otherwise the ordinary stemmed search answers. When it applies, pages that write stale-served or stale served are not returned, so before concluding a concept has one page or no contradiction, search again with the words separated. stale alone still finds stale_served." +
         PAGE_DERIVED,
       inputSchema: {
         query: z
           .string()
           .min(1)
           .describe(
-            "Words that must all match. Double quotes make a phrase; a trailing * a prefix.",
+            "Words that must all match. Double quotes make a phrase; a trailing * a prefix. An underscore-joined identifier matches only pages holding it exactly when one also matches the rest of the query and filters; pages spelling it with spaces or hyphens are then left out.",
           ),
         types: z
           .array(z.string())

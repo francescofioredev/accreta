@@ -62,8 +62,8 @@ and prints the index size in bytes, which is the cost of the identifier table (#
 # Identifier queries
 
 `identifier-bench.ts` runs 22 plain queries over `identifiers/`, a 15-page corpus of metric,
-column and setting names. Its relevance judgments were committed before any variant of identifier
-search was run. It reports recall@1, MRR, recall@10 (the share of relevant pages in the top ten)
+column and setting names. Its relevance judgments were committed before the bench first ran. It
+reports recall@1, MRR, recall@10 (the share of relevant pages in the top ten)
 and how many queries returned nothing. `--verbose` prints every ranking.
 
 ```bash

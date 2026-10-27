@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import { readdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import type { AccretaConfig } from "../config.ts";
-import { compileCitationTemplate, readFootnotes } from "../citations.ts";
+import {
+  compileCitationTemplate,
+  readFootnotes,
+  withoutFootnotesOrComments,
+} from "../citations.ts";
 import { identifiersIn } from "../identifiers.ts";
 import { extractLinks, tryResolveWikilink } from "../links.ts";
 import { nameKey } from "../name-key.ts";
@@ -268,7 +272,10 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
         $type: type,
         $source: source ?? "",
       });
-      const identifiers = identifiersIn(`${title}\n${aliases}\n${body}`);
+      // A citation path or a hidden comment would otherwise make a page an exact match no reader sees.
+      const identifiers = identifiersIn(
+        `${title}\n${aliases}\n${withoutFootnotesOrComments(body)}`,
+      );
       if (identifiers.length > 0) {
         insertIdentifiers.run({ $rowid: fts.lastInsertRowid, $identifiers: identifiers.join(" ") });
       }

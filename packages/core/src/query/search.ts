@@ -44,7 +44,8 @@ export function searchPages(db: Database, options: SearchOptions): SearchHit[] {
   if (identifiers === "") return run(db, options, match, "", limit);
   requireTable(db, "pages_identifiers");
   const exact = run(db, options, match, identifiers, limit);
-  // A near miss such as `stale_serve` holds no identifier; an empty answer invites a duplicate page.
+  // Empty when no page holds the identifier and also matches the other words and filters; an empty
+  // answer invites a duplicate page, so the stemmed ranking answers instead.
   return exact.length > 0 ? exact : run(db, options, match, "", limit);
 }
 

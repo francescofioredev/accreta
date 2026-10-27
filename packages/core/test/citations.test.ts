@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { compileCitationTemplate, extractFootnotes, readFootnotes } from "../src/citations.ts";
+import {
+  compileCitationTemplate,
+  extractFootnotes,
+  readFootnotes,
+  withoutFootnotesOrComments,
+} from "../src/citations.ts";
 import { DEFAULT_CONFIG } from "../src/config.ts";
 import { formatCitation } from "../src/source/adapter.ts";
 
@@ -246,5 +251,36 @@ describe("readFootnotes", () => {
     const body =
       "A claim.[^a]\n\n[^a]: s @ r · p.md#L1\n    read alongside [^b].\n[^b]: s @ r · p.md#L2";
     expect(readFootnotes(body).footnotes[1]?.claim).toBe("");
+  });
+});
+
+describe("withoutFootnotesOrComments", () => {
+  test("blanks definitions with their continuation and comments, and keeps code", () => {
+    const body = [
+      "Claim.[^a] Kept <!-- gone --> text.",
+      "",
+      "[^a]: src @ abc · a_path.ts#L1",
+      "    still_the_definition",
+      "",
+      "After <!-- open",
+      "still_open --> closed_after",
+      "```",
+      "<!-- kept_in_code -->",
+      "[^b]: kept_in_code_too",
+      "```",
+    ].join("\n");
+    const out = withoutFootnotesOrComments(body).split("\n");
+    expect(out).toHaveLength(11);
+    expect(out[0]).toBe("Claim.[^a] Kept  text.");
+    expect(out[2]).toBe("");
+    expect(out[3]).toBe("");
+    expect(out[5]).toBe("After ");
+    expect(out[6]).toBe(" closed_after");
+    expect(out[8]).toBe("<!-- kept_in_code -->");
+    expect(out[9]).toBe("[^b]: kept_in_code_too");
+  });
+
+  test("an unclosed comment runs to the end of the body", () => {
+    expect(withoutFootnotesOrComments("a <!-- b\nc_d")).toBe("a \n");
   });
 });
