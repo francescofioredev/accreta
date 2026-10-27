@@ -140,15 +140,15 @@ export interface FootnoteOrphan {
   role: "reference" | "definition";
 }
 
-const DEFINITION_RE = /^\[\^([^\]\s]+)\]:\s*(.*?)\s*$/;
-const FENCE_RE = /^\s*(```|~~~)/;
+export const DEFINITION_RE = /^\[\^([^\]\s]+)\]:\s*(.*?)\s*$/;
+export const FENCE_RE = /^\s*(```|~~~)/;
 const REFERENCE_RE = /(?<!\\)\[\^([^\]\s]+)\](?!:)/g;
 const INLINE_CODE_RE = /(`+).*?\1/g;
 // Stands in for the `[` of a marker inside inline code, so the code survives into the claim.
 const MASKED = "\0";
 
 // Lazy continuation is paragraph text only: a heading, list item, quote or rule starts a new block.
-const BLOCK_START_RE = /^ {0,3}(#{1,6}(\s|$)|[-*+]\s|\d+[.)]\s|>|([-*_])(\s*\3){2,}\s*$)/;
+export const BLOCK_START_RE = /^ {0,3}(#{1,6}(\s|$)|[-*+]\s|\d+[.)]\s|>|([-*_])(\s*\3){2,}\s*$)/;
 
 /** How footnote ids are paired: as micromark and cmark-gfm fold labels, with no NFC. */
 export function footnoteKey(id: string): string {
@@ -161,55 +161,6 @@ export function footnoteKey(id: string): string {
  */
 export function extractFootnotes(body: string): Footnote[] {
   return readFootnotes(body).footnotes;
-}
-
-/** A body with footnote definitions (by readFootnotes' rule) and HTML comments blanked, code kept. */
-export function withoutFootnotesOrComments(body: string): string {
-  if (!body.includes("[^") && !body.includes("<!--")) return body;
-  let fenced = false;
-  let within = false;
-  let afterBlank = false;
-  let comment = false;
-  return body
-    .split("\n")
-    .map((line) => {
-      if (comment || (!fenced && line.includes("<!--"))) {
-        // An HTML comment runs to its `-->`, or to the end of the body as an HTML block does.
-        const [kept, open] = stripComments(line, comment);
-        comment = open;
-        line = kept;
-      }
-      if (FENCE_RE.test(line)) {
-        fenced = !fenced;
-        within = false;
-        afterBlank = false;
-        return line;
-      }
-      if (fenced) return line;
-      if (DEFINITION_RE.test(line)) within = true;
-      else if ((afterBlank && /^\S/.test(line)) || BLOCK_START_RE.test(line)) within = false;
-      afterBlank = line.trim() === "";
-      return within ? "" : line;
-    })
-    .join("\n");
-}
-
-function stripComments(line: string, open: boolean): [string, boolean] {
-  let out = "";
-  let rest = line;
-  while (true) {
-    if (open) {
-      const end = rest.indexOf("-->");
-      if (end === -1) return [out, true];
-      rest = rest.slice(end + 3);
-      open = false;
-    }
-    const start = rest.indexOf("<!--");
-    if (start === -1) return [out + rest, false];
-    out += rest.slice(0, start);
-    rest = rest.slice(start + 4);
-    open = true;
-  }
 }
 
 /**

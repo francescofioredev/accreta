@@ -298,6 +298,44 @@ describe("searchPages on an underscore identifier", () => {
     expect(ranked("queue_wait")).toContain("notes/wait.md");
   });
 
+  test("an identifier only in a link destination or label-hidden target does not hide prose", () => {
+    const hiders = {
+      inline: "See [the counter](src/lag_seconds.ts#L3).",
+      reference: "See [the counter][c].\n\n[c]: src/lag_seconds.ts",
+      unused: "Text.\n\n[zz]: https://x.example/lag_seconds",
+      wikilink: "See [[metrics/lag_seconds|the counter]].",
+    };
+    writePage(
+      "notes/lag.md",
+      "---\ntype: note\n---\n\n# Lag\n\nLag seconds measure how far a replica trails.\n",
+    );
+    for (const [name, text] of Object.entries(hiders)) {
+      writePage(
+        `notes/${name}.md`,
+        `---\ntype: note\n---\n\n# ${name}\n\nLag seconds.\n\n${text}\n`,
+      );
+    }
+    db.close();
+    reindex();
+    expect(ranked("lag_seconds")).toContain("notes/lag.md");
+  });
+
+  test("a literal <!-- in prose or code does not hide the identifiers after it", () => {
+    const bodies = {
+      codespan: "Write `<!--` to open a comment.\nstale_served counts late answers.",
+      prose: "A literal <!-- in prose.\n\nstale_served counts late answers.",
+      arrow: "The arrow <!--- marks it. stale_served counts.",
+      empty: "<!-->\nstale_served counts late answers.",
+    };
+    for (const [name, text] of Object.entries(bodies)) {
+      writePage(`notes/${name}.md`, `---\ntype: note\n---\n\n# ${name}\n\n${text}\n`);
+    }
+    db.close();
+    reindex();
+    const hits = ranked("stale_served");
+    for (const name of Object.keys(bodies)) expect(hits).toContain(`notes/${name}.md`);
+  });
+
   test("an identifier in fenced code is still an exact match", () => {
     writePage(
       "notes/fenced.md",

@@ -108,9 +108,12 @@ Search is SQLite FTS5 over each page's title, aliases and body, with Porter stem
 no dependencies, no keys and no network, and there is no `search` configuration key.
 
 A word joined by underscores is an identifier. Identifiers sit in a second FTS5 table, unstemmed
-and with `_` as a token character, and `stale` alone still finds `stale_served`. Footnote
-definitions and HTML comments are left out of that table, so a citation path or a hidden comment
-cannot make a page an exact match.
+and with `_` as a token character, and `stale` alone still finds `stale_served`. Only
+rendered text goes into that table: footnote definitions, HTML comments, link destinations,
+reference definitions and wikilink targets behind a label are left out, so a word no reader sees
+cannot make a page an exact match. Known limits: `<span title=…>` and `<div hidden>` still count,
+and so do lines after a fence the reader mistracks (mixed fence characters or lengths, indented
+fences) and indented footnote definitions.
 
 When a page holds the exact identifier and also matches the rest of the query and its filters,
 `stale_served` returns only such pages. A page that spells it `stale-served` or `stale served` is
