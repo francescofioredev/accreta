@@ -15,7 +15,6 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { run } from "../src/main.ts";
-import { isControl } from "../src/commands/mcp-config.ts";
 import type { CommandContext } from "../src/commands/shared.ts";
 
 const ENV = ["HOME", "PATH", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "XDG_CONFIG_HOME", "APPDATA"];
@@ -190,9 +189,34 @@ test("doctor escapes control characters from a config file", async () => {
   write(join(home, ".cursor", "mcp.json"), `{"mcpServers": {"a\u001b[2K": 1}`);
   await cli("doctor");
   // Newlines are doctor's own; any other control character came from the file.
-  const controls = [...output.join("")].filter((c) => c !== "\n" && isControl(c.charCodeAt(0)));
-  expect(controls).toEqual([]);
+  expect(stdout()).not.toMatch(/[^\P{Cc}\n]/u);
   expect(stdout()).toContain("\\u001b");
+});
+
+// U+202E reverses what follows, U+200D is invisible, U+2028 breaks the line in some terminals.
+const DISGUISE = /\u202e|\u200d|\u2028/;
+
+test("doctor escapes bidi, zero-width and line-separator characters from a config file", async () => {
+  accretaIn(join(home, "bin"));
+  const servers = {
+    "accreta\u202e\u200d\u2028": { command: "accreta\u202ex" },
+    "accreta-args": { command: "accreta", args: ["mcp\u200d", "\u2028ok"] },
+  };
+  write(join(root, ".mcp.json"), JSON.stringify({ mcpServers: servers }));
+  await cli("doctor");
+  expect(stdout()).not.toMatch(DISGUISE);
+  expect(stdout()).toContain("`accreta\\u202e\\u200d\\u2028` runs `accreta\\u202ex`");
+  expect(stdout()).toContain("runs `accreta mcp\\u200d \\u2028ok`");
+});
+
+test("install escapes them in the entry it would replace, keeping JSON's backslashes", async () => {
+  const current = { command: "accreta\u202ex", args: ["mcp\u200d", "\u2028ok"], cwd: "C:\\kb" };
+  write(join(root, ".mcp.json"), JSON.stringify({ mcpServers: { accreta: current } }));
+  expect(await cli("mcp", "install", "--client", "claude")).toBe(1);
+  expect(stderr()).not.toMatch(DISGUISE);
+  expect(stderr()).toContain(
+    `current: {"command":"accreta\\u202ex","args":["mcp\\u200d","\\u2028ok"],"cwd":"C:\\\\kb"}`,
+  );
 });
 
 test("--force on TOML keeps the comment and blank lines before the next table", async () => {
@@ -226,6 +250,18 @@ test("doctor reads Claude Code's local scope, under CLAUDE_CONFIG_DIR when set",
   expect(await cli("doctor")).toBe(1);
   expect(stdout()).toContain("stale: ~/claude/.claude.json (Claude Code, local) `accreta`");
   expect(stdout()).toContain("claude mcp remove --scope local accreta");
+});
+
+test("doctor offers no remove command for a local-scope name a shell would split", async () => {
+  accretaIn(join(home, "bin"));
+  const stale = { command: "bun", args: ["run", "node_modules/@accreta/mcp-server/src/main.ts"] };
+  write(
+    join(home, ".claude.json"),
+    JSON.stringify({ projects: { [root]: { mcpServers: { "accreta;echo pwned": stale } } } }),
+  );
+  expect(await cli("doctor")).toBe(1);
+  expect(stdout()).not.toContain("claude mcp remove");
+  expect(stdout()).toContain("remove `accreta;echo pwned` from ~/.claude.json by hand");
 });
 
 test("a JSON rewrite keeps the file's indent", async () => {

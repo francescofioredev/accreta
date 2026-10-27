@@ -36,6 +36,14 @@ export class UnsupportedRuntimeError extends Error {
   }
 }
 
+/** A reader opened the index file but could not read it; a rebuild replaces it. */
+export class IndexUnreadableError extends Error {
+  constructor(reason: string, options?: ErrorOptions) {
+    super(`Cannot read the index (${reason}); run \`accreta reindex\`.`, options);
+    this.name = "IndexUnreadableError";
+  }
+}
+
 function hasFts5(db: Database): boolean {
   try {
     db.prepare("SELECT fts5(NULL)").get();
@@ -86,9 +94,7 @@ export function openIndex(path: string, opts: OpenOptions = {}): Database {
     const own = error instanceof UnsupportedRuntimeError || error instanceof StaleIndexError;
     if (!opts.readonly || own) throw error;
     const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(`Cannot read the index (${reason}); run \`accreta reindex\`.`, {
-      cause: error,
-    });
+    throw new IndexUnreadableError(reason, { cause: error });
   }
 }
 

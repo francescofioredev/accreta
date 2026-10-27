@@ -3,10 +3,10 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  IndexUnreadableError,
   openIndex,
   sealForReading,
   sqliteSupport,
-  UnsupportedRuntimeError,
 } from "../src/index-db/db.ts";
 import { INDEX_FORMAT, INDEX_FORMAT_KEY } from "../src/index-db/format.ts";
 
@@ -68,7 +68,7 @@ test("a reader that cannot open the file gets SQLite's reason and the remedy, no
   } catch (error) {
     failure = error;
   }
-  expect(failure).not.toBeInstanceOf(UnsupportedRuntimeError);
+  expect(failure).toBeInstanceOf(IndexUnreadableError);
   expect((failure as Error).message).toContain("file is not a database");
   expect((failure as Error).message).toContain("run `accreta reindex`");
 });

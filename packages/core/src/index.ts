@@ -33,6 +33,7 @@ export type { BuildOptions, BuildResult } from "./index-db/build.ts";
 export { buildIndex } from "./index-db/build.ts";
 export type { Database, OpenOptions, Statement } from "./index-db/db.ts";
 export {
+  IndexUnreadableError,
   openIndex,
   sealForReading,
   sqliteSupport,
