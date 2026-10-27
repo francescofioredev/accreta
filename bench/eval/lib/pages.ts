@@ -59,6 +59,7 @@ const FOOTNOTE_KINDS = new Set([
   "citation-locator-missing",
   "citation-unpinned",
   "citation-revision-unknown",
+  "citation-revision-abbreviated",
   "duplicate-footnote",
 ]);
 

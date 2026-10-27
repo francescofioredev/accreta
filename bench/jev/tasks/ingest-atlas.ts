@@ -28,7 +28,7 @@ const prompt = (
 The method is kb/AGENTS.md, which is also in your system prompt; the vocabulary is kb/accreta.config.yaml. Follow both.
 
 Source to ingest: ${t.rfc}, the file ${t.path}, source id \`${t.source}\`, revision ${rev}.
-Cite in the configured format, for example: \`${t.source} @ ${rev.slice(0, 7)} · ${t.path}#L120-L134\`.
+Cite in the configured format, for example: \`${t.source} @ ${rev} · ${t.path}#L120-L134\`.
 
 Write pages under kb/knowledge/. Do not ingest any other RFC, and never edit anything under kb/corpus/.
 When the source is ingested, stop and reply with one line listing the pages you wrote.`;
