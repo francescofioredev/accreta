@@ -35,23 +35,23 @@ precision and cannot be checked.
 An absence has no locator either. For "no record 7 exists", cite the document that would list
 it, whole, and state the absence in the claim.
 
-**A citation covers its whole sentence.** Every factual part of a cited sentence — a name, an
-order, a condition, a value — must be visible in the cited lines. If one is not, split the
-sentence, cite more lines, or drop the part. An inference you add is fine when the sentence
-says it is one; it is never cited as fact.
-
-```markdown
-Before: The likely range is 2.5 to 4.0 °C, narrowed by paleoclimate evidence.[^ecs]
-After:  The likely range is 2.5 to 4.0 °C.[^ecs] Paleoclimate evidence narrowed it.[^paleo]
-```
-
-Lines 320–344 give the range and say nothing of why it narrowed, so that part needs lines of
-its own, or goes.
-
 The revision is the part people drop, and it is the part that matters. Without it the
 citation says where the claim came from but not *when*, and drift detection has nothing to
 compare against. A page with citations that omit revisions is a page that can never be
 checked.
+
+**A citation covers its whole sentence.** Every fact in a cited sentence — a name, a value, a
+sequence, a condition, a cause — must be in the cited lines, in your words or theirs. If one is
+not, split the sentence and cite the lines that show it with `cite`, or drop it; do not widen a
+range to cover a sentence. Mark an inference as yours ("this suggests") and cite the lines it
+rests on. An inference never settles a disagreement (rule 3).
+
+```markdown
+Before: The assessed likely range is 2.5 to 4.0 degrees Celsius, narrowed by paleoclimate evidence.[^ecs]
+After:  The assessed likely range is 2.5 to 4.0 degrees Celsius.[^ecs] Paleoclimate evidence narrowed it.[^paleo]
+```
+
+`[^ecs]`'s lines give the range, not why it narrowed; `[^paleo]` is `cite`'s footnote for lines that do.
 
 ### 2. Never duplicate a source into the knowledge base
 
@@ -204,9 +204,9 @@ With a shell, use the CLI. Without one, the MCP tool beside it does the same.
 5. **Record the revision of the page's own `source`** in `last_verified_revision`. On a page
    you extended, only if you re-verified the whole page against it.
 6. **`accreta reindex`**, then **`accreta lint`**. Fix what it reports.
-7. **Before you stop, re-read each footnote's lines against its sentence.** Lint checks that the
-   lines exist, not that they say what the sentence says. Any part they do not show: split the
-   sentence, cite more lines, or cut it. If you changed anything, run step 6 again.
+7. **Before you stop, re-open the source lines each footnote you wrote cites, and only those.**
+   Lint checks that they exist, not that they say what the sentence says. Fix any part they do
+   not show as rule 1 says; if you changed anything, run step 6 again.
 
 A citation `cite` cannot pin comes back with `unknown` where the revision belongs, and lint
 reports it as `citation-unpinned`. Paste it as returned: never write a revision into it. For an
@@ -248,7 +248,7 @@ re-reading converts a detectable problem into an undetectable one, and is the si
 damaging thing you can do here.
 
 The loop is **drift → re-verify → cite → lint**: for each page drift names, re-read the changed
-parts, then follow Ingesting 4–6 with `--expect-revision` set to drift's revision for that source
+parts, then follow Ingesting 4–7 with `--expect-revision` set to drift's revision for that source
 (`source @ rev`; `current_revision` in JSON). If that fails, the source moved again: rerun drift.
 Repeat until drift exits 0.
 

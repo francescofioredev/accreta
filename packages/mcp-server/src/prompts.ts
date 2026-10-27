@@ -22,6 +22,7 @@ export function ingestSourceText(target: string): string {
     "4. For each claim, call `cite` with the exact place as `target` and the revision from step 1 as `expect_revision`, and paste the `footnote` it returns. Never compose one. If it says the source is at another revision, the source moved: re-read and cite again. `location.verdict: missing` means the target is wrong.",
     "5. On a new page, record that revision of its own `source` in `last_verified_revision` (for a delegated source, the revision you read through the connector). On a page you extended, leave its revision alone unless you re-verified the whole page against this one.",
     "6. Ask for `accreta reindex`, then call `lint_knowledge_base` and fix what it reports.",
+    "7. Before you stop, re-open the source lines each footnote you wrote cites, and only those. Every fact in the sentence (a name, a value, a sequence, a condition, a cause) must be in them. Otherwise split the sentence and cite the lines that show the rest with `cite`, or drop it; then repeat step 6.",
     "",
     UNREACHABLE,
     DATA,
