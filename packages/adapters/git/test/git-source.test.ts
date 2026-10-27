@@ -20,7 +20,7 @@ import {
   pageChanges,
   UnknownRevisionError,
 } from "@accreta/core";
-import { GitCommandError, GitSource } from "../src/index.ts";
+import { GitCommandError, GitSource, scopeRefusal, unmatchedPaths } from "../src/index.ts";
 
 let root = "";
 
@@ -804,6 +804,76 @@ describe("lint over GitSource asks a symlink citation to name its target", () =>
   });
 });
 
+// #303: drift never ran lint, so a citation the diff could not see ranked its page "uncited".
+describe("drift over GitSource does not clear a citation locate refuses", () => {
+  let kb = "";
+
+  beforeEach(async () => {
+    kb = mkdtempSync(join(tmpdir(), "accreta-git-kb-"));
+    write("docs/real.md", lines(12));
+    write("other/b.md", lines(3));
+    symlinkSync("real.md", join(root, "docs", "link.md"));
+    await commit("first");
+  });
+
+  afterEach(() => {
+    rmSync(kb, { recursive: true, force: true });
+  });
+
+  /** Cite `cited` at HEAD, edit line 6 of docs/real.md, and rank the citing page as drift does. */
+  async function driftAfterEdit(cited: string, git = source()) {
+    const from = await git.revision();
+    mkdirSync(join(kb, "knowledge"), { recursive: true });
+    writeFileSync(
+      join(kb, "knowledge", "page.md"),
+      `---\ntype: note\nsource: repo\nlast_verified_revision: ${from}\n---\n\nA claim.[^a]\n\n[^a]: repo @ ${from} · ${cited}\n`,
+    );
+    write("docs/real.md", lines(12, { 6: "changed" }));
+    await commit("edit line 6");
+
+    const indexPath = join(kb, "index.sqlite");
+    buildIndex({ root: kb, config: DEFAULT_CONFIG, indexPath });
+    const db = openIndex(indexPath);
+    try {
+      const [entry] = (await detectDrift(db, git)).stale;
+      expect(entry?.changedPaths).toEqual(["docs/real.md"]);
+      return { rank: pageChanges(entry!)?.get("knowledge/page.md"), entry: entry! };
+    } finally {
+      db.close();
+    }
+  }
+
+  test("a symlink to the edited file", async () => {
+    const { rank, entry } = await driftAfterEdit("docs/link.md#L5-L8");
+    expect(rank).toBe("changed");
+    expect(entry.citations?.[0]?.refused).toContain('cite "docs/real.md" instead');
+  });
+
+  test("a case variant of the edited file", async () => {
+    expect((await driftAfterEdit("docs/REAL.md#L5-L8")).rank).toBe("changed");
+  });
+
+  test("a path outside the declared paths", async () => {
+    const scoped = new GitSource({
+      id: "repo",
+      root,
+      citationFormat: "{source} @ {rev} · {path}#{locator}",
+      paths: ["docs"],
+    });
+    const { rank, entry } = await driftAfterEdit("other/b.md#L1-L2", scoped);
+    expect(rank).toBe("changed");
+    expect(entry.citations?.[0]?.refused).toContain("outside the declared paths");
+  });
+
+  test("the target's unedited lines still rank untouched", async () => {
+    expect((await driftAfterEdit("docs/real.md#L1-L2")).rank).toBe("untouched");
+  });
+
+  test("a file the commit left alone still ranks uncited", async () => {
+    expect((await driftAfterEdit("other/b.md#L1-L2")).rank).toBe("uncited");
+  });
+});
+
 describe("GitSource rooted in a subdirectory of the repository", () => {
   let kb = "";
 
@@ -901,6 +971,70 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
     expect(await sub(["../sub/other"]).locate("docs/a.md")).toMatchObject({ verdict: "missing" });
   });
 
+  test("a scope path is refused only when it ends up outside the root", async () => {
+    expect(await sub(["../sub/docs"]).revision()).toBe(await head());
+    expect(await sub([".", "./"]).revision()).toBe(await head());
+    expect(() => sub(["../other.md"])).toThrow('"../other.md"');
+    expect(() => sub(["docs/../../other.md"])).toThrow('"docs/../../other.md"');
+    expect(() => sub([""])).toThrow('""');
+    expect(() => sub([":(glob)../*.md"])).toThrow("outside the source root");
+  });
+
+  test("an absolute scope path is refused without quoting it, inside the root or not", () => {
+    for (const path of [join(root, "other.md"), join(root, "sub", "docs")]) {
+      expect(() => sub([path])).toThrow("an absolute path; name it relative to `root`");
+      expect(() => sub([path])).not.toThrow(root);
+    }
+  });
+
+  test("a pathspec anchored at the repository top is refused, an exclusion is not", () => {
+    expect(() => sub([":/docs"])).toThrow('":/docs"');
+    expect(() => sub([":(top)docs"])).toThrow('":(top)docs"');
+    expect(() => sub([":(top,glob)sub/docs/*"])).toThrow("relative to the repository top");
+    expect(() => sub([":(top)sub/docs"])).toThrow("relative to the repository top");
+    expect(() => sub([":(exclude)other.md", "docs"])).not.toThrow();
+    expect(() => sub([":!other.md", "docs"])).not.toThrow();
+  });
+
+  test("a scope made only of exclusions is refused", () => {
+    expect(() => sub([":(exclude)other.md"])).toThrow(
+      'add "." to keep the whole root, or omit `paths`',
+    );
+    expect(() => sub([":!a.md", ":^b.md"])).toThrow("only exclusions");
+  });
+
+  test("an exclusion of the root itself is refused, since it leaves nothing in scope", () => {
+    for (const entry of [":!", ":!.", ":(exclude)", ":(exclude).", ":^", ":^.", ":!.."]) {
+      expect(() => sub(["docs", entry])).toThrow(
+        `${JSON.stringify(entry)}, which excludes the whole source root`,
+      );
+    }
+    expect(() => sub([".", ":!docs"])).not.toThrow();
+  });
+
+  test("a scope path is judged from where the root really is, not through a symlink", async () => {
+    symlinkSync(join(root, "sub"), join(root, "lnk"));
+    const linked = (paths: string[]) =>
+      new GitSource({ id: "repo", root: join(root, "lnk"), citationFormat: "{path}", paths });
+    expect(() => linked(["../lnk/docs"])).toThrow("outside the source root");
+    expect(await linked(["../sub/docs"]).revision()).toBe(await head());
+    expect(
+      () =>
+        new GitSource({
+          id: "repo",
+          root: join(root, "nowhere"),
+          citationFormat: "",
+          paths: ["docs"],
+        }),
+    ).not.toThrow();
+  });
+
+  test("git's own reading of paths is checked: its refusal, or a match outside the root", async () => {
+    expect(await scopeRefusal(join(root, "sub"), ["docs"])).toBeUndefined();
+    expect(await scopeRefusal(join(root, "sub"), [":(bogus)docs"])).toContain("bogus");
+    expect(await scopeRefusal(join(root, "sub"), [":/other.md"])).toContain("../other.md");
+  });
+
   test("paths are relative to the root, and so is what changedSince names", async () => {
     const scoped = sub(["docs"]);
     const from = await scoped.revision();
@@ -925,7 +1059,9 @@ describe("GitSource rooted in a subdirectory of the repository", () => {
     );
     expect(() => sub(["./sub/docs/*.md"])).toThrow('(did you mean "docs/*.md"?)');
     expect(() => sub(["sub"])).toThrow('(did you mean "."?)');
-    expect(() => sub(["docs", "../other.md"])).not.toThrow();
+    // It matches a tracked file, so only the earlier out-of-root check refuses it.
+    expect(unmatchedPaths(join(root, "sub"), ["docs", "../other.md"])).toBeUndefined();
+    expect(() => sub(["docs", "../other.md"])).toThrow("resolves outside the source root");
   });
 
   test("a suggestion is offered only when it matches", () => {

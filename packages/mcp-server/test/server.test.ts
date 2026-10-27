@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildIndex, DEFAULT_CONFIG, openIndex } from "@accreta/core";
+import { buildIndex, DEFAULT_CONFIG, LINT_FINDING_KINDS, openIndex } from "@accreta/core";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createServer } from "../src/index.ts";
@@ -130,6 +130,25 @@ test("search_pages names every column the FTS index searches", async () => {
     const fields = description.match(/\(([^)]*)\)/)?.[1];
     expect(fields).toBeDefined();
     for (const column of searched) expect(fields).toContain(column);
+  } finally {
+    await client.close();
+  }
+});
+
+// A hand-kept prose list of kinds rots as kinds are added; the enum is the list.
+test("lint_knowledge_base points at the kinds enum, which lists every kind", async () => {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "description-probe", version: "0.0.0" });
+
+  await Promise.all([createServer(ctx).connect(serverTransport), client.connect(clientTransport)]);
+
+  try {
+    const { tools } = await client.listTools();
+    const lint = tools.find((tool) => tool.name === "lint_knowledge_base");
+    const description = lint?.description ?? "";
+    expect(description).toContain("enum is the complete list of finding kinds");
+    const kinds = lint?.inputSchema.properties?.kinds as { items: { enum: string[] } };
+    expect(kinds.items.enum).toEqual([...LINT_FINDING_KINDS]);
   } finally {
     await client.close();
   }

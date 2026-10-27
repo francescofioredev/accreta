@@ -476,7 +476,8 @@ describe("drift --source checks what check_drift {source} checks", () => {
       expect(out.code).toBe(2);
       expect(out.stderr).toContain('checked only source "docs"; add --source docs');
     }
-    expect((await cli(["drift", "--source", "docs", "--base", scoped])).code).toBe(1);
+    // Accepted, and against its own base nothing is newly in doubt.
+    expect((await cli(["drift", "--source", "docs", "--base", scoped])).code).toBe(0);
   });
 });
 

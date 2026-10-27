@@ -31,7 +31,7 @@ source: docs
 Cites the diffing and the per-file source at a revision the page names.[^CANARY-FOOTNOTE-a][^CANARY-FOOTNOTE-b]
 
 [^CANARY-FOOTNOTE-a]: lines @ CANARY-REVISION-pin · knowledge/notes/CANARY-FILENAME.md#CANARY-LOCATOR
-[^CANARY-FOOTNOTE-b]: plain @ CANARY-REVISION-pin · knowledge/notes/CANARY-FILENAME.md#L1
+[^CANARY-FOOTNOTE-b]: plain @ CANARY-REVISION-pin · knowledge/notes/CANARY-FILENAME.md#CANARY-LOCATOR-plain
 `;
 
 /** A source that diffs contents and answers every cited place with `change`. */
@@ -54,6 +54,13 @@ const PLAIN: SourceAdapter = {
   citation: () => "",
   pinRevision: () => {},
 };
+
+/** Refuses every place it is asked about, naming the cited path back as git's error does. */
+const refusing = (adapter: SourceAdapter): SourceAdapter => ({
+  ...adapter,
+  changedSince: async () => ["elsewhere.md"],
+  locate: async (path) => ({ verdict: "missing", part: "path", detail: `${path} is a symlink` }),
+});
 
 const DELEGATED: SourceAdapter = {
   id: "agent",
@@ -94,9 +101,9 @@ function taint<T>(value: T, key = ""): T {
   }
   if (Array.isArray(value)) return value.map((item) => taint(item)) as T;
   if (value !== null && typeof value === "object") {
-    // citedPaths is keyed by page path, so its keys must match the tainted pages.
+    // citedPaths and refused are keyed by page path, so their keys must match the tainted pages.
     const entries = Object.entries(value).map(([k, v]) => [
-      key === "citedPaths" ? taint(k) : k,
+      key === "citedPaths" || key === "refused" ? taint(k) : k,
       taint(v, k),
     ]);
     return Object.fromEntries(entries) as T;
@@ -125,6 +132,11 @@ beforeAll(async () => {
       }
       runs.push(run);
     }
+    // A refusal lands in `citations[]` with a diff and in the page's `refused[]` without one.
+    runs.push([
+      await detectDrift(db, refusing(diffing({ status: "untouched" }))),
+      await detectDrift(db, refusing(PLAIN)),
+    ]);
   } finally {
     db.close();
   }
