@@ -9,9 +9,11 @@ import {
   findRelated,
   getPage,
   lintKnowledgeBase,
+  namesRef,
   pageChanges,
   parseCitation,
   searchPages,
+  UnknownRevisionError,
   type AccretaConfig,
   type CanonicalMatch,
   type Database,
@@ -481,10 +483,15 @@ export async function listRecentChangesTool(
     }
     // "I cannot tell" reaches the agent as itself. Returning an empty list here
     // would read as "nothing changed", which is a different claim.
+    const ref = error instanceof UnknownRevisionError && (await namesRef(adapter, input.since));
     return {
       source: adapter.id,
       unresolvable: true as const,
-      message: error instanceof Error ? error.message : String(error),
+      message: ref
+        ? `"${input.since}" names a ref of source "${adapter.id}", not a revision: a ref moves with the source. Pass the revision \`cite\` or \`check_drift\` gave.`
+        : error instanceof Error
+          ? error.message
+          : String(error),
       changed: [],
     };
   }

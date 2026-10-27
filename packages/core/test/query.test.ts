@@ -1221,6 +1221,16 @@ describe("lintCitations on footnotes", () => {
       const exact = withHistory(["5b824c5"]);
       expect((await lintCitations(db, sources(exact))).findings).toEqual([]);
     });
+
+    // #338: a ref passed lint, and drift diffed it against itself.
+    test("a revision the source knows but cannot resolve names a ref", async () => {
+      writePage("a.md", page(["[^a]: s @ HEAD · doc.md#L1"]));
+      reindex();
+      const withRef = { ...prefixed, knowsRevision: async (r: string) => r === "HEAD" };
+      const { findings } = await lintCitations(db, sources(withRef));
+      expect(findings.map((f) => f.kind)).toEqual(["citation-revision-unknown"]);
+      expect(findings[0]?.detail).toContain('cites HEAD, which names a ref of source "s"');
+    });
   });
 
   test("a mangled citation is reported, a prose footnote is not", async () => {
@@ -1348,6 +1358,53 @@ describe("lintCitations on last_verified_revision", () => {
           'last_verified_revision 5b8a now names several commits of source "a"; re-verify and record the full revision',
       },
     ]);
+  });
+
+  describe("against a source that resolves prefixes", () => {
+    const FULL = "5b824c5e0f1a2b3c4d5e6f708192a3b4c5d6e7f8";
+    const resolving: SourceAdapter = {
+      ...withHistory("a", [FULL, "HEAD"]),
+      resolveRevision: async (revision) =>
+        FULL.startsWith(revision.toLowerCase())
+          ? { status: "resolved", revision: FULL }
+          : { status: "unknown" },
+    };
+    const lintWith = async (revision: string) => {
+      writePage("a.md", verified("a", `"${revision}"`));
+      reindex();
+      return (await lintCitations(db, twoSources(resolving, withHistory("b", [])))).findings;
+    };
+
+    // #338: drift diffed HEAD against HEAD, so the page could never be found in doubt.
+    test("a ref is reported as one, not as missing", async () => {
+      expect(await lintWith("HEAD")).toEqual([
+        {
+          kind: "verified-revision-unknown",
+          path: "knowledge/a.md",
+          detail: expect.stringContaining('last_verified_revision HEAD names a ref of source "a"'),
+        },
+      ]);
+    });
+
+    test("an abbreviation is reported with the full revision to record", async () => {
+      expect(await lintWith("5b824c5")).toEqual([
+        {
+          kind: "verified-revision-abbreviated",
+          path: "knowledge/a.md",
+          detail: expect.stringContaining(`record ${FULL}`),
+        },
+      ]);
+    });
+
+    test("uppercase is reported as such", async () => {
+      const [finding] = await lintWith(FULL.toUpperCase());
+      expect(finding?.kind).toBe("verified-revision-abbreviated");
+      expect(finding?.detail).toContain(`written in uppercase; record the lowercase form ${FULL}`);
+    });
+
+    test("the full revision is clean", async () => {
+      expect(await lintWith(FULL)).toEqual([]);
+    });
   });
 
   test("a source that keeps no history, or is not loaded, is not asked", async () => {

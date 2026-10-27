@@ -73,7 +73,8 @@ tells a reading model which text it should treat as data.
 - **`stale`** — the source changed since the page was verified.
 - **`unverifiable`** — the page records no revision, so nothing can be said about it.
 - **`unresolvable`** — the source cannot place the revision the page names. History was
-  rewritten, or an `fs` source no longer holds the listing that revision was taken from.
+  rewritten, the page names a ref such as `HEAD` where a revision belongs, or an `fs` source no
+  longer holds the listing that revision was taken from.
 - **`delegated`** — accreta cannot reach the source at all; the agent can. Carries the
   connector, the declared scope, and the pages grouped by the revision they are stuck at.
   `current_revision` is `null`, because there is no honest string to put there.

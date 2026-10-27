@@ -136,14 +136,14 @@ type: concept
 canonical_source: ipcc-ar6-wg1:chapter-07.md#L142
 aliases: ["radiative forcing", "climate forcing"]
 discussed_in: [[synthesis/energy-balance]]
-last_verified_revision: 9a4f2c1
+last_verified_revision: 9a4f2c1e8b03d5f7a6c2e9b1d4f8a0c3e5b7d9f2
 ---
 
 # Radiative forcing
 
 The change in net downward radiative flux at the tropopause…[^src]
 
-[^src]: ipcc-ar6-wg1 @ 9a4f2c1 · chapter-07.md#L142-L158
+[^src]: ipcc-ar6-wg1 @ 9a4f2c1e8b03d5f7a6c2e9b1d4f8a0c3e5b7d9f2 · chapter-07.md#L142-L158
 ```
 
 Two kinds of link feed one graph: **frontmatter relations** (typed, from `link_fields`) and

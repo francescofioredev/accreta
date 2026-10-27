@@ -255,7 +255,7 @@ than it delivers.
 |---|---|---|
 | **stale** | the source changed after the page was verified | re-read the changed parts; update or re-verify |
 | **unverifiable** | the page records no revision, or cites the source without one | check the claims; record the revision if none is recorded, else re-pin the citation with `cite` |
-| **unresolvable** | the source cannot place the recorded revision | history was rewritten or the revision is foreign; re-verify from scratch |
+| **unresolvable** | the source cannot place the recorded revision | history was rewritten, the revision is foreign, or it is a ref such as `HEAD`; re-verify from scratch |
 | **delegated** | accreta cannot reach this source; you can | read the listed pages at the source yourself, then record the revision on its own pages |
 
 **Only the absence of all four means current.** An unresolvable revision is not a small
@@ -302,13 +302,15 @@ an interruption to work around.
 - **unknown page types** — a `type` outside the configured vocabulary
 - **missing provenance** — no `canonical_source`
 - **unverified pages** — no `last_verified_revision`, or one the page's own `source` cannot
-  place (history rewritten, a shallow clone, or a commit from another repository)
+  place (history rewritten, a shallow clone, a commit from another repository, or a ref such as
+  `HEAD` or a branch, which moves with the source)
 - **unsupported field values** — a list in `source` or `last_verified_revision`
 - **citations that point at nothing** — a `canonical_source` or footnote naming a path the
   source does not have, or a locator the source cannot place
 - **citations that name no revision, or one the source never had** — `unknown` where a
-  revision belongs, or a commit that is not in the history
-- **abbreviated revisions** — a footnote naming a short revision; lint gives the full one to write
+  revision belongs, a commit that is not in the history, or a ref such as `HEAD` or a branch
+- **abbreviated revisions** — a footnote or `last_verified_revision` naming a short revision;
+  lint gives the full one to write
 - **footnotes that do not read as the configured format**, and footnote ids defined twice
 - **footnotes that do not pair up** — a reference with no definition, whose claim reads as cited
   and is not, or a definition no claim on the page leads to. Fix `undefined-footnote` by citing

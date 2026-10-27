@@ -568,6 +568,17 @@ describe("an expected revision", () => {
     expect(message).not.toContain("moved");
   });
 
+  // #338: lint reports the same pair, a revision the source knows but cannot resolve, as a ref.
+  test("a ref says it names a ref, as lint does", async () => {
+    const adapter = Object.assign(prefixed(), {
+      knowsRevision: async (revision: string) => revision === "HEAD",
+    });
+    const message = await refusal(adapter, "HEAD");
+    expect(message).toContain('HEAD names a ref of source "docs", not a revision');
+    expect(message).toContain("full revision");
+    expect(await refusal(adapter, "abcdef0")).toContain('Source "docs" has no revision abcdef0');
+  });
+
   test("a source without prefixes compares exactly", async () => {
     expect(
       await refusal(

@@ -367,6 +367,7 @@ export class GitSource implements SourceAdapter {
   /**
    * `cat-file -e` is the cheap way to ask whether this repository has ever heard of the
    * revision. A shallow clone, a rewritten history or another repository's revision all say no.
+   * It also says yes to a ref, which `resolveRevision` refuses: lint reads that pair as a ref.
    */
   async knowsRevision(revision: string): Promise<boolean> {
     try {
@@ -384,9 +385,11 @@ export class GitSource implements SourceAdapter {
   async resolveRevision(input: string): Promise<RevisionResolution> {
     const revision = input.toLowerCase();
     if (!/^[0-9a-f]{4,64}$/.test(revision)) return { status: "unknown" };
+    // Drift reaches this through commitOf, so it keeps knowsRevision's guard against a lazy fetch.
+    const local = { GIT_NO_LAZY_FETCH: "1" };
     try {
       const commit = (
-        await git(this.root, ["rev-parse", "--verify", "--quiet", `${revision}^{commit}`])
+        await git(this.root, ["rev-parse", "--verify", "--quiet", `${revision}^{commit}`], local)
       ).trim();
       // A branch named like the prefix, or a tag object, resolves to a commit it does not abbreviate.
       // git prefers a ref named like the prefix, so the answer is a real candidate but maybe not flagged ambiguous.
@@ -397,7 +400,11 @@ export class GitSource implements SourceAdapter {
     const commits: string[] = [];
     const named = await git(this.root, ["rev-parse", `--disambiguate=${revision}`]);
     for (const id of named.split("\n").filter(Boolean)) {
-      const commit = await git(this.root, ["rev-parse", "--verify", "--quiet", `${id}^{commit}`])
+      const commit = await git(
+        this.root,
+        ["rev-parse", "--verify", "--quiet", `${id}^{commit}`],
+        local,
+      )
         .then((out) => out.trim())
         .catch(() => "");
       if (commit === id) commits.push(id);
@@ -406,12 +413,20 @@ export class GitSource implements SourceAdapter {
     return commits[0] ? { status: "resolved", revision: commits[0] } : { status: "unknown" };
   }
 
+  /**
+   * The commit a recorded revision names, or `UnknownRevisionError`. A ref moves, so diffing
+   * from `HEAD` finds nothing ever changed; and git reads a branch named like a prefix as the branch.
+   */
+  private async commitOf(revision: string): Promise<string> {
+    const resolved = await this.resolveRevision(revision);
+    if (resolved.status !== "resolved") throw new UnknownRevisionError(this.id, revision);
+    return resolved.revision;
+  }
+
   async changedSince(revision: string): Promise<string[]> {
     // Answering "nothing changed" for a revision this repository cannot place
     // would be a lie that drift detection cannot detect.
-    if (!(await this.knowsRevision(revision))) {
-      throw new UnknownRevisionError(this.id, revision);
-    }
+    const commit = await this.commitOf(revision);
 
     // Citations name a renamed file's old path; -z stops git quoting a non-ASCII one.
     // --relative: citations name paths from the root, not the repository top.
@@ -423,7 +438,7 @@ export class GitSource implements SourceAdapter {
       "--no-renames",
       "--relative",
       "--end-of-options",
-      revision,
+      commit,
       "HEAD",
     ];
     if (this.paths.length > 0) args.push("--", ...this.paths);
@@ -440,7 +455,7 @@ export class GitSource implements SourceAdapter {
     path: string,
     locators: readonly string[],
   ): Promise<Map<string, LocatorChange>> {
-    if (!(await this.knowsRevision(revision))) throw new UnknownRevisionError(this.id, revision);
+    const commit = await this.commitOf(revision);
     const out = new Map<string, LocatorChange>();
     const ranges = locators.map((locator) => [locator, parseLineLocator(locator)] as const);
     // Only a line range is judged from the diff, and a large file's diff is expensive.
@@ -464,7 +479,7 @@ export class GitSource implements SourceAdapter {
       // A `-diff` attribute or a NUL byte would print "Binary files differ" and no hunks.
       "--text",
       "--end-of-options",
-      revision,
+      commit,
       "HEAD",
       "--",
       path,

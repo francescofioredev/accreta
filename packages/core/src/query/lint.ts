@@ -28,6 +28,7 @@ export const LINT_FINDING_KINDS = [
   "citation-revision-unknown",
   "citation-revision-abbreviated",
   "verified-revision-unknown",
+  "verified-revision-abbreviated",
   "duplicate-footnote",
   "undefined-footnote",
   "unused-footnote",
@@ -81,6 +82,10 @@ interface PageRow {
   frontmatter_json: string;
   frontmatter_error: string | null;
 }
+
+/** Whether `written` differs from the full revision only in case. */
+const onlyCased = (written: string, full: string) =>
+  full.length === written.length && full === written.toLowerCase();
 
 // Fields accreta reads as one string; the indexer stores anything else as absent.
 const SINGLE_VALUE_FIELDS = ["source", "last_verified_revision"] as const;
@@ -464,7 +469,12 @@ export async function lintCitations(
   }
 
   // One question per revision, for the same reason as per location; the resolver goes first because it settles the common case alone.
-  type RevisionState = { known: boolean | null; full: string | null; ambiguous: boolean };
+  type RevisionState = {
+    known: boolean | null;
+    full: string | null;
+    ambiguous: boolean;
+    ref: boolean;
+  };
   const revisions = new Map<string, Promise<RevisionState>>();
   const revisionState = (adapter: SourceAdapter, revision: string) => {
     const key = `${adapter.id}\0${revision}`;
@@ -475,13 +485,19 @@ export async function lintCitations(
           () => undefined,
         );
         if (resolved?.status === "resolved") {
-          return { known: true, full: resolved.revision, ambiguous: false };
+          return { known: true, full: resolved.revision, ambiguous: false, ref: false };
         }
-        if (resolved?.status === "ambiguous") return { known: false, full: null, ambiguous: true };
+        if (resolved?.status === "ambiguous") {
+          return { known: false, full: null, ambiguous: true, ref: false };
+        }
         const known = adapter.knowsRevision
           ? await adapter.knowsRevision(revision).catch(() => null)
           : null;
-        return { known, full: null, ambiguous: false };
+        // Known but not resolvable to an id: a ref such as HEAD, which drift cannot diff from.
+        if (known === true && resolved?.status === "unknown") {
+          return { known: false, full: null, ambiguous: false, ref: true };
+        }
+        return { known, full: null, ambiguous: false, ref: false };
       })();
       revisions.set(key, state);
     }
@@ -507,7 +523,17 @@ export async function lintCitations(
         path: page.path,
         detail: state.ambiguous
           ? `last_verified_revision ${page.last_verified_revision} now names several commits of source "${adapter.id}"; re-verify and record the full revision`
-          : `source "${adapter.id}" cannot place last_verified_revision ${page.last_verified_revision} (history rewritten, shallow clone, or a different repository); re-verify against "${adapter.id}" before recording a revision`,
+          : state.ref
+            ? `last_verified_revision ${page.last_verified_revision} names a ref of source "${adapter.id}", not a revision; a ref moves with the source, so drift cannot place it. Re-verify and record the revision \`cite\` gives`
+            : `source "${adapter.id}" cannot place last_verified_revision ${page.last_verified_revision} (history rewritten, shallow clone, or a different repository); re-verify against "${adapter.id}" before recording a revision`,
+      });
+    } else if (state.full !== null && state.full !== page.last_verified_revision) {
+      findings.push({
+        kind: "verified-revision-abbreviated",
+        path: page.path,
+        detail: onlyCased(page.last_verified_revision, state.full)
+          ? `last_verified_revision ${page.last_verified_revision} is written in uppercase; record the lowercase form ${state.full}`
+          : `last_verified_revision ${page.last_verified_revision} is an abbreviation that can turn ambiguous as source "${adapter.id}" grows; record ${state.full}`,
       });
     }
   }
@@ -568,16 +594,17 @@ export async function lintCitations(
           path: row.page_path,
           detail: state.ambiguous
             ? `${label} cites ${row.revision}, which now names several commits of source "${adapter.id}"; cite the full revision again`
-            : `${label} cites revision ${row.revision}, which source "${adapter.id}" does not have`,
+            : state.ref
+              ? `${label} cites ${row.revision}, which names a ref of source "${adapter.id}", not a revision; a ref moves with the source, so drift cannot place it. Cite again and keep the revision \`cite\` gives`
+              : `${label} cites revision ${row.revision}, which source "${adapter.id}" does not have`,
         });
       } else if (state.full !== null && state.full !== row.revision) {
         findings.push({
           kind: "citation-revision-abbreviated",
           path: row.page_path,
-          detail:
-            state.full.length === row.revision.length && state.full === row.revision.toLowerCase()
-              ? `${label} cites ${row.revision}, written in uppercase; write the lowercase form ${state.full}`
-              : `${label} cites ${row.revision}, an abbreviation that can turn ambiguous as source "${adapter.id}" grows; write ${state.full}`,
+          detail: onlyCased(row.revision, state.full)
+            ? `${label} cites ${row.revision}, written in uppercase; write the lowercase form ${state.full}`
+            : `${label} cites ${row.revision}, an abbreviation that can turn ambiguous as source "${adapter.id}" grows; write ${state.full}`,
         });
       }
     }

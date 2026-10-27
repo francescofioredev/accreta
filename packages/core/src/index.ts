@@ -55,6 +55,7 @@ export {
   countLines,
   formatCanonicalSource,
   formatCitation,
+  namesRef,
   parseCitation,
   parseLineLocator,
   resolveCitedFile,
