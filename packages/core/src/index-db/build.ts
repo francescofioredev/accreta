@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import type { AccretaConfig } from "../config.ts";
-import { compileCitationTemplate, extractFootnotes } from "../citations.ts";
+import { compileCitationTemplate, readFootnotes } from "../citations.ts";
 import { extractLinks, tryResolveWikilink } from "../links.ts";
 import { nameKey } from "../name-key.ts";
 import { parsePage } from "../page.ts";
@@ -190,6 +190,10 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
        (page_path, footnote, line, text, source, revision, path, locator, claim)
      VALUES ($page, $footnote, $line, $text, $source, $revision, $path, $locator, $claim)`,
   );
+  const insertOrphan = db.prepare(
+    `INSERT OR IGNORE INTO footnote_orphans (page_path, footnote, line, role)
+     VALUES ($page, $footnote, $line, $role)`,
+  );
   const upsertMeta = db.prepare(
     `INSERT INTO meta (key, value) VALUES ($key, $value)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
@@ -216,6 +220,7 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
     db.exec("DELETE FROM links");
     db.exec("DELETE FROM broken_links");
     db.exec("DELETE FROM citations");
+    db.exec("DELETE FROM footnote_orphans");
 
     for (const absolute of walkMarkdown(knowledgeDir)) {
       const path = toPosix(relative(root, absolute));
@@ -284,9 +289,18 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
         }
       }
 
+      const offset = raw.slice(0, raw.length - body.length).split("\n").length - 1;
+      const { footnotes, orphans } = readFootnotes(body);
+      for (const orphan of orphans) {
+        insertOrphan.run({
+          $page: path,
+          $footnote: orphan.id,
+          $line: orphan.line + offset,
+          $role: orphan.role,
+        });
+      }
       if (template) {
-        const offset = raw.slice(0, raw.length - body.length).split("\n").length - 1;
-        for (const footnote of extractFootnotes(body)) {
+        for (const footnote of footnotes) {
           if (!template.attempts(footnote.text)) continue;
           const parts = template.read(footnote.text);
           insertCitation.run({

@@ -132,33 +132,77 @@ export interface Footnote {
   claim: string;
 }
 
+/** A footnote that cannot pair up: a reference nothing defines, or a definition no claim leads to. */
+export interface FootnoteOrphan {
+  id: string;
+  /** 1-based line of the reference or definition, in the text it was read from. */
+  line: number;
+  role: "reference" | "definition";
+}
+
 const DEFINITION_RE = /^\[\^([^\]\s]+)\]:\s*(.*?)\s*$/;
 const FENCE_RE = /^\s*(```|~~~)/;
-const REFERENCE_RE = /\[\^([^\]\s]+)\](?!:)/g;
+const REFERENCE_RE = /(?<!\\)\[\^([^\]\s]+)\](?!:)/g;
+const INLINE_CODE_RE = /(`+).*?\1/g;
+// Stands in for the `[` of a marker inside inline code, so the code survives into the claim.
+const MASKED = "\0";
+
+// Lazy continuation is paragraph text only: a heading, list item, quote or rule starts a new block.
+const BLOCK_START_RE = /^ {0,3}(#{1,6}(\s|$)|[-*+]\s|\d+[.)]\s|>|([-*_])(\s*\3){2,}\s*$)/;
+
+/** How footnote ids are paired: as micromark and cmark-gfm fold labels, with no NFC. */
+export function footnoteKey(id: string): string {
+  return id.toLowerCase().toUpperCase();
+}
 
 /**
  * Every footnote definition in a page body, with the claim that cites it. A claim is the
  * sentence carrying the marker, since a paragraph makes several; fenced code is an example.
  */
 export function extractFootnotes(body: string): Footnote[] {
-  if (!body.includes("[^")) return [];
+  return readFootnotes(body).footnotes;
+}
+
+/**
+ * `extractFootnotes`, plus the footnotes that do not pair up. A definition counts as referenced
+ * only if a claim in the body leads to it, directly or through other definitions.
+ */
+export function readFootnotes(body: string): { footnotes: Footnote[]; orphans: FootnoteOrphan[] } {
+  if (!body.includes("[^")) return { footnotes: [], orphans: [] };
   const lines = body.split("\n");
   const definitions: Omit<Footnote, "claim">[] = [];
+  const references: { id: string; line: number; within: string | null; raw: string }[] = [];
   const prose: string[] = [];
   let fenced = false;
+  let within: string | null = null;
+  let afterBlank = false;
 
   lines.forEach((line, index) => {
     if (FENCE_RE.test(line)) {
       fenced = !fenced;
+      within = null;
+      afterBlank = false;
       prose.push("");
       return;
     }
-    const definition = fenced ? null : line.match(DEFINITION_RE);
+    if (fenced) {
+      prose.push("");
+      return;
+    }
+    const masked = line.replace(INLINE_CODE_RE, (code) => code.replaceAll("[^", `${MASKED}^`));
+    const definition = line.match(DEFINITION_RE);
     if (definition) {
+      within = footnoteKey(definition[1]!);
       definitions.push({ id: definition[1]!, line: index + 1, text: definition[2]! });
       prose.push("");
     } else {
-      prose.push(fenced ? "" : line);
+      // A definition runs on, lazily or indented, until a block start or a blank line and an unindented one, as on GitHub.
+      if ((afterBlank && /^\S/.test(line)) || BLOCK_START_RE.test(line)) within = null;
+      prose.push(within === null ? masked : "");
+    }
+    afterBlank = line.trim() === "";
+    for (const match of masked.matchAll(REFERENCE_RE)) {
+      references.push({ id: footnoteKey(match[1]!), line: index + 1, within, raw: match[1]! });
     }
   });
 
@@ -166,9 +210,9 @@ export function extractFootnotes(body: string): Footnote[] {
   for (const paragraph of prose.join("\n").split(/\n\s*\n/)) {
     if (!paragraph.includes("[^")) continue;
     for (const sentence of sentences(paragraph.replace(/\s+/g, " ").trim())) {
-      const ids = [...sentence.matchAll(REFERENCE_RE)].map((m) => m[1]!);
+      const ids = [...sentence.matchAll(REFERENCE_RE)].map((m) => footnoteKey(m[1]!));
       if (ids.length === 0) continue;
-      const text = sentence.replace(REFERENCE_RE, "").trim();
+      const text = sentence.replace(REFERENCE_RE, "").trim().replaceAll(MASKED, "[");
       for (const id of new Set(ids)) {
         const list = claims.get(id);
         if (list) list.push(text);
@@ -177,7 +221,36 @@ export function extractFootnotes(body: string): Footnote[] {
     }
   }
 
-  return definitions.map((d) => ({ ...d, claim: (claims.get(d.id) ?? []).join("\n") }));
+  const cites = new Map<string | null, string[]>();
+  for (const { id, within: from } of references) {
+    const list = cites.get(from);
+    if (list) list.push(id);
+    else cites.set(from, [id]);
+  }
+  const reached = new Set<string>();
+  const queue = [...(cites.get(null) ?? [])];
+  for (let id = queue.pop(); id !== undefined; id = queue.pop()) {
+    if (reached.has(id)) continue;
+    reached.add(id);
+    queue.push(...(cites.get(id) ?? []));
+  }
+  const defined = new Set(definitions.map((d) => footnoteKey(d.id)));
+  const orphans: FootnoteOrphan[] = [
+    ...references
+      .filter((r) => !defined.has(r.id))
+      .map((r) => ({ id: r.raw, line: r.line, role: "reference" as const })),
+    ...definitions
+      .filter((d) => !reached.has(footnoteKey(d.id)))
+      .map((d) => ({ id: d.id, line: d.line, role: "definition" as const })),
+  ];
+
+  return {
+    footnotes: definitions.map((d) => ({
+      ...d,
+      claim: (claims.get(footnoteKey(d.id)) ?? []).join("\n"),
+    })),
+    orphans,
+  };
 }
 
 // Markers usually follow the full stop, so a sentence can end on one. A capture group rather

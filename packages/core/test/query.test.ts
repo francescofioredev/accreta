@@ -412,6 +412,11 @@ describe("an index built before a table existed", () => {
     );
     await expect(lintCitations(db, new Map())).rejects.toThrow(StaleIndexError);
   });
+
+  test("lint says to reindex when footnote_orphans is missing", () => {
+    dropTable("footnote_orphans");
+    expect(() => lint(db, config)).toThrow(StaleIndexError);
+  });
 });
 
 describe("lint", () => {
@@ -550,6 +555,94 @@ describe("lint", () => {
     );
     reindex();
     expect(lint(db, config).findings).toEqual([]);
+  });
+});
+
+// The body starts on line 9, after five frontmatter lines, a blank, the title and a blank.
+const cited = (body: string) =>
+  `---\ntype: note\ncanonical_source: "s:a.md#L1"\nlast_verified_revision: r1\n---\n\n# A\n\n${body}\n`;
+
+describe("lint on footnote pairing", () => {
+  const pairing = () =>
+    lint(db, config).findings.filter(
+      (f) => f.kind === "undefined-footnote" || f.kind === "unused-footnote",
+    );
+
+  test("a reference with no definition is reported with its id and line", () => {
+    writePage("a.md", cited("A claim that looks cited.[^nowhere]"));
+    reindex();
+    const findings = pairing();
+    expect(findings.map((f) => f.kind)).toEqual(["undefined-footnote"]);
+    expect(findings[0]?.path).toBe("knowledge/a.md");
+    expect(findings[0]?.detail).toContain("[^nowhere] (line 9)");
+  });
+
+  test("a definition nothing references is reported with its id and line", () => {
+    writePage("a.md", cited("A claim.\n\n[^unused]: s @ r1 · a.md#L1-L2"));
+    reindex();
+    const findings = pairing();
+    expect(findings.map((f) => f.kind)).toEqual(["unused-footnote"]);
+    expect(findings[0]?.detail).toContain("[^unused] (line 11)");
+  });
+
+  test("a well-formed cited page has neither", () => {
+    writePage(
+      "a.md",
+      cited("One.[^a] Two.[^b] One again.[^a]\n\n[^a]: s @ r1 · a.md#L1\n[^b]: See the history."),
+    );
+    reindex();
+    expect(lint(db, config).findings).toEqual([]);
+  });
+
+  test("an undefined id referenced twice is one finding naming both lines", () => {
+    writePage("a.md", cited("One.[^x]\n\nTwo.[^x]"));
+    reindex();
+    const findings = pairing();
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.detail).toContain("[^x] (lines 9, 11)");
+  });
+
+  test("footnotes inside fenced or inline code are not counted", () => {
+    writePage(
+      "a.md",
+      cited(
+        "Write `[^id]` to cite.\n\n```markdown\nA claim.[^fenced]\n\n[^example]: s @ r1 · a.md#L1\n```",
+      ),
+    );
+    reindex();
+    expect(pairing()).toEqual([]);
+  });
+
+  test("a definition referenced only from a referenced definition is used", () => {
+    writePage(
+      "a.md",
+      cited("A claim.[^a]\n\n[^a]: s @ r1 · a.md#L1, read with [^b]\n[^b]: s @ r1 · a.md#L2"),
+    );
+    reindex();
+    expect(pairing()).toEqual([]);
+  });
+
+  test("ids differing only in case pair up, and count as defined twice", async () => {
+    writePage("a.md", cited("Claim.[^A]\n\n[^a]: s @ r1 · a.md#L1\n[^A]: s @ r1 · a.md#L2"));
+    reindex();
+    expect(pairing()).toEqual([]);
+    const { findings } = await lintCitations(db, new Map());
+    expect(findings.map((f) => f.kind)).toEqual(["duplicate-footnote"]);
+    expect(findings[0]?.detail).toContain("[^A] is defined again at line 12");
+  });
+
+  test("definitions that reference only each other are both unused", () => {
+    writePage(
+      "a.md",
+      cited("No claim cites these.\n\n[^a]: See [^b].\n[^b]: See [^a].\n[^c]: See [^gone]."),
+    );
+    reindex();
+    expect(pairing().map((f) => `${f.kind} ${f.detail.split(" ")[0]}`)).toEqual([
+      "undefined-footnote [^gone]",
+      "unused-footnote [^a]",
+      "unused-footnote [^b]",
+      "unused-footnote [^c]",
+    ]);
   });
 });
 
