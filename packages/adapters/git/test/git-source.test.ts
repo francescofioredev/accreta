@@ -261,6 +261,29 @@ describe("GitSource", () => {
     }
   });
 
+  test.skipIf(process.platform === "win32")(
+    "git runs in the C locale whatever the user's, so its messages read the same everywhere",
+    async () => {
+      const bin = join(root, "bin");
+      mkdirSync(bin);
+      writeFileSync(join(bin, "git"), '#!/bin/sh\necho "LC_ALL=$LC_ALL" >&2\nexit 1\n');
+      chmodSync(join(bin, "git"), 0o755);
+      const saved = { PATH: process.env.PATH, LC_ALL: process.env.LC_ALL };
+      process.env.PATH = bin;
+      process.env.LC_ALL = "it_IT.UTF-8";
+      try {
+        const failure = await source()
+          .revision()
+          .catch((error: unknown) => error);
+        expect((failure as GitCommandError).stderr).toBe("LC_ALL=C");
+      } finally {
+        process.env.PATH = saved.PATH;
+        if (saved.LC_ALL === undefined) delete process.env.LC_ALL;
+        else process.env.LC_ALL = saved.LC_ALL;
+      }
+    },
+  );
+
   test("git that cannot start is not reported as git refusing the repository", async () => {
     write("a.md", "one");
     await commit("first");

@@ -61,7 +61,13 @@ const FOREIGN_REPOSITORY = [
 
 function gitEnv(extraEnv: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   // accreta only reads; without this `status` rewrites .git/index and a user's commit can hit index.lock.
-  const env: NodeJS.ProcessEnv = { ...process.env, GIT_OPTIONAL_LOCKS: "0", ...extraEnv };
+  // LC_ALL=C: git's messages reach users and reports, so they read the same on every machine.
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    GIT_OPTIONAL_LOCKS: "0",
+    LC_ALL: "C",
+    ...extraEnv,
+  };
   // GIT_DIFF_OPTS would override the -U0 that hunk parsing depends on.
   delete env.GIT_DIFF_OPTS;
   for (const name of FOREIGN_REPOSITORY) delete env[name];
