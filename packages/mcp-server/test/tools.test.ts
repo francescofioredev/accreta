@@ -307,6 +307,9 @@ describe("source-backed tools", () => {
     });
     expect(result).toMatchObject({ delegated: true, via: "notion", changed: [] });
     expect(result).not.toHaveProperty("unresolvable");
+    // via and scope come from the declaration; the message must not repeat them unlabelled.
+    expect(result).toMatchObject({ _provenance: { page_derived_fields: ["via", "scope"] } });
+    expect((result as { message: string }).message).not.toContain("notion");
   });
 
   test("list_recent_changes surfaces an unplaceable revision as such", async () => {
@@ -547,7 +550,9 @@ describe("update_verified_revision", () => {
     buildWith(true, delegated);
     const dry = await updateVerifiedRevisionTool(ctx, { path: "a", revision: "any" });
     expect(dry).toMatchObject({ ok: false, dry_run: true, source_revision: null });
-    expect(dry.message).toContain("a connector");
+    expect(dry.message).toContain("delegated, so accreta cannot check this revision");
+    // The connector name is declaration text, and message is not a labelled field.
+    expect(dry.message).not.toContain("a connector");
 
     const token = "confirm_token" in dry ? dry.confirm_token : undefined;
     const result = await updateVerifiedRevisionTool(ctx, {

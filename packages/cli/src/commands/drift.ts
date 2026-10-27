@@ -18,7 +18,7 @@ import {
   type UncheckedSource,
 } from "@accreta/adapters";
 import { findWorkspace } from "../workspace.ts";
-import { loadSources, printable, provenance, type CommandContext } from "./shared.ts";
+import { DRIFT_NOTICE, loadSources, printable, provenance, type CommandContext } from "./shared.ts";
 
 export type DriftFormat = "text" | "json" | "github";
 
@@ -454,8 +454,8 @@ interface DriftJson {
   _provenance: ReturnType<typeof provenance>;
 }
 
-// check_drift's DRIFT_FIELDS in this shape. `now` and `unloaded_sources` are left out there too:
-// the adapter computes one, sources/*.yaml supplies the other.
+// check_drift's DRIFT_FIELDS in this shape. `now` is the adapter's; `unloaded_sources` quotes
+// sources/*.yaml and is left out there too, a known gap (#362).
 const DRIFT_FIELDS = [
   "sources[].in_doubt[].page",
   "sources[].in_doubt[].verified_at",
@@ -487,6 +487,7 @@ const DRIFT_FIELDS = [
   "sources[].delegated.pending[].revision",
   "sources[].delegated.pending[].pages",
   "sources[].delegated.pending[].cited_only",
+  "sources[].delegated.via",
 ] as const;
 
 /** With `--base`, `on_base` says the base branch already failed to load the same declaration. */
@@ -596,7 +597,7 @@ export function toJson(
     sources,
     unloaded_sources: unloaded,
     sources_newly_unloaded: unloaded.filter((u) => !u.on_base).length,
-    _provenance: provenance(DRIFT_FIELDS),
+    _provenance: provenance(DRIFT_FIELDS, DRIFT_NOTICE),
   };
 }
 

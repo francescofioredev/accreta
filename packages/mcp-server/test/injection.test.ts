@@ -40,12 +40,14 @@ const PROBES: Record<string, Probe[]> = {
   list_recent_changes: [
     { source: "docs", since: "0" },
     { source: "lines", since: "rev1" },
+    { source: "agent", since: "rev1" },
   ],
   lint_knowledge_base: [{}],
   cite: [
     { target: "docs:ch01.md#L1" },
     { target: "docs:ch01.md#L999" },
     { target: "quoting:p#b1" },
+    { target: "agent:ticket-1" },
   ],
   [WRITE_TOOL]: [
     // Refused: the page's own source is page text, echoed back.
@@ -126,9 +128,12 @@ const PLAIN_SOURCE: SourceAdapter = {
 const DELEGATED_SOURCE: SourceAdapter = {
   id: "agent",
   revision: async () => {
-    throw new DelegatedSourceError("agent", "a connector", "every ticket the notes cite");
+    throw new DelegatedSourceError("agent", "a CANARY-VIA connector", "every ticket; CANARY-SCOPE");
   },
-  changedSince: async () => [],
+  // As the real adapter does: only the agent holding the connector can list changes.
+  changedSince: async () => {
+    throw new DelegatedSourceError("agent", "a CANARY-VIA connector", "every ticket; CANARY-SCOPE");
+  },
   locate: async () => ({ verdict: "unknown", detail: "only the agent can read this source" }),
   citation: () => "",
   pinRevision: () => {},

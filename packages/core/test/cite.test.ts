@@ -587,6 +587,6 @@ describe("an expected revision", () => {
     );
     await expect(
       cite(sources(wiki), FORMAT, { sourceId: "wiki", path: "design" }, { expectRevision: "v7" }),
-    ).rejects.toThrow("read through notion, and accreta cannot tell its revision");
+    ).rejects.toThrow("it is delegated, and accreta cannot tell its revision");
   });
 });

@@ -29,6 +29,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false # the action never pushes, so the token need not sit in .git/config
       - uses: francescofioredev/accreta@main # pin a release tag or commit once one ships the action
         with:
           working-directory: . # where accreta.config.yaml lives
@@ -130,6 +131,22 @@ goes for any other run whose token is refused (403), such as Dependabot's.
 
 Do not switch to `pull_request_target` to get a write token. It would run the fork's code, and
 `accreta reindex` parses the fork's pages, with that token in reach.
+
+## What the checkout cannot change
+
+Bun reads `bunfig.toml`, including its `preload` scripts, and `.env` from the directory it starts
+in. The action starts Bun in an empty temporary directory with `--no-env-file`, and names the
+knowledge base through `ACCRETA_ROOT`, so neither file in the repository configures the run.
+`working-directory` must therefore be the directory that holds `accreta.config.yaml`, not one
+below it.
+
+The guarantee above holds only for consumers who reference `owner/repo@ref`. This repository's
+own `drift.yml` uses `uses: ./`, so there the action, its scripts and its install come from the
+pull request's checkout.
+
+What an earlier step sets still applies: Bun reads a global `$HOME/.bunfig.toml` or
+`$XDG_CONFIG_HOME/.bunfig.toml` and variables written to `GITHUB_ENV`, and Git, which still runs
+inside the checkout, reads `GIT_CONFIG_*`.
 
 ## Limits
 

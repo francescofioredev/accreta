@@ -199,7 +199,7 @@ accreta reindex && accreta lint
 > **accreta runs on Node `^22.16.0 || >=24` and on Bun `>=1.4.0`.** The bins start with
 > `#!/usr/bin/env node`, so under Bun run them with `bunx --bun accreta`, and a `bun add -g`
 > install needs Node on `PATH`. An older runtime gets a message naming this range — see
-> [ADR-0016](docs/adr/0016-run-on-node-and-bun.md).
+> [ADR-0016](docs/adr/0016-run-on-node-and-bun.md). A `git` source needs git 2.24 or newer.
 
 ## Try it
 
