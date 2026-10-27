@@ -42,6 +42,7 @@ export function reverifyStalePagesText(source: string | undefined, writesEnabled
     "- `stale`, every other page: re-read what changed for it (its `citations`, else the `changed_paths`; also for a page in `pages_by_change.untouched` or `pages_by_change.uncited`), correct the page, re-cite each claim with `cite` and `expect_revision` set to the report's `current_revision`, then " +
       record +
       ". If `cite` says the source is at a newer revision, start again from step 1.",
+    "- A citation with `refused`, or a page in a group's `refused`: the source will not vouch for that place, so re-reading cannot clear it. Fix the citation instead, for example re-cite the path the reason names with `cite`.",
     "- `unresolvable`, every other page: its recorded revision cannot be found. Re-verify the whole page against `current_revision`, then " +
       record +
       ".",
