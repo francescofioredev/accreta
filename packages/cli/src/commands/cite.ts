@@ -45,7 +45,7 @@ export function citeArguments(
   }
   if (given === undefined) return { format: json ? "json" : "text", targets: [...positional] };
   if (given !== "text" && given !== "footnote" && given !== "json") {
-    return `--format takes text, footnote or json, not "${given}".`;
+    return `--format takes text, footnote or json, not "${printable(given)}".`;
   }
   if (json && given !== "json") return `--json and --format ${given} ask for different output.`;
   const targets = [...positional];
@@ -85,7 +85,7 @@ export async function cite(
   // One revision cannot vouch for two sources; the check would fail as a misleading "moved".
   if (options.expectRevision !== undefined && named.length > 1) {
     ctx.err(
-      `--expect-revision is one source's revision, but the targets name ${named.join(", ")}. Cite each source in its own call.`,
+      `--expect-revision is one source's revision, but the targets name ${named.map(printable).join(", ")}. Cite each source in its own call.`,
     );
     return 2;
   }
@@ -104,7 +104,7 @@ export async function cite(
     }
     // Input errors exit 2, not 1 like a refusal; the sentences are core's, which MCP returns.
     if (!sources.has(target.sourceId)) {
-      const known = [...sources.keys()].toSorted().join(", ") || "none";
+      const known = [...sources.keys()].toSorted().map(printable).join(", ") || "none";
       ctx.err(`Unknown source "${printable(target.sourceId)}". Configured sources: ${known}.`);
       return 2;
     }
@@ -157,11 +157,13 @@ export async function cite(
 }
 
 function moved(target: ParsedCitation, citation: Citation, expected: string): string {
+  const id = printable(target.sourceId);
+  const at = printable(expected);
   return citation.revision !== null
-    ? `Source "${target.sourceId}" is at ${citation.revision}, not ${expected}: it moved since you read it, or ${expected} did not come from cite. Re-read ${citation.canonicalSource}, then cite again.`
+    ? `Source "${id}" is at ${printable(citation.revision)}, not ${at}: it moved since you read it, or ${at} did not come from cite. Re-read ${printable(citation.canonicalSource)}, then cite again.`
     : citation.delegated
-      ? `Cannot confirm source "${target.sourceId}" is still at ${expected}: it is read through ${printable(citation.delegated.via)}, and accreta cannot tell its revision.`
-      : `Cannot confirm source "${target.sourceId}" is still at ${expected}: accreta could not check this place. Cite it without an expected revision to see why.`;
+      ? `Cannot confirm source "${id}" is still at ${at}: it is read through ${printable(citation.delegated.via)}, and accreta cannot tell its revision.`
+      : `Cannot confirm source "${id}" is still at ${at}: accreta could not check this place. Cite it without an expected revision to see why.`;
 }
 
 function toJson(citation: Citation) {

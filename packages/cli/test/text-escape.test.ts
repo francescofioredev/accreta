@@ -26,6 +26,17 @@ async function cli(...argv: string[]): Promise<number> {
 /** Every printed line, split where a printed value broke it. */
 const lines = () => output.flatMap((line) => line.split("\n"));
 const unsafe = () => lines().filter((line) => UNSAFE.test(line));
+const unsafeErrors = () => errors.filter((line) => UNSAFE.test(line));
+
+/** What run() threw, as main() would print it. */
+async function thrown(...argv: string[]): Promise<string> {
+  try {
+    await cli(...argv);
+  } catch (error) {
+    return (error as Error).message;
+  }
+  throw new Error("expected the command to throw");
+}
 
 const HOSTILE_PAGE = `---
 type: note
@@ -107,6 +118,20 @@ describe("text output against a page that carries control and format characters"
     expect(unsafe()).toEqual([]);
   });
 
+  test("lint prints two pages a variation selector tells apart as two paths", async () => {
+    writeFileSync(join(root, "knowledge", "auth.md"), "---\ntype: note\n---\n\n[[nowhere]]\n");
+    writeFileSync(
+      join(root, "knowledge", "auth\ufe0f.md"),
+      "---\ntype: note\n---\n\n[[nowhere]]\n",
+    );
+    await cli("reindex");
+    output = [];
+    expect(await cli("lint")).toBe(1);
+    const auth = lines().filter((line) => line.startsWith("  knowledge/auth"));
+    expect(auth.some((line) => line.startsWith("  knowledge/auth.md:"))).toBe(true);
+    expect(auth.some((line) => line.startsWith("  knowledge/auth\\ufe0f.md:"))).toBe(true);
+  });
+
   test("--json stays raw", async () => {
     expect(await cli("show", `evil${RAW}`, "--json")).toBe(0);
     const { page } = JSON.parse(output.join("\n")) as { page: { title: string } };
@@ -136,5 +161,33 @@ describe("cite's text output against a declaration that carries them", () => {
     expect(lines().join("\n")).toContain(`read through notion${SHOWN}; accreta cannot check it`);
     expect(lines().filter((line) => /^(footnote|revision):/.test(line))).toHaveLength(2);
     expect(unsafe()).toEqual([]);
+  });
+
+  test("an unknown source escapes every configured id", async () => {
+    writeFileSync(
+      join(root, "sources", "evil.yaml"),
+      `id: "evil${YAML}"\ntype: delegated\nvia: notion\nscope: "x"\n`,
+    );
+    expect(await cli("cite", "nosuch:a.md")).toBe(2);
+    expect(errors.join("\n")).toContain(`Configured sources: evil${SHOWN}, wiki.`);
+    expect(unsafeErrors()).toEqual([]);
+  });
+
+  test("an expected revision it cannot confirm is escaped", async () => {
+    const message = await thrown("cite", "wiki:page.md", "--expect-revision", `rev${RAW}`);
+    expect(message).toContain(`still at rev${SHOWN}:`);
+    expect(UNSAFE.test(message)).toBe(false);
+  });
+
+  test("two sources named against one expected revision are escaped", async () => {
+    expect(await cli("cite", `x${RAW}:a.md`, "wiki:b.md", "--expect-revision", "r")).toBe(2);
+    expect(errors.join("\n")).toContain(`the targets name x${SHOWN}, wiki.`);
+    expect(unsafeErrors()).toEqual([]);
+  });
+
+  test("an unknown --format value is escaped", async () => {
+    expect(await cli("cite", "wiki:a.md", "--format", `x${RAW}`)).toBe(2);
+    expect(errors.join("\n")).toContain(`not "x${SHOWN}"`);
+    expect(unsafeErrors()).toEqual([]);
   });
 });

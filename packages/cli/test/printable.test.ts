@@ -7,10 +7,16 @@ describe("printable", () => {
       "a\\\\u0041\\u000a\\u0009\\u001b[2J\\u202e\\u200b\\u200d\\u{e0041}\\u2028\\u2029b",
     );
   });
+
+  test("escapes invisible characters outside Cf, so a path cannot pass for another", () => {
+    expect(printable("a\ufe0f\u{e0100}\u180b\u034f\u115f\u3164\uffa0b")).toBe(
+      "a\\ufe0f\\u{e0100}\\u180b\\u034f\\u115f\\u3164\\uffa0b",
+    );
+  });
 });
 
 describe("printableBlock", () => {
-  test("keeps lines, tabs, backslashes and joiners", () => {
+  test("keeps lines, tabs, backslashes and format characters other than bidi controls", () => {
     const prose = "one\n\ttwo \\n\nthree\u200b\u200d\u{e0041}";
     expect(printableBlock(prose)).toBe(prose);
   });
