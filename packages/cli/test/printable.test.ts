@@ -22,6 +22,13 @@ describe("printable", () => {
 });
 
 describe("printableBlock", () => {
+  test("keeps a subdivision flag, but not tag text dressed as one", () => {
+    const england = "\u{1f3f4}\u{e0067}\u{e0062}\u{e0065}\u{e006e}\u{e0067}\u{e007f}";
+    expect(printableBlock(england)).toBe(england);
+    const smuggled = `\u{1f3f4}${"\u{e0069}".repeat(20)}\u{e007f}`;
+    expect(printableBlock(smuggled)).not.toContain("\u{e0069}");
+  });
+
   test("keeps lines, tabs, backslashes, joiners and presentation selectors", () => {
     const prose = "one\n\ttwo \\n\nthree\u200d\u200c \u26a0\ufe0f \u2705\ufe0e";
     expect(printableBlock(prose)).toBe(prose);
@@ -37,6 +44,12 @@ describe("printableBlock", () => {
   test("escapes invisible characters a model reads and a human cannot", () => {
     expect(printableBlock("a\u200b\u2060\u2061\u2062\u2063\u2064\ufeff\u00ad\u180eb")).toBe(
       "a\\u200b\\u2060\\u2061\\u2062\\u2063\\u2064\\ufeff\\u00ad\\u180eb",
+    );
+  });
+
+  test("escapes variation selectors, Hangul fillers and the other invisibles", () => {
+    expect(printableBlock("a\ufe00\u{e0100}\u3164\uffa0\u2065b")).toBe(
+      "a\\ufe00\\u{e0100}\\u3164\\uffa0\\u2065b",
     );
   });
 

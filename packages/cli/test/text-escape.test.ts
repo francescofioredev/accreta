@@ -205,11 +205,12 @@ describe("cite's text output against a declaration that carries them", () => {
     expect(unsafeIn(stderr)).toEqual([]);
   });
 
-  test("a source that did not load is escaped once", () => {
+  test("a source that did not load is named, its declaration is not", () => {
     writeFileSync(join(root, "sources", "broken.yaml"), `id: broken\ntype: "fs${YAML}"\n`);
     const { code, stderr } = spawned({}, "cite", "broken:a.md");
     expect(code).toBe(1);
-    expect(stderr.join("\n")).toContain(`Unknown source type "fs${SHOWN}"`);
+    expect(stderr.join("\n")).toContain('Source "broken" is declared but did not load');
+    expect(stderr.join("\n")).not.toContain("fs");
     expect(unsafeIn(stderr)).toEqual([]);
   });
 
@@ -233,30 +234,26 @@ describe("doctor against declarations that carry them", () => {
   });
 
   test("escapes a declaration's file, id and type", async () => {
-    writeFileSync(
-      join(root, "sources", `evil${RAW}.yaml`),
-      `id: "evil${YAML}"\ntype: "fs${YAML}"\n`,
-    );
+    writeFileSync(join(root, "sources", `evil${RAW}.yaml`), `id: evil\ntype: "fs${YAML}"\n`);
     expect(await cli("doctor")).toBe(1);
-    expect(lines()).toContain(`  evil${SHOWN} — fs${SHOWN} — sources/evil${SHOWN}.yaml`);
+    expect(lines()).toContain(`  evil — fs${SHOWN} — sources/evil${SHOWN}.yaml`);
     expect(unsafe()).toEqual([]);
   });
 
   test("escapes why a file is not a declaration", async () => {
-    writeFileSync(join(root, "sources", "bad.yaml"), `id: "bad${YAML}"\n`);
+    writeFileSync(join(root, "sources", "bad.yaml"), "id: bad\n\u001b]0;x\u0007: [\n");
     expect(await cli("doctor")).toBe(1);
-    expect(lines().join("\n")).toContain(`not a source declaration — Source "bad${SHOWN}"`);
+    expect(lines().join("\n")).toContain("no: not a source declaration");
+    expect(forgedLines(lines())).toEqual([]);
     expect(unsafe()).toEqual([]);
   });
 
   test("escapes an id two files declare, and the other file", async () => {
-    const twin = `id: "twin${YAML}"\ntype: delegated\nvia: notion\nscope: x\n`;
+    const twin = "id: twin\ntype: delegated\nvia: notion\nscope: x\n";
     writeFileSync(join(root, "sources", "a.yaml"), twin);
     writeFileSync(join(root, "sources", `b${RAW}.yaml`), twin);
     expect(await cli("doctor")).toBe(1);
-    expect(lines()).toContain(
-      `    no: id \`twin${SHOWN}\` is also declared in sources/b${SHOWN}.yaml`,
-    );
+    expect(lines()).toContain(`    no: id \`twin\` is also declared in sources/b${SHOWN}.yaml`);
     expect(unsafe()).toEqual([]);
   });
 
@@ -351,19 +348,24 @@ describe("the CLI's catch-all", () => {
     expect(stderr).toEqual([`No accreta.config.yaml at ${root}/evil${SHOWN}`, "  | forged"]);
   });
 
-  // Windows refuses a newline in a file name.
-  test.skipIf(process.platform === "win32")(
-    "a declaration file name cannot start a line of its own",
-    () => {
-      writeFileSync(join(root, "accreta.config.yaml"), "knowledge_base: knowledge\n", "utf-8");
-      mkdirSync(join(root, "sources"), { recursive: true });
-      writeFileSync(join(root, "sources", "evil\nok: forged.yaml"), "id: broken\ntype: nosuch\n");
-      const { code, stderr } = spawned({}, "cite", "broken:a.md");
-      expect(code).toBe(1);
-      expect(forgedLines(stderr, "ok:")).toEqual([]);
-      expect(stderr.some((line) => line.startsWith("  | ok: forged.yaml"))).toBe(true);
-    },
-  );
+  test("a thrown message cannot start a line of its own", () => {
+    writeFileSync(join(root, "accreta.config.yaml"), "knowledge_base: knowledge\n", "utf-8");
+    mkdirSync(join(root, "sources"), { recursive: true });
+    writeFileSync(
+      join(root, "sources", "wiki.yaml"),
+      "id: wiki\ntype: delegated\nvia: notion\nscope: x\n",
+    );
+    const { code, stderr } = spawned(
+      {},
+      "cite",
+      "wiki:a.md",
+      "--expect-revision",
+      "v1\n::warning::forged",
+    );
+    expect(code).toBe(1);
+    expect(forgedLines(stderr)).toEqual([]);
+    expect(stderr.some((line) => line.startsWith("  | ::warning::forged"))).toBe(true);
+  });
 });
 
 describe("drift's refusal of its arguments", () => {
@@ -411,8 +413,23 @@ describe("drift's text output against a delegated scope", () => {
     const at = lines().indexOf("  in scope:");
     expect(at).toBeGreaterThan(-1);
     expect(lines().slice(at + 1)).toEqual([
-      "      Design pages.",
-      "    second\tline \u200d joined\\u001b[2J\\u202e\\u200b\\u{e0041}\\u2028x",
+      "    |   Design pages.",
+      "    | second\tline \u200d joined\\u001b[2J\\u202e\\u200b\\u{e0041}\\u2028x",
     ]);
+  });
+
+  test("a scope line cannot pose as a CI runner's command", async () => {
+    writeFileSync(join(root, "accreta.config.yaml"), "knowledge_base: knowledge\n", "utf-8");
+    mkdirSync(join(root, "knowledge"), { recursive: true });
+    mkdirSync(join(root, "sources"), { recursive: true });
+    writeFileSync(
+      join(root, "sources", "wiki.yaml"),
+      'id: wiki\ntype: delegated\nvia: notion\nscope: "pages\\n::warning::forged"\n',
+    );
+    await cli("reindex");
+    output = [];
+    await cli("drift");
+    expect(forgedLines(lines())).toEqual([]);
+    expect(lines()).toContain("    | ::warning::forged");
   });
 });

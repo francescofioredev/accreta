@@ -145,13 +145,13 @@ export const printable = (value: string) =>
     escaped,
   );
 
-// Prose keeps its lines, tabs, joiners and emoji flags. A terminal escape, a bidi control, an
-// invisible or tag character (text a model reads and a human cannot) or a U+2028 line still shows.
+// Prose keeps its lines, tabs, ZWJ/ZWNJ, an emoji's presentation selector and a subdivision flag
+// (UTS #51's tag shape); every other invisible character is text a model reads and a human cannot.
 export const printableBlock = (value: string) =>
   value
     .replaceAll("\r\n", "\n")
     .replaceAll(
-      /(\u{1f3f4}[\u{e0020}-\u{e007e}]+\u{e007f})|[^\P{Cc}\n\t]|[\u00ad\u061c\u180e\u200b\u200e\u200f\u202a-\u202e\u2028\u2029\u2060-\u2064\u2066-\u2069\ufeff\u{e0000}-\u{e007f}]/gu,
+      /(\u{1f3f4}[\u{e0061}-\u{e007a}]{2}[\u{e0030}-\u{e0039}\u{e0061}-\u{e007a}]{1,4}\u{e007f})|[^\P{Cc}\n\t]|(?!\u200c|\u200d|\ufe0e|\ufe0f)[\p{Cf}\p{Default_Ignorable_Code_Point}\u2028\u2029]|(?<!\p{Extended_Pictographic})[\ufe0e\ufe0f]/gu,
       (c, flag?: string) => flag ?? escaped(c),
     );
 

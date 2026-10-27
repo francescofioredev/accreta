@@ -254,7 +254,9 @@ export function printText(ctx: Pick<CommandContext, "out">, report: DriftReport)
     }
     printUnverifiable(ctx, report);
     ctx.out("  in scope:");
-    for (const line of printableBlock(work.guidance.trimEnd()).split("\n")) ctx.out(`    ${line}`);
+    // Marked, not just indented: drift runs in CI, and the runner reads `::` after leading space.
+    for (const line of printableBlock(work.guidance.trimEnd()).split("\n"))
+      ctx.out(`    | ${line}`);
     return;
   }
 
