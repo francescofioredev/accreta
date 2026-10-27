@@ -54,7 +54,7 @@ test("no row is undefined, not null", () => {
   }
 });
 
-test("a reader that cannot open the file gets SQLite's reason, not a missing FTS5", () => {
+test("a reader that cannot open the file gets SQLite's reason and the remedy, not a missing FTS5", () => {
   const writer = openIndex(indexPath);
   writer.close();
   // Bun 1.4.4 removes these on close; older runtimes leave them, so remove them here.
@@ -67,6 +67,7 @@ test("a reader that cannot open the file gets SQLite's reason, not a missing FTS
   }
   expect(failure).not.toBeInstanceOf(UnsupportedRuntimeError);
   expect((failure as Error).message).toContain("unable to open database file");
+  expect((failure as Error).message).toContain("run `accreta reindex`");
 });
 
 test("the runtime running this suite has FTS5", () => {
