@@ -47,6 +47,9 @@ touchedSince?(revision: string, path: string, locators: readonly string[]):
 - A page whose cited lines are untouched may rest on lines it did not cite, so it is lower in
   the list, not verified.
 - The exit code is unchanged.
+  _Amended 2026-10-27 (#253): with `--base`, drift exits 1 only on pages newly in doubt, newly
+  unplaceable, or a declaration newly not loading. Moved and untouched pages are still listed
+  but no longer fail. Without `--base` the exit code is as above._
 
 ## Alternatives rejected
 

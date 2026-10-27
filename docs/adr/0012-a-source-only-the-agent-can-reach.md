@@ -59,6 +59,8 @@ than discovered in a pipeline: **a knowledge base with delegated sources cannot 
 drift in CI**, because the check needs an agent holding a connector. `--strict` fails on
 anything unchecked — delegated pages and `unverifiable` alike — so a pipeline can demand
 "nothing unverified" without anyone pretending the source was inspected.
+_Amended 2026-10-27 (#253): with `--base`, `--strict` fails only on a page the base branch did
+not already leave unchecked. Without `--base` it is as above._
 
 ### The conformance suite now has two tables, and that is the real cost
 
