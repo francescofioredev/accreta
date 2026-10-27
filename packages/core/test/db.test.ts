@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -55,10 +55,8 @@ test("no row is undefined, not null", () => {
 });
 
 test("a reader that cannot open the file gets SQLite's reason and the remedy, not a missing FTS5", () => {
-  const writer = openIndex(indexPath);
-  writer.close();
-  // Bun 1.4.4 removes these on close; older runtimes leave them, so remove them here.
-  for (const suffix of ["-wal", "-shm"]) rmSync(indexPath + suffix, { force: true });
+  // Portable stand-in for an unsealed WAL index on Bun 1.4.4/macOS: the open succeeds, the first read fails.
+  writeFileSync(indexPath, "not a database, but long enough to have a header to reject".repeat(4));
   let failure: unknown;
   try {
     openIndex(indexPath, { readonly: true }).close();
@@ -66,7 +64,7 @@ test("a reader that cannot open the file gets SQLite's reason and the remedy, no
     failure = error;
   }
   expect(failure).not.toBeInstanceOf(UnsupportedRuntimeError);
-  expect((failure as Error).message).toContain("unable to open database file");
+  expect((failure as Error).message).toContain("file is not a database");
   expect((failure as Error).message).toContain("run `accreta reindex`");
 });
 
