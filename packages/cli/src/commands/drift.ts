@@ -132,7 +132,7 @@ export async function drift(
     }
     if (reports.length === 0 && unloaded.length === 0) {
       ctx.out("No sources declared in sources/. Nothing to check.");
-    } else for (const report of reports) printText(ctx, report);
+    } else printReports(ctx, reports);
   }
 
   // "I cannot tell", like `unresolvable`: a typo in `type` must not turn a failing run green.
@@ -182,6 +182,16 @@ function printUnverifiable(ctx: Pick<CommandContext, "out">, report: DriftReport
   for (const u of report.unpinned ?? []) {
     const { cited, fix } = howToPin(u);
     ctx.out(`    ${printable(u.page)} ${printable(cited)} names no revision: ${fix}`);
+  }
+}
+
+/** Each source's report, then, with several, the distinct total that `--json` reports. */
+export function printReports(ctx: Pick<CommandContext, "out">, reports: DriftReport[]): void {
+  for (const report of reports) printText(ctx, report);
+  if (reports.length > 1) {
+    // A page in doubt under two sources is counted under each above, but once here.
+    const total = toJson(reports).pages_in_doubt;
+    ctx.out(`${total} page(s) in doubt across ${reports.length} sources`);
   }
 }
 
