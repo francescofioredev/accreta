@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { DEFAULT_CONFIG, parseConfig } from "../src/config.ts";
 
 describe("parseConfig", () => {
@@ -64,4 +66,10 @@ supersession_fields:
       });
     }
   });
+});
+
+// The repository's own config is the default vocabulary; it went stale once when the default grew.
+test("the repository's accreta.config.yaml is the default vocabulary", () => {
+  const raw = readFileSync(join(import.meta.dir, "..", "..", "..", "accreta.config.yaml"), "utf-8");
+  expect(parseConfig(raw)).toEqual(DEFAULT_CONFIG);
 });

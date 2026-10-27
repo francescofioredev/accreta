@@ -39,7 +39,7 @@ export async function chooseBase(
 }
 
 async function main(): Promise<number> {
-  const choice = await chooseBase(process.cwd(), {
+  const choice = await chooseBase(process.argv[3] ?? process.cwd(), {
     head: process.env.PR_HEAD,
     base: process.env.PR_BASE,
   });
@@ -56,7 +56,7 @@ async function main(): Promise<number> {
     return 0;
   }
   const out = process.argv[2];
-  if (!out) throw new Error("Usage: drift-base.ts <file to write the base revision to>");
+  if (!out) throw new Error("Usage: drift-base.ts <file to write the base revision to> [checkout]");
   writeFileSync(out, `${choice.revision}\n`, "utf-8");
   return 0;
 }

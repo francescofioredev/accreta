@@ -123,7 +123,7 @@ describe("composeConstitution", () => {
       }
     }
     const codebase = composeConstitution({ preset: "codebase" });
-    expect(codebase).toContain("consumed_by # what this page's subject calls");
+    expect(codebase).toContain("consumes # what this page's subject calls");
     const research = composeConstitution({ preset: "research" });
     expect(research).toContain("link back to it with `discussed_in`");
   });

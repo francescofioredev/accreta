@@ -38,6 +38,7 @@ export {
   sqliteSupport,
   UnsupportedRuntimeError,
 } from "./index-db/db.ts";
+export { INDEX_FORMAT } from "./index-db/format.ts";
 
 export type {
   LocationVerdict,

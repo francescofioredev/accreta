@@ -35,6 +35,14 @@ describe("extractLinks", () => {
     ]);
   });
 
+  test("a knowledge base that still declares consumed_by keeps indexing it", () => {
+    const { frontmatter, body } = parsePage("---\nconsumed_by: [[modules/a]]\n---\n\n# X\n", "fb");
+    const legacy = { ...config, linkFields: ["consumers", "consumed_by"] };
+    expect(extractLinks(frontmatter, body, legacy)).toEqual([
+      { target: "modules/a", kind: "consumed_by" },
+    ]);
+  });
+
   test("inline body wikilinks are untyped", () => {
     const { frontmatter, body } = parsePage("# X\n\nSee [[concepts/a]] for detail.\n", "fb");
     expect(extractLinks(frontmatter, body, config)).toEqual([

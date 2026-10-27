@@ -1,9 +1,12 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -21,8 +24,19 @@ import {
   openIndex,
   pageChanges,
   UnknownRevisionError,
+  type RevisionResolution,
 } from "@accreta/core";
-import { GitCommandError, GitSource, scopeRefusal, unmatchedPaths } from "../src/index.ts";
+import {
+  GitCommandError,
+  GitSource,
+  isWorkingTree,
+  scopeRefusal,
+  TimeoutError,
+  unmatchedPaths,
+} from "../src/index.ts";
+
+// Some tests spawn about 20 git processes, which a loaded machine stretches past the 5 s default.
+setDefaultTimeout(20_000);
 
 let root = "";
 
@@ -430,6 +444,29 @@ describe("GitSource", () => {
     }
   });
 
+  test.skipIf(process.platform === "win32")(
+    "git runs in the C locale whatever the user's, so its messages read the same everywhere",
+    async () => {
+      const bin = join(root, "bin");
+      mkdirSync(bin);
+      writeFileSync(join(bin, "git"), '#!/bin/sh\necho "LC_ALL=$LC_ALL" >&2\nexit 1\n');
+      chmodSync(join(bin, "git"), 0o755);
+      const saved = { PATH: process.env.PATH, LC_ALL: process.env.LC_ALL };
+      process.env.PATH = bin;
+      process.env.LC_ALL = "it_IT.UTF-8";
+      try {
+        const failure = await source()
+          .revision()
+          .catch((error: unknown) => error);
+        expect((failure as GitCommandError).stderr).toBe("LC_ALL=C");
+      } finally {
+        process.env.PATH = saved.PATH;
+        if (saved.LC_ALL === undefined) delete process.env.LC_ALL;
+        else process.env.LC_ALL = saved.LC_ALL;
+      }
+    },
+  );
+
   test("git that cannot start is not reported as git refusing the repository", async () => {
     write("a.md", "one");
     await commit("first");
@@ -605,6 +642,48 @@ describe("GitSource scoped to paths", () => {
       rmSync(outside, { recursive: true, force: true });
     }
   });
+
+  test.skipIf(process.platform === "win32")(
+    "a history git could not read is not taken for an entry no commit touched",
+    () => {
+      const bin = join(root, "bin");
+      mkdirSync(bin);
+      // ls-files finds no match; rev-list fails, as a timeout or a missing promisor tree would.
+      writeFileSync(
+        join(bin, "git"),
+        '#!/bin/sh\nfor a; do case "$a" in ls-files) exit 1;; rev-list) exit 128;; esac; done\nexit 0\n',
+      );
+      chmodSync(join(bin, "git"), 0o755);
+      const path = process.env.PATH;
+      process.env.PATH = bin;
+      try {
+        expect(unmatchedPaths(root, ["docs/zzz"])).toBeUndefined();
+      } finally {
+        process.env.PATH = path;
+      }
+    },
+  );
+
+  test.skipIf(process.platform === "win32")(
+    "loading a source never asks a promisor remote for a missing tree",
+    () => {
+      const bin = join(root, "bin");
+      mkdirSync(bin);
+      // Stands in for a treeless clone: rev-list fetches unless lazy fetch is off, then fails.
+      writeFileSync(
+        join(bin, "git"),
+        '#!/bin/sh\nfor a; do case "$a" in ls-files) exit 1;; rev-list) [ "$GIT_NO_LAZY_FETCH" = 1 ] && exit 128; exit 0;; esac; done\nexit 0\n',
+      );
+      chmodSync(join(bin, "git"), 0o755);
+      const path = process.env.PATH;
+      process.env.PATH = bin;
+      try {
+        expect(unmatchedPaths(root, ["docs/zzz"])).toBeUndefined();
+      } finally {
+        process.env.PATH = path;
+      }
+    },
+  );
 });
 
 const lines = (n: number, edit: Record<number, string> = {}) =>
@@ -1450,5 +1529,279 @@ describe("a revision that names a ref, not a commit", () => {
     );
     expect(findings.map((f) => f.kind)).toEqual(["verified-revision-abbreviated"]);
     expect(findings[0]?.detail).toContain("uppercase");
+  });
+});
+
+/** A shell loop that appends to `file` every 100 ms, so a dead one is a file that stops growing. */
+const beat = (file: string) => `(while :; do echo . >> "${file}"; sleep 0.1; done)`;
+
+/** Whether `file` stops growing within 5 s; kill(pid, 0) would also answer yes for a zombie. */
+async function stopsBeating(file: string): Promise<boolean> {
+  const size = () => (existsSync(file) ? statSync(file).size : 0);
+  const deadline = Date.now() + 5_000;
+  let last = size();
+  while (Date.now() < deadline) {
+    await Bun.sleep(400);
+    if (size() === last) return true;
+    last = size();
+  }
+  return false;
+}
+
+const at = (cwd: string, args: string[]) => Bun.spawnSync(["git", ...args], { cwd });
+
+function gitAtLeast(major: number, minor: number): boolean {
+  const out = Bun.spawnSync(["git", "--version"]).stdout.toString();
+  const [, a = "0", b = "0"] = /(\d+)\.(\d+)/.exec(out) ?? [];
+  return Number(a) > major || (Number(a) === major && Number(b) >= minor);
+}
+
+describe("GitSource spawn hardening", () => {
+  const saved = { ...process.env };
+  let outside = "";
+
+  beforeEach(async () => {
+    outside = mkdtempSync(join(tmpdir(), "accreta-git-outside-"));
+    write("a.md", lines(3));
+    await commit("first");
+  });
+
+  afterEach(() => {
+    for (const name of Object.keys(process.env)) if (!(name in saved)) delete process.env[name];
+    Object.assign(process.env, saved);
+    rmSync(outside, { recursive: true, force: true });
+  });
+
+  /** An executable that leaves `marker` behind when run. */
+  function plant(name: string, body = ""): { script: string; marker: string } {
+    const script = join(outside, name);
+    const marker = join(outside, `${name}.ran`);
+    // The PATH under test may hold nothing but this script.
+    const header = `#!/bin/sh\nPATH=/usr/bin:/bin\ntouch "${marker}"\n`;
+    writeFileSync(script, header + body, { mode: 0o755 });
+    return { script, marker };
+  }
+
+  /** Every kind of call the adapter makes, with a diff that is not empty, after `configure`. */
+  async function everyCall(configure: () => Promise<void> | void): Promise<void> {
+    const git = source();
+    const from = await git.revision();
+    write("a.md", lines(3, { 2: "changed" }));
+    await commit("second");
+    // The test's own `git commit` honours the config; only the adapter's calls are under test.
+    await configure();
+    await git.changedSince(from);
+    await git.touchedSince(from, "a.md", ["L1-L2"]);
+    await git.locate("a.md", "L1");
+    await new GitSource({ id: "s", root, citationFormat: "x", paths: ["*.md"] }).locate("a.md");
+  }
+
+  test("core.fsmonitor from the environment never runs", async () => {
+    const { script, marker } = plant("fsmonitor");
+    await everyCall(() => {
+      Object.assign(process.env, {
+        GIT_CONFIG_COUNT: "1",
+        GIT_CONFIG_KEY_0: "core.fsmonitor",
+        GIT_CONFIG_VALUE_0: script,
+      });
+    });
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  test("core.fsmonitor from the repository's own config never runs", async () => {
+    const { script, marker } = plant("fsmonitor");
+    await everyCall(() => run(["config", "core.fsmonitor", script]));
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  test("GIT_DIR and friends from a hook do not point the adapter at another repository", async () => {
+    const other = join(outside, "other");
+    mkdirSync(other);
+    for (const args of [
+      ["init", "-q", "-b", "main"],
+      ["-c", "user.email=t@e", "-c", "user.name=T", "commit", "-q", "--allow-empty", "-m", "x"],
+    ])
+      Bun.spawnSync(["git", ...args], { cwd: other });
+    const own = await source().revision();
+    Object.assign(process.env, {
+      GIT_DIR: join(other, ".git"),
+      GIT_WORK_TREE: other,
+      GIT_INDEX_FILE: join(other, ".git", "index"),
+      GIT_OBJECT_DIRECTORY: join(other, ".git", "objects"),
+    });
+
+    expect(await source().revision()).toBe(own);
+    expect(await source().locate("a.md", "L1")).toEqual({ verdict: "found" });
+  });
+
+  test("a git call that hangs is killed with its helpers, and the error names it", async () => {
+    const heartbeat = join(outside, "helper.beat");
+    plant("git", `${beat(heartbeat)} &\necho $! > "${heartbeat}.pid"\nwait\n`);
+    Object.assign(process.env, { PATH: outside, ACCRETA_GIT_TIMEOUT_MS: "1500" });
+
+    const started = performance.now();
+    const failure = await source()
+      .revision()
+      .catch((error: unknown) => error);
+    expect(performance.now() - started).toBeLessThan(6_000);
+    expect(failure).toBeInstanceOf(TimeoutError);
+    // The subcommand alone: a locate detail must carry no path.
+    expect((failure as Error).message).toBe("git rev-parse did not finish within 1500 ms");
+
+    expect(Number(readFileSync(`${heartbeat}.pid`, "utf-8"))).toBeGreaterThan(0);
+    expect(await stopsBeating(heartbeat)).toBe(true);
+  }, 15_000);
+
+  test("a hanging git is reported as such, not as an unknown revision or no repository", async () => {
+    plant("git", "sleep 30\n");
+    Object.assign(process.env, { PATH: outside, ACCRETA_GIT_TIMEOUT_MS: "500" });
+    await expect(source().changedSince("0".repeat(40))).rejects.toBeInstanceOf(TimeoutError);
+    await expect(isWorkingTree(root)).rejects.toBeInstanceOf(TimeoutError);
+  });
+
+  test("pathspec settings in the environment neither kill git nor change what paths match", async () => {
+    const from = await source().revision();
+    write("a.md", lines(3, { 2: "changed" }));
+    await commit("second");
+    for (const name of ["GIT_GLOB_PATHSPECS", "GIT_NOGLOB_PATHSPECS", "GIT_ICASE_PATHSPECS"]) {
+      process.env[name] = "1";
+      expect(Object.fromEntries(await source().touchedSince(from, "a.md", ["L2"]))).toEqual({
+        L2: { status: "touched" },
+      });
+      delete process.env[name];
+    }
+    for (const name of ["GIT_NOGLOB_PATHSPECS", "GIT_LITERAL_PATHSPECS"]) {
+      process.env[name] = "1";
+      const patterned = new GitSource({ id: "s", root, citationFormat: "x", paths: ["*.md"] });
+      expect(await patterned.locate("a.md")).toEqual({ verdict: "found" });
+      delete process.env[name];
+    }
+  });
+
+  test("a git dir committed inside the corpus does not lend its config to a root in it", async () => {
+    const seed = join(outside, "seed");
+    const marker = join(outside, "filter.ran");
+    mkdirSync(seed);
+    for (const args of [
+      ["init", "-q", "-b", "main"],
+      ["add", "-A"],
+      ["-c", "user.email=t@e", "-c", "user.name=T", "commit", "-q", "-m", "x"],
+    ]) {
+      if (args[0] === "add") {
+        writeFileSync(join(seed, "a.md"), "one\n");
+        writeFileSync(join(seed, ".gitattributes"), "a.md filter=x\n");
+      }
+      Bun.spawnSync(["git", ...args], { cwd: seed });
+    }
+    const embedded = join(root, "corpus", "emb");
+    cpSync(join(seed, ".git"), embedded, { recursive: true });
+    mkdirSync(join(embedded, "tree"));
+    for (const file of ["a.md", ".gitattributes"]) {
+      cpSync(join(seed, file), join(embedded, "tree", file));
+    }
+    for (const [key, value] of [
+      ["core.bare", "false"],
+      ["core.worktree", "tree"],
+      ["filter.x.clean", `touch "${marker}"; cat`],
+    ])
+      Bun.spawnSync(["git", "config", key!, value!], { cwd: embedded });
+    // A newer mtime makes status re-hash the file through its clean filter.
+    const later = new Date(Date.now() + 60_000);
+    utimesSync(join(embedded, "tree", "a.md"), later, later);
+
+    const inside = new GitSource({ id: "c", root: join(embedded, "tree"), citationFormat: "x" });
+    expect(await inside.locate("a.md", "L1")).toMatchObject({ verdict: "unknown" });
+    expect(existsSync(marker)).toBe(false);
+    // Without the guard plain git does run the corpus's filter, so the setup is a real attack.
+    at(join(embedded, "tree"), ["status", "--porcelain"]);
+    expect(existsSync(marker)).toBe(true);
+  });
+
+  test("a git killed by a signal is no answer about the revision", async () => {
+    const pidFile = join(outside, "git.pid");
+    plant("git", `echo $$ > "${pidFile}"\nexec sleep 30\n`);
+    Object.assign(process.env, { PATH: outside });
+
+    const asked = source().knowsRevision("0".repeat(40));
+    asked.catch(() => {});
+    const pid = () => (existsSync(pidFile) ? Number(readFileSync(pidFile, "utf-8")) : 0);
+    const deadline = Date.now() + 5_000;
+    while (!(pid() > 0) && Date.now() < deadline) await Bun.sleep(20);
+    // Never 0: kill(0) would signal this test's own process group.
+    expect(pid()).toBeGreaterThan(0);
+    process.kill(pid(), "SIGKILL");
+    await expect(asked).rejects.toThrow("git cat-file was killed by SIGKILL");
+  });
+
+  test.skipIf(!gitAtLeast(2, 44))(
+    "knowsRevision never fetches a revision from a promisor remote",
+    async () => {
+      const server = join(outside, "server");
+      const client = join(outside, "client");
+      mkdirSync(server);
+      const commitIn = (cwd: string, m: string) =>
+        at(cwd, [
+          "-c",
+          "user.email=t@e",
+          "-c",
+          "user.name=T",
+          "commit",
+          "-q",
+          "--allow-empty",
+          "-m",
+          m,
+        ]);
+      at(server, ["init", "-q", "-b", "main"]);
+      at(server, ["config", "uploadpack.allowFilter", "true"]);
+      at(server, ["config", "uploadpack.allowAnySHA1InWant", "true"]);
+      commitIn(server, "first");
+      at(outside, ["clone", "-q", "--filter=blob:none", `file://${server}`, client]);
+      commitIn(server, "later");
+      const later = at(server, ["rev-parse", "HEAD"]).stdout.toString().trim();
+
+      const git = new GitSource({ id: "c", root: client, citationFormat: "x" });
+      expect(await git.knowsRevision(later)).toBe(false);
+      const local = Bun.spawnSync(["git", "cat-file", "-e", later], {
+        cwd: client,
+        env: { ...process.env, GIT_NO_LAZY_FETCH: "1" },
+      });
+      expect(local.exitCode).not.toBe(0);
+      // Without the guard the same question fetches it, so the setup does exercise a lazy fetch.
+      expect(at(client, ["cat-file", "-e", later]).exitCode).toBe(0);
+    },
+  );
+
+  test("a timeout that is not a whole number of milliseconds is refused", async () => {
+    process.env.ACCRETA_GIT_TIMEOUT_MS = "soon";
+    await expect(source().revision()).rejects.toThrow(
+      "ACCRETA_GIT_TIMEOUT_MS must be a whole number",
+    );
+  });
+
+  test("a revision shaped like an option is never read as one by diff", async () => {
+    // A second layer behind resolveRevision, which already refuses this revision.
+    class Trusting extends GitSource {
+      override resolveRevision(revision: string): Promise<RevisionResolution> {
+        return Promise.resolve({ status: "resolved", revision });
+      }
+    }
+    const git = new Trusting({ id: "repo", root, citationFormat: "x" });
+    const written = join(outside, "written");
+
+    await expect(git.changedSince(`--output=${written}`)).rejects.toThrow(GitCommandError);
+    await expect(git.touchedSince(`--output=${written}`, "a.md", ["L1"])).rejects.toThrow(
+      GitCommandError,
+    );
+    expect(existsSync(written)).toBe(false);
+  });
+
+  test("a git in the source root never runs, even with the cwd on PATH", async () => {
+    const marker = join(outside, "planted.ran");
+    write("git", `#!/bin/sh\ntouch "${marker}"\necho ${"f".repeat(40)}\n`);
+    chmodSync(join(root, "git"), 0o755);
+    process.env.PATH = `.:${process.env.PATH}`;
+
+    expect(await source().revision()).not.toBe("f".repeat(40));
+    expect(existsSync(marker)).toBe(false);
   });
 });

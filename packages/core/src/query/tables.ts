@@ -1,9 +1,9 @@
 import type { Database } from "../index-db/db.ts";
 
-/** The index is older than a table a query needs; it is never migrated, only rebuilt. */
+/** The index was built by another accreta than this one; it is never migrated, only rebuilt. */
 export class StaleIndexError extends Error {
-  constructor(table: string) {
-    super(`This index predates the ${table} table; run \`accreta reindex\`.`);
+  constructor(reason: string, remedy = "run `accreta reindex`") {
+    super(`${reason}; ${remedy}.`);
     this.name = "StaleIndexError";
   }
 }
@@ -18,7 +18,7 @@ export function requireTable(db: Database, table: string): void {
   const row = db
     .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
     .get(table);
-  if (!row) throw new StaleIndexError(table);
+  if (!row) throw new StaleIndexError(`This index predates the ${table} table`);
   known.add(table);
   present.set(db, known);
 }

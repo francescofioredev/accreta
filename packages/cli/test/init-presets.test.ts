@@ -67,7 +67,7 @@ page_types:
 
 link_fields:
   - consumers
-  - consumed_by
+  - consumes
   - delegates_to
   - implements
   - supersedes
@@ -145,6 +145,20 @@ describe("decision records (#270)", () => {
     expect(DEFAULT_CONFIG.linkFields).toContain("amends");
     expect(DEFAULT_CONFIG.linkFields).toContain("amended_by");
   });
+
+  // init's template is a hand-kept copy of the default, as the repository's own config was.
+  test("init with no preset writes the default vocabulary", async () => {
+    expect(await cli("init")).toBe(0);
+    expect(parseConfig(read("accreta.config.yaml"))).toEqual(DEFAULT_CONFIG);
+  });
+});
+
+describe("preset vocabulary (#318)", () => {
+  test("no preset declares consumed_by, which would flip old pages", () => {
+    for (const vocabulary of Object.values(PRESET_VOCABULARY)) {
+      expect(vocabulary.linkFields ?? []).not.toContain("consumed_by");
+    }
+  });
 });
 
 describe("init with several presets", () => {
@@ -155,7 +169,7 @@ describe("init with several presets", () => {
     expect(config.pageTypes).toEqual(`${types} usecase decision integration`.split(" "));
     const fields = "cites cited_by supports contradicts supersedes superseded_by related";
     expect(config.linkFields).toEqual(
-      `${fields} discussed_in consumers consumed_by delegates_to implements amends amended_by`.split(
+      `${fields} discussed_in consumers consumes delegates_to implements amends amended_by`.split(
         " ",
       ),
     );

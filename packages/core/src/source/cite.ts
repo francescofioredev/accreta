@@ -125,7 +125,7 @@ async function abbreviating(
   if (revision === null) {
     throw new Error(
       delegated
-        ? `Cannot confirm source "${sourceId}" is still at ${expected}: it is read through ${delegated.via}, and accreta cannot tell its revision.`
+        ? `Cannot confirm source "${sourceId}" is still at ${expected}: it is delegated, and accreta cannot tell its revision.`
         : `Cannot confirm source "${sourceId}" is still at ${expected}: accreta could not check this place. Cite it without an expected revision to see why.`,
     );
   }
