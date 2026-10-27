@@ -145,6 +145,12 @@ describe("decision records (#270)", () => {
     expect(DEFAULT_CONFIG.linkFields).toContain("amends");
     expect(DEFAULT_CONFIG.linkFields).toContain("amended_by");
   });
+
+  // init's template is a hand-kept copy of the default, as the repository's own config was.
+  test("init with no preset writes the default vocabulary", async () => {
+    expect(await cli("init")).toBe(0);
+    expect(parseConfig(read("accreta.config.yaml"))).toEqual(DEFAULT_CONFIG);
+  });
 });
 
 describe("preset vocabulary (#318)", () => {
