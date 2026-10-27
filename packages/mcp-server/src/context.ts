@@ -1,6 +1,12 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { openIndex, parseConfig, type Database } from "@accreta/core";
+import {
+  openIndex,
+  parseConfig,
+  StaleIndexError,
+  UnsupportedRuntimeError,
+  type Database,
+} from "@accreta/core";
 import { loadSources, stateDirFor } from "@accreta/adapters";
 import type { ToolContext } from "./tools.ts";
 
@@ -24,10 +30,8 @@ function findRoot(start: string): string {
 }
 
 /**
- * The index's identity, or null if it cannot be stat'd.
- *
- * A rebuild is never observable as an absence — rename(2) replaces the path
- * atomically — so a missing file means it is genuinely gone, not mid-swap.
+ * The index's identity, or null if it cannot be stat'd. A rebuild is never observable as an
+ * absence — rename(2) replaces the path atomically — so a missing file is gone, not mid-swap.
  */
 function inodeOf(path: string): string | null {
   try {
@@ -39,12 +43,8 @@ function inodeOf(path: string): string | null {
 }
 
 /**
- * Assemble what the tools need.
- *
- * The index is opened read-only. The write tool edits markdown on disk and asks
- * for a reindex rather than mutating the index directly: the index is derived,
- * and a write that updated it in place would put it out of step with the pages
- * it is derived from.
+ * Assemble what the tools need. The index is opened read-only: the write tool edits markdown
+ * and asks for a reindex, since an index updated in place would drift from the pages it derives from.
  */
 export function createContext(cwd: string = process.cwd()): ToolContext {
   const root = findRoot(cwd);
@@ -54,19 +54,25 @@ export function createContext(cwd: string = process.cwd()): ToolContext {
     ? resolve(process.env.ACCRETA_INDEX_PATH)
     : join(root, ".accreta", "index.sqlite");
 
-  if (!existsSync(indexPath)) {
-    throw new Error(`No index at ${indexPath}. Run \`accreta reindex\` first.`);
-  }
-
   interface Handle {
     db: Database;
     inode: string | null;
     pins: number;
   }
-  let handle: Handle = {
-    db: openIndex(indexPath, { readonly: true }),
-    inode: inodeOf(indexPath),
-    pins: 0,
+  // Opened on first use, so an index this accreta cannot read fails a tool call the agent sees,
+  // not the server start it never does; every later call tries again, so a reindex mends it.
+  let handle: Handle | null = null;
+  const open = (): Database => {
+    try {
+      return openIndex(indexPath, { readonly: true });
+    } catch (error) {
+      if (error instanceof StaleIndexError || error instanceof UnsupportedRuntimeError) throw error;
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Cannot open the index at ${indexPath}: ${reason}; run \`accreta reindex\` to rebuild it.`,
+        { cause: error },
+      );
+    }
   };
   const loaded = loadSources({
     root,
@@ -79,10 +85,16 @@ export function createContext(cwd: string = process.cwd()): ToolContext {
   // rows off the unlinked inode, the worse half. So a long-lived reader reopens (ADR-0010),
   // and asks the filesystem, since a failing or stale connection cannot say it is stale.
   const refresh = (): Handle => {
+    // Stat before opening: a swap in between then costs one more reopen, never a stale handle.
     const inode = inodeOf(indexPath);
-    if (inode !== null && inode !== handle.inode) {
+    if (handle === null) {
+      if (inode === null) {
+        throw new Error(`No index at ${indexPath}. Run \`accreta reindex\` first.`);
+      }
+      handle = { db: open(), inode, pins: 0 };
+    } else if (inode !== null && inode !== handle.inode) {
       // Open before closing, so a failed reopen leaves a working context rather than a dead one.
-      const reopened = openIndex(indexPath, { readonly: true });
+      const reopened = open();
       // A call that pinned the old handle closes it on release; closing it now throws under it.
       if (handle.pins === 0) handle.db.close();
       handle = { db: reopened, inode, pins: 0 };

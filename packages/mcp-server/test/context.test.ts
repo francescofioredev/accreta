@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -350,3 +350,20 @@ test("a reopen after a swap refuses an index of another format", () => {
   reindex();
   expect(searchPagesTool(ctx, { query: "alpha" }).count).toBe(1);
 });
+
+// Windows and root ignore the mode bits, so the file stays readable there.
+test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+  "an index that cannot be opened fails the call with the remedy, and a rebuild mends it",
+  () => {
+    writePage("a.md", "---\ntype: note\n---\n\n# A\n\nalpha\n");
+    reindex();
+    chmodSync(indexPath(), 0o000);
+
+    const ctx = createContext(root);
+    expect(() => ctx.db).toThrow(`Cannot open the index at ${indexPath()}`);
+    expect(() => ctx.db).toThrow("run `accreta reindex`");
+
+    reindex();
+    expect(searchPagesTool(ctx, { query: "alpha" }).count).toBe(1);
+  },
+);
