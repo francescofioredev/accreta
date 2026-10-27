@@ -381,3 +381,21 @@ test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
     expect(searchPagesTool(ctx, { query: "alpha" }).count).toBe(1);
   },
 );
+
+test("an index core opens but cannot read names the remedy once", () => {
+  mkdirSync(join(root, ".accreta"), { recursive: true });
+  writeFileSync(
+    indexPath(),
+    "not a database, but long enough to have a header to reject".repeat(4),
+  );
+
+  const ctx = createContext(root);
+  let message = "";
+  try {
+    void ctx.db;
+  } catch (error) {
+    message = (error as Error).message;
+  }
+  expect(message).toContain("file is not a database");
+  expect(message.split("accreta reindex")).toHaveLength(2);
+});
