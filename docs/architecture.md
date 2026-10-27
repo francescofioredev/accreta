@@ -110,6 +110,9 @@ no dependencies, no keys and no network, and there is no `search` configuration 
 A word joined by underscores is an identifier: `stale_served` matches only pages that contain
 that whole identifier, never `stale serves` or `stale_served_total`, while `stale` alone still
 finds it. Identifiers sit in a second FTS5 table, unstemmed and with `_` as a token character.
+An identifier query therefore misses a page that spells it another way: `stale-served`,
+`stale served` in prose, `_stale_served`, or a near miss such as `stale_serve`. When it returns
+nothing, search again with the words spaced, as `stale served`.
 
 Semantic search is **not built**. [ADR-0001](adr/0001-lexical-search-first.md) measured 85%
 recall@1 without it and keeps it optional and unbuilt until a benchmark says otherwise.

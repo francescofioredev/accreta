@@ -266,6 +266,10 @@ describe("searchPages on an underscore identifier", () => {
       "metrics/stale-served-total.md",
       "metrics/stale-served.md",
     ]);
+    expect(ranked("stale\\_served*").toSorted()).toEqual([
+      "metrics/stale-served-total.md",
+      "metrics/stale-served.md",
+    ]);
   });
 
   test("underscores in odd places never reach the caller as a syntax error", () => {

@@ -5,7 +5,10 @@ import { requireTable } from "./tables.ts";
 export interface SearchOptions {
   /** Words that must all match; a double-quoted run is a phrase, a trailing `*` a prefix. Under `syntax: "fts5"`, an FTS5 query. */
   query: string;
-  /** `plain` (default) searches NOT, OR and AND as words; `fts5` applies operators and throws on bad syntax. */
+  /**
+   * `plain` (default) searches NOT, OR and AND as words; `fts5` applies operators and throws on bad syntax.
+   * `fts5` also skips identifier matching: `stale_served` there is the phrase `stale served`, stemmed.
+   */
   syntax?: "plain" | "fts5";
   /** Restrict to these page types. Empty means every type. */
   types?: readonly string[];
@@ -108,7 +111,8 @@ function identifierMatch(terms: Term[]): string {
       const found = identifiersIn(text);
       return found.map((id, i) => ({
         text: id,
-        prefix: prefix && i === found.length - 1 && text.endsWith(id),
+        // identifiersIn unescapes `\_`, so compare against unescaped text.
+        prefix: prefix && i === found.length - 1 && text.replaceAll("\\_", "_").endsWith(id),
       }));
     })
     .map(quoted)
