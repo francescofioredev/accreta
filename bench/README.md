@@ -53,7 +53,25 @@ is seeded, so a run can be reproduced exactly.
 ```bash
 bun run bench:scale                          # 100, 1000, 10000
 bun run bench:scale -- --sizes=100,1000      # pick your own
+bun run bench:scale -- --identifiers=10      # every 10th body word is an identifier like forcing_feedback
 ```
+
+`--identifiers` keeps the link graph unchanged. It adds a plain search for `forcing_feedback`
+and prints the index size in bytes, which is the cost of the identifier table (#275).
+
+# Identifier queries
+
+`identifier-bench.ts` runs 22 plain queries over `identifiers/`, a 15-page corpus of metric,
+column and setting names. Its relevance judgments were committed before the bench first ran. It
+reports recall@1, MRR, recall@10 (the share of relevant pages in the top ten)
+and how many queries returned nothing. `--verbose` prints every ranking.
+
+```bash
+bun run bench:identifiers -- --verbose
+```
+
+`bun run bench` cannot see identifier handling: its queries have no underscores, and it uses the
+FTS5 syntax that bypasses the identifier table.
 
 The 100,000-page case takes about twelve minutes, most of it in corpus generation.
 

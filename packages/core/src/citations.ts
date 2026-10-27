@@ -140,15 +140,15 @@ export interface FootnoteOrphan {
   role: "reference" | "definition";
 }
 
-const DEFINITION_RE = /^\[\^([^\]\s]+)\]:\s*(.*?)\s*$/;
-const FENCE_RE = /^\s*(```|~~~)/;
+export const DEFINITION_RE = /^\[\^([^\]\s]+)\]:\s*(.*?)\s*$/;
+export const FENCE_RE = /^\s*(```|~~~)/;
 const REFERENCE_RE = /(?<!\\)\[\^([^\]\s]+)\](?!:)/g;
 const INLINE_CODE_RE = /(`+).*?\1/g;
 // Stands in for the `[` of a marker inside inline code, so the code survives into the claim.
 const MASKED = "\0";
 
 // Lazy continuation is paragraph text only: a heading, list item, quote or rule starts a new block.
-const BLOCK_START_RE = /^ {0,3}(#{1,6}(\s|$)|[-*+]\s|\d+[.)]\s|>|([-*_])(\s*\3){2,}\s*$)/;
+export const BLOCK_START_RE = /^ {0,3}(#{1,6}(\s|$)|[-*+]\s|\d+[.)]\s|>|([-*_])(\s*\3){2,}\s*$)/;
 
 /** How footnote ids are paired: as micromark and cmark-gfm fold labels, with no NFC. */
 export function footnoteKey(id: string): string {

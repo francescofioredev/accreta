@@ -1,0 +1,165 @@
+{
+  "note": "Judged by hand against identifiers/knowledge before any arm was run (#275). Every listed page is relevant; order does not matter. `variant` marks a query, or a relevant page, that spells the identifier another way.",
+  "queries": [
+    {
+      "id": "i01",
+      "class": "exact",
+      "query": "stale_served",
+      "relevant": ["metrics/stale-served.md", "runbooks/cache-alerts.md"],
+      "why": "The metric page; the alert page spells it stale-served."
+    },
+    {
+      "id": "i02",
+      "class": "near-miss",
+      "query": "stale_serves",
+      "relevant": ["notes/replica-reads.md"],
+      "why": "#275: stale serves is another concept than the stale_served metric."
+    },
+    {
+      "id": "i03",
+      "class": "words",
+      "query": "served stale",
+      "relevant": ["notes/replica-reads.md"],
+      "why": "Prose about serving stale data; the metric is named, not described, by these words."
+    },
+    {
+      "id": "i04",
+      "class": "words",
+      "query": "stale",
+      "relevant": [
+        "metrics/stale-served.md",
+        "metrics/stale-served-total.md",
+        "notes/replica-reads.md",
+        "notes/expiry.md",
+        "runbooks/cache-alerts.md"
+      ],
+      "why": "#275: stale alone must still find the identifiers that contain it."
+    },
+    {
+      "id": "i05",
+      "class": "exact",
+      "query": "stale_served_total",
+      "relevant": ["metrics/stale-served-total.md"],
+      "why": "Exact identifier."
+    },
+    {
+      "id": "i06",
+      "class": "variant",
+      "query": "stale-served",
+      "relevant": ["metrics/stale-served.md", "runbooks/cache-alerts.md"],
+      "why": "Hyphenated spelling of the metric."
+    },
+    {
+      "id": "i07",
+      "class": "variant",
+      "query": "stale_serve",
+      "relevant": ["metrics/stale-served.md", "runbooks/cache-alerts.md"],
+      "why": "Truncated identifier; no concept is named stale serve."
+    },
+    {
+      "id": "i08",
+      "class": "variant",
+      "query": "stale_",
+      "relevant": ["metrics/stale-served.md", "metrics/stale-served-total.md"],
+      "why": "An identifier being typed, without the *."
+    },
+    {
+      "id": "i09",
+      "class": "exact",
+      "query": "stale_*",
+      "relevant": ["metrics/stale-served.md", "metrics/stale-served-total.md"],
+      "why": "Identifier prefix."
+    },
+    {
+      "id": "i10",
+      "class": "exact",
+      "query": "retry_budget",
+      "relevant": ["config/retry-budget.md", "notes/retry-storms.md"],
+      "why": "The setting; the storms page explains what a retry budget is for."
+    },
+    {
+      "id": "i11",
+      "class": "words",
+      "query": "retry budget",
+      "relevant": ["config/retry-budget.md", "notes/retry-storms.md"],
+      "why": "Same concept in words."
+    },
+    {
+      "id": "i12",
+      "class": "variant",
+      "query": "private_helper",
+      "relevant": ["code/request-signing.md"],
+      "why": "The page writes _private_helper."
+    },
+    {
+      "id": "i13",
+      "class": "exact",
+      "query": "_private_helper",
+      "relevant": ["code/request-signing.md"],
+      "why": "Exact identifier."
+    },
+    {
+      "id": "i14",
+      "class": "exact",
+      "query": "user_id",
+      "relevant": ["schema/orders.md", "notes/user-identity.md"],
+      "why": "The column; the identity page defines what a user id is."
+    },
+    {
+      "id": "i15",
+      "class": "exact",
+      "query": "order_id",
+      "relevant": ["schema/orders.md"],
+      "why": "Exact identifier."
+    },
+    {
+      "id": "i16",
+      "class": "exact",
+      "query": "max_connections",
+      "relevant": ["config/connection-limits.md"],
+      "why": "The page writes max\\_connections, escaped markdown."
+    },
+    {
+      "id": "i17",
+      "class": "variant",
+      "query": "max-connections",
+      "relevant": ["config/connection-limits.md"],
+      "why": "The flag spelling."
+    },
+    {
+      "id": "i18",
+      "class": "exact",
+      "query": "__init__",
+      "relevant": ["code/module-setup.md"],
+      "why": "Exact identifier."
+    },
+    {
+      "id": "i19",
+      "class": "exact",
+      "query": "queue_depth",
+      "relevant": ["metrics/queue-gauges.md"],
+      "why": "Exact identifier."
+    },
+    {
+      "id": "i20",
+      "class": "exact",
+      "query": "canonical_source",
+      "relevant": ["notes/provenance-fields.md", "notes/canonical-source.md"],
+      "why": "The field; the other page writes canonical source in prose."
+    },
+    {
+      "id": "i21",
+      "class": "words",
+      "query": "canonical source",
+      "relevant": ["notes/canonical-source.md", "notes/provenance-fields.md"],
+      "why": "Same concept in words."
+    },
+    {
+      "id": "i22",
+      "class": "exact",
+      "query": "last_verified_revision",
+      "relevant": ["notes/provenance-fields.md"],
+      "why": "Exact identifier."
+    }
+  ]
+}

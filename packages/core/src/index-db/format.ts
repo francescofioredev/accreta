@@ -2,7 +2,7 @@ import { requireTable, StaleIndexError } from "../query/tables.ts";
 import type { Database } from "./db.ts";
 
 // Bump whenever the build changes what it writes: readers refuse any other value.
-export const INDEX_FORMAT = 1;
+export const INDEX_FORMAT = 2;
 
 export const INDEX_FORMAT_KEY = "index_format";
 

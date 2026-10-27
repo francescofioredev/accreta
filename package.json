@@ -17,6 +17,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "bench": "bun --conditions=@accreta/source run bench/search-bench.ts",
+    "bench:identifiers": "bun --conditions=@accreta/source run bench/identifier-bench.ts",
     "bench:scale": "bun --conditions=@accreta/source run bench/scale-bench.ts",
     "bench:mcp": "bun --conditions=@accreta/source run bench/mcp-budget.ts",
     "bench:canonical": "bun --conditions=@accreta/source run bench/canonical-bench.ts",

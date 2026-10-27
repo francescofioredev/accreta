@@ -42,6 +42,13 @@ const SIZES = ((): number[] => {
 // A supersession chain through every page, so lint's supersession check has the deepest graph to walk.
 const SUPERSESSION = process.argv.includes("--supersession");
 
+// Every Nth body word becomes two words joined by `_`, the identifier shape #275 indexes whole.
+const IDENTIFIER_EVERY = ((): number => {
+  const arg = process.argv.find((a) => a.startsWith("--identifiers="));
+  return arg ? Number(arg.slice("--identifiers=".length)) : 0;
+})();
+const IDENTIFIER_QUERY = "forcing_feedback";
+
 const CONFIG_YAML = `knowledge_base: knowledge
 page_types: [note, source, concept, decision, synthesis]
 link_fields: [related, supersedes, superseded_by, discussed_in]
@@ -112,9 +119,12 @@ function generate(n: number, seed = 42): Corpus {
     }
     for (const t of targets) indegree[t]! += 1;
 
-    const body = Array.from({ length: 120 }, () => WORDS[Math.floor(rng() * WORDS.length)]).join(
-      " ",
-    );
+    // The partner word draws nothing from rng, so the link graph is the same with or without identifiers.
+    const body = Array.from({ length: 120 }, (_, k) => {
+      const at = Math.floor(rng() * WORDS.length);
+      const joined = IDENTIFIER_EVERY > 0 && k % IDENTIFIER_EVERY === 0;
+      return joined ? `${WORDS[at]}_${WORDS[(at + 1) % WORDS.length]}` : WORDS[at];
+    }).join(" ");
     const related = [...targets].map((t) => `[[${pathOf(t).replace("knowledge/", "")}]]`);
     // One page carries a distinctive alias, so findCanonical's alias branch is exercised
     // on a corpus where it has to scan past everything else to reach it.
@@ -170,6 +180,7 @@ interface Row {
   buildMs: number;
   indexBytes: number;
   searchMs: number;
+  identifierSearchMs: number;
   getPageMs: number;
   findRelatedMs: number;
   findCanonicalMs: number;
@@ -193,6 +204,7 @@ function measure(size: number): Row {
       20,
       () => void searchPages(db, { query: "forcing OR feedback", syntax: "fts5" }),
     );
+    const identifierSearchMs = timeMs(20, () => void searchPages(db, { query: IDENTIFIER_QUERY }));
     const getPageMs = timeMs(20, () => void getPage(db, corpus.hubPath, config));
     const findRelatedMs = timeMs(20, () => void findRelated(db, corpus.hubPath, config, {}));
     const findCanonicalMs = timeMs(5, () => void findCanonical(db, corpus.aliasTerm, config));
@@ -208,6 +220,7 @@ function measure(size: number): Row {
       buildMs: build.ms,
       indexBytes: statSync(indexPath).size,
       searchMs,
+      identifierSearchMs,
       getPageMs,
       findRelatedMs,
       findCanonicalMs,
@@ -224,7 +237,10 @@ const mb = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)}MB`;
 const ms = (x: number) => (x < 1 ? `${x.toFixed(2)}ms` : `${x.toFixed(0)}ms`);
 
 console.log(`platform: ${process.platform} ${process.arch}, bun ${Bun.version}`);
-console.log(`sizes: ${SIZES.join(", ")}${SUPERSESSION ? ", with a supersession chain" : ""}\n`);
+console.log(
+  `sizes: ${SIZES.join(", ")}${SUPERSESSION ? ", with a supersession chain" : ""}` +
+    `${IDENTIFIER_EVERY > 0 ? `, an identifier every ${IDENTIFIER_EVERY} words` : ""}\n`,
+);
 
 const rows: Row[] = [];
 for (const size of SIZES) {
@@ -247,6 +263,15 @@ for (const r of rows) {
   console.log(
     `  ${String(r.pages).padStart(7)}  ${ms(r.searchMs).padStart(7)}  ${ms(r.getPageMs).padStart(8)}  ${ms(r.findRelatedMs).padStart(11)}  ${ms(r.findCanonicalMs).padStart(13)}  ${ms(r.lintMs).padStart(8)}  ${String(r.lintFindings).padStart(8)}`,
   );
+}
+
+if (IDENTIFIER_EVERY > 0) {
+  console.log(`\nIDENTIFIERS (plain search for ${IDENTIFIER_QUERY}, median; index in bytes)`);
+  for (const r of rows) {
+    console.log(
+      `  ${String(r.pages).padStart(7)}  ${ms(r.identifierSearchMs).padStart(7)}  ${String(r.indexBytes).padStart(12)}`,
+    );
+  }
 }
 
 console.log("\nGROWTH (ratio to the previous size)");
