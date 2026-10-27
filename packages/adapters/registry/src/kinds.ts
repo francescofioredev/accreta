@@ -2,7 +2,13 @@ import { existsSync, realpathSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { SourceAdapter, SourceDeclaration } from "@accreta/core";
 import { FsSource, SNAPSHOT_BUDGET_BYTES, snapshotHealth } from "@accreta/adapter-fs";
-import { GitSource, isWorkingTree, unmatchedPaths } from "@accreta/adapter-git";
+import {
+  GitSource,
+  isWorkingTree,
+  scopeProblem,
+  scopeRefusal,
+  unmatchedPaths,
+} from "@accreta/adapter-git";
 import { DelegatedSource } from "@accreta/adapter-delegated";
 
 export interface SourceContext {
@@ -142,9 +148,12 @@ const gitKind: SourceKind = {
   template: (id) => `# A git repository. The revision is a commit SHA and change detection is
 # \`diff --name-only\`.
 #
-# \`paths\` scopes the source to part of the repository. Without it, every commit
-# to anything — a README, a test — reports as drift for pages whose documents
-# never moved, and a report full of false positives is one people stop reading.
+# \`paths\`, relative to \`root\`, scopes the source to part of the repository.
+# With \`root\` at the repository top and no \`paths\`, every commit to anything — a
+# README, a test — reports as drift for pages whose documents never moved, and a
+# report full of false positives is one people stop reading. A \`root\` in a
+# subdirectory is already scoped to that subtree. Once \`paths\` is set, \`cite\`
+# reports a file outside it as missing.
 
 id: ${id}
 type: git
@@ -156,10 +165,19 @@ paths: []
       id: d.id,
       root: rootOf(d, ctx),
       citationFormat: ctx.citationFormat,
-      paths: stringsOr(d.options.paths),
+      // Unchecked, so the adapter refuses a malformed list rather than widening the scope.
+      paths: d.options.paths as readonly string[] | undefined,
     }),
   preflight: async (d, ctx) => {
     const root = rootOf(d, ctx);
+    const problem = scopeProblem(root, d.options.paths);
+    if (problem) {
+      return {
+        reachable: "no",
+        detail: problem,
+        remedy: "Name directories or files inside `root`, relative to it.",
+      };
+    }
     const bad = checkDirectory(root);
     if (bad) return bad;
     let repository: boolean;
@@ -180,9 +198,19 @@ paths: []
         remedy: "Point `root` at a checkout, or declare it as `type: fs` instead.",
       };
     }
+    // scopeProblem passed, so `paths` is a list of strings or absent.
+    const paths = (d.options.paths as readonly string[] | undefined) ?? [];
+    const refusal = await scopeRefusal(root, paths);
+    if (refusal) {
+      return {
+        reachable: "no",
+        detail: refusal,
+        remedy: "Name directories or files inside `root`, relative to it.",
+      };
+    }
     // The same verdict construction would give, so doctor cannot pass what drift refuses.
-    const refusal = unmatchedPaths(root, stringsOr(d.options.paths) ?? []);
-    if (refusal) return { reachable: "no", detail: refusal };
+    const unmatched = unmatchedPaths(root, paths);
+    if (unmatched) return { reachable: "no", detail: unmatched };
     return { reachable: "yes", detail: `${root} is a git repository` };
   },
 };

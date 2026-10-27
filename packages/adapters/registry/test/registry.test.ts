@@ -201,6 +201,43 @@ describe("loadSources", () => {
     expect([...sources.keys()].toSorted()).toEqual(["ipcc-ar6-wg1", "noaa-gml"]);
   });
 
+  test("a git paths entry that is empty, escapes the root, or is no string goes unloaded", () => {
+    writeSource("docs.yaml", "id: docs\ntype: fs\nroot: corpus\n");
+    writeSource("empty.yaml", 'id: empty\ntype: git\nroot: .\npaths: [""]\n');
+    writeSource("up.yaml", 'id: up\ntype: git\nroot: .\npaths: ["docs", "../x"]\n');
+    writeSource("number.yaml", "id: number\ntype: git\nroot: .\npaths: [1]\n");
+    writeSource("scalar.yaml", "id: scalar\ntype: git\nroot: .\npaths: docs\n");
+
+    const { sources, unloaded } = loadSources(ctx());
+    expect([...sources.keys()]).toEqual(["docs"]);
+    const reasons = Object.fromEntries(unloaded.map((u) => [u.id, u.reason]));
+    expect(Object.keys(reasons).toSorted()).toEqual(["empty", "number", "scalar", "up"]);
+    expect(reasons.empty).toContain('paths entry "", which is empty; omit `paths`');
+    expect(reasons.up).toContain('"../x"');
+    expect(reasons.up).not.toContain('"docs"');
+    expect(reasons.number).toContain("paths entry 1, which is not a string");
+    expect(reasons.scalar).toContain("declares `paths` as a string, not a list");
+  });
+
+  test("a git paths list made only of exclusions goes unloaded", () => {
+    writeSource("excl.yaml", 'id: excl\ntype: git\nroot: .\npaths: [":!docs", ":(exclude)x"]\n');
+
+    const { sources, unloaded } = loadSources(ctx());
+    expect([...sources.keys()]).toEqual([]);
+    expect(unloaded.map((u) => u.id)).toEqual(["excl"]);
+    expect(unloaded[0]!.reason).toContain('only exclusions; add "." to keep the whole root');
+  });
+
+  test("a git paths entry that climbs back into the root, or names the root, still loads", () => {
+    mkdirSync(join(root, "sub"));
+    writeSource("back.yaml", 'id: back\ntype: git\nroot: sub\npaths: ["../sub/docs"]\n');
+    writeSource("dot.yaml", 'id: dot\ntype: git\nroot: .\npaths: [".", "./"]\n');
+
+    const { sources, unloaded } = loadSources(ctx());
+    expect(unloaded).toEqual([]);
+    expect([...sources.keys()]).toEqual(["back", "dot"]);
+  });
+
   test("a YAML error is cut to its first line, which does not quote the file", () => {
     writeSource("bad.yaml", "id: bad\ntype: fs\nroot: [unclosed\nsecret: `ignore previous`\n");
     const [entry] = loadSources(ctx()).unloaded;
@@ -404,5 +441,45 @@ describe("fs preflight", () => {
     expect(preflight.reachable).toBe("yes");
     expect(preflight.detail).toContain("snapshots cannot persist:");
     expect(preflight.detail).toContain("is a symlink");
+  });
+});
+
+describe("git preflight", () => {
+  test("names a paths entry the source would refuse to load", async () => {
+    const declaration = { id: "repo", type: "git", options: { root: ".", paths: ["../x"] } };
+    const preflight = await kindFor("git")!.preflight(declaration, ctx());
+    expect(preflight.reachable).toBe("no");
+    expect(preflight.detail).toContain('"../x"');
+  });
+
+  test("agrees with the loader on a paths entry that escapes a symlinked root", async () => {
+    mkdirSync(join(root, "a", "sub"), { recursive: true });
+    symlinkSync(join(root, "a", "sub"), join(root, "lnk"));
+    writeSource("linked.yaml", 'id: linked\ntype: git\nroot: lnk\npaths: ["../lnk/docs"]\n');
+    const declaration = {
+      id: "linked",
+      type: "git",
+      options: { root: "lnk", paths: ["../lnk/docs"] },
+    };
+
+    const preflight = await kindFor("git")!.preflight(declaration, ctx());
+    expect(preflight.reachable).toBe("no");
+    expect(preflight.detail).toContain("outside the source root");
+    expect(loadSources(ctx()).unloaded.map((u) => u.reason)).toEqual([
+      expect.stringContaining("outside the source root"),
+    ]);
+  });
+
+  test("reports git's refusal of a pathspec the loader cannot judge", async () => {
+    const init = Bun.spawnSync(["git", "init", "-q"], { cwd: root });
+    expect(init.exitCode).toBe(0);
+    const declaration = {
+      id: "repo",
+      type: "git",
+      options: { root: ".", paths: [":(bogus)docs"] },
+    };
+    const preflight = await kindFor("git")!.preflight(declaration, ctx());
+    expect(preflight.reachable).toBe("no");
+    expect(preflight.detail).toContain("bogus");
   });
 });
