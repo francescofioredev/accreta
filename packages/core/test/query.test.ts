@@ -8,6 +8,7 @@ import { buildIndex } from "../src/index-db/build.ts";
 import { openIndex, type Database } from "../src/index-db/db.ts";
 import { findCanonical, findRelated, getPage } from "../src/query/page.ts";
 import { searchPages } from "../src/query/search.ts";
+import { identifiersIn } from "../src/identifiers.ts";
 import { lint, lintCitations } from "../src/query/lint.ts";
 import { countPagesCiting } from "../src/query/citing.ts";
 import { requireTable, StaleIndexError } from "../src/query/tables.ts";
@@ -209,6 +210,86 @@ describe("searchPages on a plain query", () => {
     expect(paths("pieces NOT porous", "fts5")).toEqual(["raw.md"]);
     expect(paths("glaze OR slip", "fts5")).toEqual(["finish.md", "rim.md"]);
     expect(paths("wedge AND knead", "fts5")).toEqual(["knead.md", "wedge.md"]);
+  });
+});
+
+describe("searchPages on an underscore identifier", () => {
+  const ranked = (query: string) =>
+    searchPages(db, { query }).map((h) => h.path.replace("knowledge/", ""));
+
+  beforeEach(() => {
+    const note = (path: string, body: string) =>
+      writePage(path, `---\ntype: note\n---\n\n${body}\n`);
+    note(
+      "metrics/stale-served.md",
+      "# Cache metrics\n\n`stale_served` counts responses the cache answered after their entry expired.",
+    );
+    note("metrics/stale-served-total.md", "# Totals\n\n`stale_served_total` is the counter behind the rate.");
+    note(
+      "notes/replica-reads.md",
+      "# Replica reads\n\nA lagging replica serves stale data. Those stale serves are tolerated for dashboards.",
+    );
+    note("notes/expiry.md", "# Expiry\n\nAn entry goes stale when its time to live runs out.");
+    reindex();
+  });
+
+  test("an identifier matches only itself, not its stemmed words", () => {
+    expect(ranked("stale_served")).toEqual(["metrics/stale-served.md"]);
+    expect(ranked("Stale_Served")).toEqual(["metrics/stale-served.md"]);
+  });
+
+  test("a near-miss identifier does not match across the underscore", () => {
+    expect(ranked("stale_serves")).toEqual([]);
+  });
+
+  test("a word inside an identifier still finds it", () => {
+    expect(ranked("stale")).toContain("metrics/stale-served.md");
+    expect(ranked("served stale")).toContain("metrics/stale-served.md");
+  });
+
+  test("a prefix and a phrase keep the identifier whole", () => {
+    expect(ranked("stale_served*").toSorted()).toEqual([
+      "metrics/stale-served-total.md",
+      "metrics/stale-served.md",
+    ]);
+    expect(ranked("stale_ser*").toSorted()).toEqual([
+      "metrics/stale-served-total.md",
+      "metrics/stale-served.md",
+    ]);
+    expect(ranked('"stale_served counts"')).toEqual(["metrics/stale-served.md"]);
+    expect(ranked('"stale_serves counts"')).toEqual([]);
+    expect(ranked("stale_served cache")).toEqual(["metrics/stale-served.md"]);
+    expect(ranked("stale_*").toSorted()).toEqual([
+      "metrics/stale-served-total.md",
+      "metrics/stale-served.md",
+    ]);
+  });
+
+  test("underscores in odd places never reach the caller as a syntax error", () => {
+    for (const query of ["_", "__", "_*", "stale_", '"_"', 'a_"b', "_stale_served_", "a_b*c_d*"]) {
+      expect(() => searchPages(db, { query })).not.toThrow();
+    }
+  });
+
+  test("an identifier is a run of letters and digits with an underscore in it", () => {
+    expect(identifiersIn("a.stale_served, __init__ _ ___ 1_000 café_noir x")).toEqual([
+      "stale_served",
+      "__init__",
+      "1_000",
+      "café_noir",
+    ]);
+  });
+
+  test("an identifier written in a title or an alias is matched too", () => {
+    writePage("notes/titled.md", "---\ntype: note\n---\n\n# queue_depth\n\nHow full the queue is.\n");
+    writePage(
+      "notes/aliased.md",
+      '---\ntype: note\naliases: ["retry_budget"]\n---\n\n# Retries\n\nHow many retries a call may spend.\n',
+    );
+    db.close();
+    reindex();
+    expect(ranked("queue_depth")).toEqual(["notes/titled.md"]);
+    expect(ranked("retry_budget")).toEqual(["notes/aliased.md"]);
   });
 });
 
@@ -416,6 +497,23 @@ describe("an index built before a table existed", () => {
   test("lint says to reindex when footnote_orphans is missing", () => {
     dropTable("footnote_orphans");
     expect(() => lint(db, config)).toThrow(StaleIndexError);
+  });
+
+  test("an identifier search says to reindex when pages_identifiers is missing", () => {
+    writePage("b.md", "---\ntype: note\n---\n\n# B\n\n`stale_served` counts late answers.\n");
+    dropTable("pages_identifiers");
+    expect(() => searchPages(db, { query: "stale_served" })).toThrow(
+      "This index predates the pages_identifiers table; run `accreta reindex`.",
+    );
+    expect(searchPages(db, { query: "stale served" }).map((h) => h.path)).toEqual([
+      "knowledge/b.md",
+    ]);
+
+    db.close();
+    reindex();
+    expect(searchPages(db, { query: "stale_served" }).map((h) => h.path)).toEqual([
+      "knowledge/b.md",
+    ]);
   });
 });
 

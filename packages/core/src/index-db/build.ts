@@ -3,6 +3,7 @@ import { readdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs
 import { join, relative, sep } from "node:path";
 import type { AccretaConfig } from "../config.ts";
 import { compileCitationTemplate, readFootnotes } from "../citations.ts";
+import { identifiersIn } from "../identifiers.ts";
 import { extractLinks, tryResolveWikilink } from "../links.ts";
 import { nameKey } from "../name-key.ts";
 import { parsePage } from "../page.ts";
@@ -171,6 +172,9 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
     INSERT INTO pages_fts (title, aliases, body, path, type, source)
     VALUES ($title, $aliases, $body, $path, $type, $source)
   `);
+  const insertIdentifiers = db.prepare(
+    `INSERT INTO pages_identifiers (rowid, identifiers) VALUES ($rowid, $identifiers)`,
+  );
   const insertAlias = db.prepare(
     `INSERT OR IGNORE INTO aliases (alias, path) VALUES ($alias, $path)`,
   );
@@ -215,6 +219,8 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
   try {
     db.exec("DELETE FROM pages");
     db.exec("DELETE FROM pages_fts");
+    // A contentless table refuses DELETE; this is its way to empty.
+    db.exec("INSERT INTO pages_identifiers (pages_identifiers) VALUES ('delete-all')");
     db.exec("DELETE FROM aliases");
     db.exec("DELETE FROM canonical_cites");
     db.exec("DELETE FROM links");
@@ -252,14 +258,19 @@ function runBuild(db: Database, root: string, config: AccretaConfig, started: nu
         $frontmatter_error: frontmatterError ?? null,
       });
 
-      insertFts.run({
+      const aliases = aliasesOf(frontmatter);
+      const fts = insertFts.run({
         $title: title,
-        $aliases: aliasesOf(frontmatter),
+        $aliases: aliases,
         $body: body,
         $path: path,
         $type: type,
         $source: source ?? "",
       });
+      const identifiers = identifiersIn(`${title}\n${aliases}\n${body}`);
+      if (identifiers.length > 0) {
+        insertIdentifiers.run({ $rowid: fts.lastInsertRowid, $identifiers: identifiers.join(" ") });
+      }
 
       const canonical = asString(frontmatter.canonical_source);
       const canonicalId = canonical ? parseCitation(canonical)?.sourceId : undefined;

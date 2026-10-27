@@ -1,4 +1,6 @@
 import type { Database } from "../index-db/db.ts";
+import { identifiersIn } from "../identifiers.ts";
+import { requireTable } from "./tables.ts";
 
 export interface SearchOptions {
   /** Words that must all match; a double-quoted run is a phrase, a trailing `*` a prefix. Under `syntax: "fts5"`, an FTS5 query. */
@@ -30,11 +32,23 @@ const MAX_LIMIT = 50;
  */
 export function searchPages(db: Database, options: SearchOptions): SearchHit[] {
   const limit = Math.min(Math.max(options.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
-  const match = options.syntax === "fts5" ? options.query : plainMatch(options.query);
+  const terms = options.syntax === "fts5" ? null : plainTerms(options.query);
+  const match = terms ? terms.map(quoted).join(" ") : options.query;
   if (match === "") return [];
 
   const filters = ["pages_fts MATCH ?"];
   const params: (string | number)[] = [match];
+
+  // pages_fts reads `stale_served` as `stale served` stemmed, so an identifier must also match whole.
+  const identifiers = terms ? identifierMatch(terms) : "";
+  if (identifiers !== "") {
+    requireTable(db, "pages_identifiers");
+    // The `+` keeps the IN off pages_fts' index: there FTS5 re-ran the MATCH per rowid, 67ms against 0.7ms at 1,000 pages.
+    filters.push(
+      "+pages_fts.rowid IN (SELECT rowid FROM pages_identifiers WHERE pages_identifiers MATCH ?)",
+    );
+    params.push(identifiers);
+  }
 
   if (options.types && options.types.length > 0) {
     filters.push(`p.type IN (${options.types.map(() => "?").join(",")})`);
@@ -65,18 +79,38 @@ export function searchPages(db: Database, options: SearchOptions): SearchHit[] {
   return rows;
 }
 
+interface Term {
+  text: string;
+  prefix: boolean;
+}
+
+const quoted = ({ text, prefix }: Term) => `"${text}"${prefix ? "*" : ""}`;
+
 // Bare, `NULLS NOT DISTINCT` is `nulls AND NOT distinct`: the inverse, silently. Quoted, it has no operators.
-function plainMatch(query: string): string {
+function plainTerms(query: string): Term[] {
   // FTS5 ends a string at NUL and then throws "unterminated string".
-  const terms = [...query.replaceAll("\0", " ").matchAll(/"([^"]*)"|[^\s"]+|"/g)].flatMap(
+  return [...query.replaceAll("\0", " ").matchAll(/"([^"]*)"|[^\s"]+|"/g)].flatMap(
     ([whole, phrase]) => {
-      if (phrase !== undefined) return [`"${phrase}"`];
+      if (phrase !== undefined) return [{ text: phrase, prefix: false }];
       if (whole === '"') return [];
       // `"word"*` keeps prefix search without letting any operator through.
       const stem = whole.replace(/\*+$/, "");
-      if (stem === whole) return [`"${whole}"`];
-      return stem === "" ? [] : [`"${stem}"*`];
+      if (stem === whole) return [{ text: whole, prefix: false }];
+      return stem === "" ? [] : [{ text: stem, prefix: true }];
     },
   );
-  return terms.join(" ");
+}
+
+/** Every identifier in the terms, whole; a term's trailing `*` carries to an identifier that ends it. */
+function identifierMatch(terms: Term[]): string {
+  return terms
+    .flatMap(({ text, prefix }) => {
+      const found = identifiersIn(text);
+      return found.map((id, i) => ({
+        text: id,
+        prefix: prefix && i === found.length - 1 && text.endsWith(id),
+      }));
+    })
+    .map(quoted)
+    .join(" ");
 }

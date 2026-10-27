@@ -55,6 +55,15 @@ CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
   tokenize = 'porter unicode61'
 );
 
+-- Each page's underscore-joined words, whole and unstemmed, keyed by its pages_fts rowid. pages_fts
+-- splits and stems `stale_served`, so `stale_serves` matched it (#275). tokenchars '_' there did not
+-- help: with porter `stale_serves` still matched, and without it bench recall@1 fell from 85% to 80%.
+CREATE VIRTUAL TABLE IF NOT EXISTS pages_identifiers USING fts5(
+  identifiers,
+  content = '',
+  tokenize = "unicode61 tokenchars '_'"
+);
+
 -- nameKey() of each entry of a list-valued `aliases`, as findCanonical compares it.
 -- Its own table because a LIKE over frontmatter_json can use no index and scans every page.
 CREATE TABLE IF NOT EXISTS aliases (
