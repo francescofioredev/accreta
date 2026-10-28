@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   PUBLISHABLE,
+  compareVersions,
   floorTooNew,
   manifestOf,
   mismatches,
@@ -34,7 +35,21 @@ test("a floor older than the tag is not a disagreement", () => {
 });
 
 test("the setup skill declares a floor at all", () => {
-  expect(skillRequires()).toMatch(/^\d+\.\d+\.\d+$/);
+  expect(skillRequires()).toMatch(/^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/);
+});
+
+test("the release being cut satisfies the floor, and an earlier prerelease does not", () => {
+  const cut = versionOf("packages/cli");
+  expect(floorTooNew(cut)).toBeNull();
+  expect(floorTooNew("0.2.0-rc.0")).toContain(`requires ${skillRequires()}`);
+});
+
+test("versions compare by semver precedence, prereleases included", () => {
+  expect(compareVersions("0.2.0-rc.1", "0.2.0")).toBeLessThan(0);
+  expect(compareVersions("0.2.0-rc.10", "0.2.0-rc.2")).toBeGreaterThan(0);
+  expect(compareVersions("0.2.0-rc", "0.2.0-rc.1")).toBeLessThan(0);
+  expect(compareVersions("0.1.10", "0.1.9")).toBeGreaterThan(0);
+  expect(compareVersions("latest", "0.2.0")).toBeNull();
 });
 
 test("the matching tag reports nothing", () => {

@@ -99,6 +99,13 @@ describe("accreta doctor: the installed skill's floor", () => {
     expect(skillSection()).toContain(`tree/v${version}/skills/accreta-setup`);
   });
 
+  test("a prerelease floor is a release, and a later prerelease is above an earlier one", async () => {
+    installSkill(join(repo, ".claude", "skills"), requiring("99.0.0-rc.2"));
+
+    expect(await doctor()).toBe(0);
+    expect(skillSection()).toContain("stale: .claude/skills/accreta-setup requires 99.0.0-rc.2");
+  });
+
   test("no skills directory anywhere is unknown, not missing", async () => {
     expect(await doctor()).toBe(0);
     expect(skillSection()).toContain(
@@ -329,6 +336,15 @@ describe("compareVersions", () => {
   test("a prerelease is below its release", () => {
     expect(compareVersions("0.2.0-rc.1", "0.2.0")).toBeLessThan(0);
     expect(compareVersions("0.2.0", "0.2.0-rc.1")).toBeGreaterThan(0);
+  });
+
+  test("prereleases of one release order by semver precedence", () => {
+    expect(compareVersions("0.2.0-rc.1", "0.2.0-rc.2")).toBeLessThan(0);
+    expect(compareVersions("0.2.0-rc.10", "0.2.0-rc.2")).toBeGreaterThan(0);
+    expect(compareVersions("0.2.0-alpha", "0.2.0-beta")).toBeLessThan(0);
+    expect(compareVersions("0.2.0-rc", "0.2.0-rc.1")).toBeLessThan(0);
+    expect(compareVersions("0.2.0-1", "0.2.0-rc")).toBeLessThan(0);
+    expect(compareVersions("0.2.0-rc.1", "0.2.0-rc.1")).toBe(0);
   });
 
   test("build metadata does not count", () => {

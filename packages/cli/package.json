@@ -1,6 +1,6 @@
 {
   "name": "accreta",
-  "version": "0.1.4",
+  "version": "0.2.0-rc.1",
   "type": "module",
   "license": "MIT",
   "description": "A knowledge base an agent writes and maintains, with provenance to the sources and drift detection when they change.",
@@ -36,9 +36,9 @@
     "skills"
   ],
   "dependencies": {
-    "@accreta/adapters": "0.1.4",
-    "@accreta/core": "0.1.4",
-    "@accreta/mcp-server": "0.1.4",
+    "@accreta/adapters": "0.2.0-rc.1",
+    "@accreta/core": "0.2.0-rc.1",
+    "@accreta/mcp-server": "0.2.0-rc.1",
     "smol-toml": "^1.9.0"
   },
   "scripts": {

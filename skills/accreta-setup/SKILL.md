@@ -2,7 +2,7 @@
 name: accreta-setup
 description: Set up an accreta knowledge base over a corpus — pick a preset, write the config and a source declaration, generate the constitution, wire up MCP, and verify the first ingest. Use when someone wants an agent-maintained knowledge base with provenance and drift detection over a codebase, a document collection, or a research corpus; when a directory contains accreta.config.yaml and something is wrong with it; or when asked to add a source to an existing knowledge base.
 metadata:
-  requires: "0.1.4"
+  requires: "0.2.0-rc.1"
 ---
 
 # Setting up an accreta knowledge base

@@ -1,6 +1,6 @@
 {
   "name": "@accreta/adapter-delegated",
-  "version": "0.1.4",
+  "version": "0.2.0-rc.1",
   "type": "module",
   "license": "MIT",
   "description": "A source only the agent can reach: accreta declares it, the connector reads it.",
@@ -30,7 +30,7 @@
     "dist"
   ],
   "dependencies": {
-    "@accreta/core": "0.1.4"
+    "@accreta/core": "0.2.0-rc.1"
   },
   "scripts": {
     "build": "bun ../../../scripts/build-package.ts",

@@ -159,7 +159,8 @@ function errorCode(error: unknown): string {
   return (error as NodeJS.ErrnoException).code ?? String(error);
 }
 
-const RELEASE = /^\d+\.\d+\.\d+$/;
+// A prerelease counts: the floor names the release being cut, and that can be an rc.
+const RELEASE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)?$/;
 
 function readFloor(text: string): InstalledSkill["floor"] {
   const page = parsePage(text, SKILL_NAME);
@@ -181,8 +182,8 @@ function readFloor(text: string): InstalledSkill["floor"] {
 const VERSION = /^(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
 /**
- * Numeric on the three parts, as `scripts/check-version.ts` compares; build metadata ignored and a
- * prerelease below its release. Two prereleases of one release tie: a floor is never one.
+ * Semver precedence, as `scripts/check-version.ts` compares: build metadata ignored, a prerelease
+ * below its release, and prereleases ordered by their dot-separated identifiers.
  */
 export function compareVersions(a: string, b: string): number | null {
   const [left, right] = [VERSION.exec(a), VERSION.exec(b)];
@@ -191,6 +192,17 @@ export function compareVersions(a: string, b: string): number | null {
     const diff = Number(left[i]) - Number(right[i]);
     if (diff !== 0) return diff;
   }
-  if (Boolean(left[4]) === Boolean(right[4])) return 0;
-  return left[4] ? -1 : 1;
+  if (!left[4] || !right[4]) return left[4] ? -1 : right[4] ? 1 : 0;
+  return comparePrerelease(left[4].slice(1).split("."), right[4].slice(1).split("."));
+}
+
+function comparePrerelease(left: string[], right: string[]): number {
+  for (let i = 0; i < Math.min(left.length, right.length); i++) {
+    const [x, y] = [left[i]!, right[i]!];
+    const [xNum, yNum] = [/^\d+$/.test(x), /^\d+$/.test(y)];
+    if (xNum && yNum && Number(x) !== Number(y)) return Number(x) - Number(y);
+    if (xNum !== yNum) return xNum ? -1 : 1;
+    if (x !== y) return x < y ? -1 : 1;
+  }
+  return left.length - right.length;
 }

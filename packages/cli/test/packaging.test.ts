@@ -55,7 +55,7 @@ let accretaMcp = "";
 
 /** `accreta-core-0.1.1.tgz` is `@accreta/core`; `accreta-0.1.1.tgz` is `accreta`. */
 function nameOf(tarball: string): string {
-  const stem = tarball.replace(/-\d+\.\d+\.\d+\.tgz$/, "");
+  const stem = tarball.replace(/-\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\.tgz$/, "");
   return stem === "accreta" ? stem : `@accreta/${stem.replace(/^accreta-/, "")}`;
 }
 
