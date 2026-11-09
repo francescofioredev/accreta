@@ -129,6 +129,6 @@ export function resolveJudgeSettings(
   if (!settings.route) problems.push("judge.route is not set");
   // A file in a cloned knowledge base must not be able to name GITHUB_TOKEN as the key to send.
   if (!settings.apiKeyEnv.startsWith("ACCRETA_"))
-    problems.push(`judge.api_key_env must name a variable starting with ACCRETA_`);
+    problems.push("the api_key_env setting must name a variable starting with ACCRETA_");
   return settings;
 }

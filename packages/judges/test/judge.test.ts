@@ -102,6 +102,7 @@ describe("the key", () => {
       "judge:\n  route: local\n  url: http://x\n  api_key_env: GITHUB_TOKEN\n",
     );
     expect(() => createJudge(config, { GITHUB_TOKEN: "ghp_x" })).toThrow("starting with ACCRETA_");
+    expect(() => createJudge(config, { GITHUB_TOKEN: "ghp_x" })).not.toThrow("ghp_x");
   });
 
   test("a cloudflare url without {model} is refused", () => {

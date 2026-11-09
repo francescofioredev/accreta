@@ -126,7 +126,7 @@ export class TypeSafeJudge implements Judge {
   }
 
   #served(reply: Reply): string {
-    return reply.model ?? this.#o.model ?? "unspecified";
+    return reply.model ?? this.#o.model ?? this.#o.route.model ?? "unspecified";
   }
 
   #malformed(what: string): JudgeUnavailableError {
