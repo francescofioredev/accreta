@@ -20,6 +20,22 @@ export interface AccretaConfig {
   provenanceFormat: string;
   /** The link fields lint reads as supersession: undefined when not set, null when turned off. */
   supersessionFields?: SupersessionFields | InvalidSupersessionFields | null;
+  /** The `judge:` block as written; absent when the file has none, which keeps the judge off. */
+  judge?: JudgeBlock;
+}
+
+/** The `judge:` block as written. `resolveJudgeSettings` fills the defaults and the env overrides. */
+export interface JudgeBlock {
+  route?: string;
+  url?: string;
+  model?: string;
+  apiKeyEnv?: string;
+  rerankTop?: number;
+  supportThreshold?: number;
+  /** Dotted keys the block holds that no setting reads: a pasted secret is among them. */
+  unknownKeys: string[];
+  /** Dotted keys present with a value that cannot be used. */
+  invalidKeys: string[];
 }
 
 /** A `supersession_fields` value that is set but is not a pair, kept so lint can say so. */
@@ -91,7 +107,63 @@ export function configFromObject(data: unknown): AccretaConfig {
     ...("supersession_fields" in raw && {
       supersessionFields: asSupersessionFields(raw.supersession_fields),
     }),
+    ...("judge" in raw && { judge: asJudgeBlock(raw.judge) }),
   };
+}
+
+const JUDGE_KEYS = new Set(["route", "url", "model", "api_key_env", "rerank", "support"]);
+
+function asJudgeBlock(value: unknown): JudgeBlock {
+  const block: JudgeBlock = { unknownKeys: [], invalidKeys: [] };
+  if (value === null || value === undefined) return block;
+  if (typeof value !== "object" || Array.isArray(value)) {
+    block.invalidKeys.push("judge");
+    return block;
+  }
+  const raw = value as Record<string, unknown>;
+  const text = (key: string): string | undefined => {
+    if (!(key in raw) || raw[key] === null) return undefined;
+    const v = raw[key];
+    if (typeof v === "string" && v.trim().length > 0) return v.trim();
+    block.invalidKeys.push(key);
+    return undefined;
+  };
+  block.route = text("route");
+  block.url = text("url");
+  block.model = text("model");
+  block.apiKeyEnv = text("api_key_env");
+
+  const nested = (key: string, field: string, read: (v: unknown) => number | undefined) => {
+    const inner = raw[key];
+    if (inner === undefined || inner === null) return undefined;
+    if (typeof inner !== "object" || Array.isArray(inner)) {
+      block.invalidKeys.push(key);
+      return undefined;
+    }
+    const fields = inner as Record<string, unknown>;
+    for (const other of Object.keys(fields))
+      if (other !== field) block.unknownKeys.push(`${key}.${other}`);
+    if (!(field in fields)) return undefined;
+    const parsed = read(fields[field]);
+    if (parsed === undefined) block.invalidKeys.push(`${key}.${field}`);
+    return parsed;
+  };
+  block.rerankTop = nested("rerank", "top", asRerankTop);
+  block.supportThreshold = nested("support", "threshold", asThreshold);
+
+  for (const key of Object.keys(raw)) if (!JUDGE_KEYS.has(key)) block.unknownKeys.push(key);
+  return block;
+}
+
+/** How many of search's hits a judge may be asked about: search itself returns at most 50. */
+export function asRerankTop(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 50
+    ? value
+    : undefined;
+}
+
+export function asThreshold(value: unknown): number | undefined {
+  return typeof value === "number" && value > 0 && value <= 1 ? value : undefined;
 }
 
 /** Parse the text of an `accreta.config.yaml`. */

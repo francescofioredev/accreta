@@ -2,6 +2,7 @@ export type {
   AccretaConfig,
   ConfigCheck,
   InvalidSupersessionFields,
+  JudgeBlock,
   SupersessionFields,
 } from "./config.ts";
 export {
@@ -92,3 +93,21 @@ export { countPagesCiting } from "./query/citing.ts";
 export type { PageInfo, PageRequest } from "./query/paging.ts";
 export { DEFAULT_PAGE_LIMIT, InvalidCursorError, MAX_PAGE_LIMIT } from "./query/paging.ts";
 export { StaleIndexError } from "./query/tables.ts";
+
+export type {
+  Judge,
+  JudgeCandidate,
+  JudgeIdentity,
+  JudgeProbe,
+  JudgeSettings,
+  RankedCandidate,
+  SupportResult,
+  SupportVerdict,
+} from "./judge.ts";
+export {
+  JUDGE_DEFAULTS,
+  JudgeConfigError,
+  JudgeUnavailableError,
+  SUPPORT_VERDICTS,
+  resolveJudgeSettings,
+} from "./judge.ts";
