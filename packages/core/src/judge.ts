@@ -10,7 +10,7 @@ import { asRerankTop, asThreshold, type JudgeBlock } from "./config.ts";
 export interface JudgeIdentity {
   /** The route that answered: `typesafe`, `cloudflare`, `local`. */
   judge: string;
-  /** The model the server says it used, not the alias that was asked for. */
+  /** The model the server says it used; the requested one when the reply does not say. */
   model: string;
 }
 
@@ -96,7 +96,9 @@ export function resolveJudgeSettings(
   env: Env = {},
 ): JudgeSettings | null {
   if (!block) return null;
-  const problems = block.invalidKeys.map((key) => `judge.${key} is not usable`);
+  const problems = block.invalidKeys.map((key) =>
+    key === "judge" ? "judge is not a mapping" : `judge.${key} is not usable`,
+  );
   const text = (name: string) => {
     const value = env[`ACCRETA_JUDGE_${name}`]?.trim();
     return value ? value : undefined;
@@ -125,5 +127,8 @@ export function resolveJudgeSettings(
     problems,
   };
   if (!settings.route) problems.push("judge.route is not set");
+  // A file in a cloned knowledge base must not be able to name GITHUB_TOKEN as the key to send.
+  if (!settings.apiKeyEnv.startsWith("ACCRETA_"))
+    problems.push(`judge.api_key_env must name a variable starting with ACCRETA_`);
   return settings;
 }

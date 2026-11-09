@@ -27,13 +27,13 @@ describe("the judge block", () => {
       ACCRETA_JUDGE_ROUTE: "typesafe",
       ACCRETA_JUDGE_RERANK_TOP: "5",
       ACCRETA_JUDGE_SUPPORT_THRESHOLD: "0.8",
-      ACCRETA_JUDGE_API_KEY_ENV: "OTHER",
+      ACCRETA_JUDGE_API_KEY_ENV: "ACCRETA_OTHER",
     });
     expect(settings).toMatchObject({
       route: "typesafe",
       rerankTop: 5,
       supportThreshold: 0.8,
-      apiKeyEnv: "OTHER",
+      apiKeyEnv: "ACCRETA_OTHER",
     });
   });
 
@@ -61,5 +61,13 @@ describe("the judge block", () => {
   test("an empty block has no route", () => {
     const settings = resolveJudgeSettings(parseConfig("judge:\n").judge, {});
     expect(settings?.problems).toEqual(["judge.route is not set"]);
+  });
+});
+
+describe("judge block shape", () => {
+  test("a scalar block says so", () => {
+    expect(resolveJudgeSettings(parseConfig("judge: 3").judge, {})?.problems).toContain(
+      "judge is not a mapping",
+    );
   });
 });

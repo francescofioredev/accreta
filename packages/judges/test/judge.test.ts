@@ -28,7 +28,7 @@ describe("no judge configured", () => {
 describe("the same config on two routes", () => {
   const cases = [
     {
-      name: "typesafe",
+      name: "local",
       opts: {},
       config: (url: string) => `judge:\n  route: local\n  url: ${url}\n`,
     },
@@ -59,7 +59,7 @@ describe("the same config on two routes", () => {
       expect(ranked[0]).toMatchObject({ model: "fake-jev-1" });
       const verdict = await judge!.supports("Ice reflects light", "Ice is highly reflective.");
       expect(verdict).toMatchObject({ verdict: "supports", probability: 0.8, model: "fake-jev-1" });
-      expect(verdict.judge).toBe(c.name === "typesafe" ? "local" : "cloudflare");
+      expect(verdict.judge).toBe(c.name);
     });
   }
 
@@ -85,11 +85,37 @@ describe("the same config on two routes", () => {
 });
 
 describe("the key", () => {
+  test("the typesafe route sends its model in the body and a bearer", async () => {
+    const server = await fake();
+    const judge = createJudge(
+      parseConfig(`judge:\n  route: typesafe\n  url: ${server.url}\n`),
+      { ACCRETA_JUDGE_KEY: "k1" },
+      fast,
+    );
+    await judge!.probe!();
+    expect(server.requests[0]?.body.model).toBe("jev-latest");
+    expect(server.requests[0]?.headers.authorization).toBe("Bearer k1");
+  });
+
+  test("api_key_env must be an ACCRETA_ variable", () => {
+    const config = parseConfig(
+      "judge:\n  route: local\n  url: http://x\n  api_key_env: GITHUB_TOKEN\n",
+    );
+    expect(() => createJudge(config, { GITHUB_TOKEN: "ghp_x" })).toThrow("starting with ACCRETA_");
+  });
+
+  test("a cloudflare url without {model} is refused", () => {
+    const config = parseConfig("judge:\n  route: cloudflare\n  url: http://x/run\n");
+    expect(() => createJudge(config, { ACCRETA_JUDGE_KEY: "k" })).toThrow("{model}");
+  });
+
   test("is read from the variable api_key_env names and sent as a bearer", async () => {
     const server = await fake();
     const judge = createJudge(
-      parseConfig(`judge:\n  route: local\n  url: ${server.url}\n  api_key_env: MY_JUDGE_VAR\n`),
-      { MY_JUDGE_VAR: "secret-from-env", ACCRETA_JUDGE_KEY: "other" },
+      parseConfig(
+        `judge:\n  route: local\n  url: ${server.url}\n  api_key_env: ACCRETA_MY_JUDGE_VAR\n`,
+      ),
+      { ACCRETA_MY_JUDGE_VAR: "secret-from-env", ACCRETA_JUDGE_KEY: "other" },
       fast,
     );
     await judge!.probe!();

@@ -37,6 +37,9 @@ export function createJudge(
   const url = settings.url ?? route.url;
   if (!url) throw new JudgeConfigError(`judge.url is required for the ${name} route`);
 
+  if (route.modelIn === "url" && !url.includes("{model}")) {
+    throw new JudgeConfigError(`judge.url for the ${name} route must contain {model}`);
+  }
   const apiKey = env[settings.apiKeyEnv]?.trim() || undefined;
   if (route.keyRequired && !apiKey) {
     throw new JudgeConfigError(`${settings.apiKeyEnv} is not set; the ${name} route needs a key`);
