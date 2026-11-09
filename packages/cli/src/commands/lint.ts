@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { lintKnowledgeBase, openIndex } from "@accreta/core";
+import { isAdvisory, lintKnowledgeBase, openIndex } from "@accreta/core";
 import { countUnchecked, unloadedFindings } from "@accreta/adapters";
 import { findWorkspace } from "../workspace.ts";
 import {
@@ -52,6 +52,8 @@ export async function runLint(
       return refuseCursor(ctx, error);
     }
     const findings = report.findings;
+    const advisory = report.advisoryCount ?? 0;
+    const blocking = report.total - advisory;
 
     if (options.json) {
       printJson(ctx, {
@@ -60,13 +62,14 @@ export async function runLint(
         citations_checked: report.citationsChecked,
         citations_unchecked: report.citationsUnchecked,
         unchecked_reasons: report.uncheckedReasons,
-        findings,
+        advisory_count: advisory,
+        findings: findings.map((f) => (isAdvisory(f.kind) ? { ...f, advisory: true } : f)),
         nextCursor: report.nextCursor,
         // An unloaded-source finding quotes sources/*.yaml.
         _provenance: provenance(LINT_FIELDS, DRIFT_NOTICE),
       });
       // The whole list, not this page: a later page must not read as a clean pass.
-      return report.total > 0 ? 1 : 0;
+      return blocking > 0 ? 1 : 0;
     }
 
     // A count rather than findings: the citations belong to a source accreta
@@ -98,19 +101,31 @@ export async function runLint(
       else byKind.set(finding.kind, [finding]);
     }
 
-    for (const [kind, group] of byKind) {
-      // A page holds only some of each kind, so its count must not read as the kind's total.
-      ctx.out(`\n${kind} (${group.length}${page ? " on this page" : ""})`);
-      for (const finding of group)
-        ctx.out(`  ${printable(finding.path)}: ${printable(finding.detail)}`);
+    const printKinds = (advisoryKinds: boolean) => {
+      for (const [kind, group] of byKind) {
+        if (isAdvisory(group[0]!.kind) !== advisoryKinds) continue;
+        // A page holds only some of each kind, so its count must not read as the kind's total.
+        ctx.out(`\n${kind} (${group.length}${page ? " on this page" : ""})`);
+        for (const finding of group)
+          ctx.out(`  ${printable(finding.path)}: ${printable(finding.detail)}`);
+      }
+    };
+    printKinds(false);
+    if (advisory > 0) {
+      ctx.out("\nadvisory (listed for review; they do not change the exit code)");
+      printKinds(true);
     }
-    ctx.out(`\n${report.total} finding(s) across ${report.pagesChecked} page(s).`);
+    ctx.out(
+      blocking === 0
+        ? `\n${report.pagesChecked} page(s) checked, nothing to fix; ${advisory} advisory finding(s).`
+        : `\n${blocking} finding(s) across ${report.pagesChecked} page(s)${advisory > 0 ? `, and ${advisory} advisory` : ""}.`,
+    );
     ctx.out(checked);
     if (unchecked) ctx.out(unchecked);
     if (page) reportPage(ctx, findings.length, report.total, "finding(s)", report.nextCursor);
 
     // A non-zero exit so CI can fail on an unresolvable link.
-    return 1;
+    return blocking > 0 ? 1 : 0;
   } finally {
     db.close();
   }

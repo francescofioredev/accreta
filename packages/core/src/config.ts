@@ -18,6 +18,12 @@ export interface AccretaConfig {
   linkFields: string[];
   /** Template used to render a provenance citation. */
   provenanceFormat: string;
+  /** Literal that ends a sentence declared as inference, which needs no footnote. */
+  inferenceMarker: string;
+  /** Whether lint reports prose sentences with neither a footnote nor the inference marker. */
+  lintUncitedSentences: boolean;
+  /** Page types `uncited-sentence` skips. */
+  uncitedExemptTypes: string[];
   /** The link fields lint reads as supersession: undefined when not set, null when turned off. */
   supersessionFields?: SupersessionFields | InvalidSupersessionFields | null;
 }
@@ -38,6 +44,9 @@ export const DEFAULT_CONFIG: AccretaConfig = {
   pageTypes: ["note", "source", "concept", "decision", "synthesis"],
   linkFields: ["related", "supersedes", "superseded_by", "amends", "amended_by", "discussed_in"],
   provenanceFormat: "{source} @ {rev} · {path}#{locator}",
+  inferenceMarker: "(inference)",
+  lintUncitedSentences: false,
+  uncitedExemptTypes: [],
 };
 
 export const DEFAULT_SUPERSESSION_FIELDS: SupersessionFields = {
@@ -83,11 +92,22 @@ export function configFromObject(data: unknown): AccretaConfig {
       ? (raw.provenance as Record<string, unknown>)
       : {};
 
+  const lintBlock =
+    raw.lint && typeof raw.lint === "object" && !Array.isArray(raw.lint)
+      ? (raw.lint as Record<string, unknown>)
+      : {};
+
   return {
     knowledgeBase: asString(raw.knowledge_base, DEFAULT_CONFIG.knowledgeBase),
     pageTypes: asStringArray(raw.page_types, DEFAULT_CONFIG.pageTypes),
     linkFields: asStringArray(raw.link_fields, DEFAULT_CONFIG.linkFields),
     provenanceFormat: asString(provenance.format, DEFAULT_CONFIG.provenanceFormat),
+    inferenceMarker:
+      asString(provenance.inference_marker, "").trim() || DEFAULT_CONFIG.inferenceMarker,
+    lintUncitedSentences: lintBlock.uncited_sentences === true,
+    uncitedExemptTypes: Array.isArray(lintBlock.uncited_exempt_types)
+      ? lintBlock.uncited_exempt_types.filter((v): v is string => typeof v === "string")
+      : [],
     ...("supersession_fields" in raw && {
       supersessionFields: asSupersessionFields(raw.supersession_fields),
     }),

@@ -185,6 +185,8 @@ describe("MCP prompts", () => {
         for (const extra of ["last_verified_revision", "unknown"]) known.add(extra);
         // A check_drift field only a refused citation emits; injection.test.ts sees it emitted.
         known.add("refused");
+        // The config key the inference rule names.
+        for (const key of ["provenance", "inference_marker"]) known.add(key);
         // One loop hands work to another by name.
         for (const prompt of (await client.listPrompts()).prompts) known.add(prompt.name);
         for (const name of Object.keys(ARGS)) {
@@ -262,6 +264,16 @@ describe("MCP prompts", () => {
     expect(text).toContain("open the lines they cite yourself");
     expect(text).toContain("Never add a claim");
     expect(text).toContain("call `lint_knowledge_base`");
+  });
+
+  test("verify marks an inference, and an answer tags text the pages do not support", async () => {
+    const verify = await withClient(false, (c) => render(c, "verify_citations"));
+    expect(verify).toContain("ending in the inference marker");
+    expect(verify).toContain("provenance.inference_marker");
+    const answer = await withClient(false, (c) => render(c, "answer_with_citations"));
+    expect(answer).toContain(
+      "End any sentence that does not come from a page with the inference marker",
+    );
   });
 
   test("verify refuses a page list that would start a new line", async () => {

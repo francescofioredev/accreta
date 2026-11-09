@@ -142,7 +142,7 @@ export interface FootnoteOrphan {
 
 export const DEFINITION_RE = /^\[\^([^\]\s]+)\]:\s*(.*?)\s*$/;
 export const FENCE_RE = /^\s*(```|~~~)/;
-const REFERENCE_RE = /(?<!\\)\[\^([^\]\s]+)\](?!:)/g;
+export const REFERENCE_RE = /(?<!\\)\[\^([^\]\s]+)\](?!:)/g;
 const INLINE_CODE_RE = /(`+).*?\1/g;
 // Stands in for the `[` of a marker inside inline code, so the code survives into the claim.
 const MASKED = "\0";
@@ -257,7 +257,7 @@ export function readFootnotes(body: string): { footnotes: Footnote[]; orphans: F
 // than a lookbehind: the lookbehind was 40x slower, and this runs on every reindex.
 const SENTENCE_END_RE = /([.!?](?:\[\^[^\]\s]+\])*)\s+(?=[A-Z`*"(])/;
 
-function sentences(paragraph: string): string[] {
+export function sentences(paragraph: string): string[] {
   const parts = paragraph.split(SENTENCE_END_RE);
   const out: string[] = [];
   for (let i = 0; i < parts.length; i += 2) out.push(parts[i]! + (parts[i + 1] ?? ""));

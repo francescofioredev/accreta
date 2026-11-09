@@ -87,7 +87,14 @@ export { searchPages } from "./query/search.ts";
 export type { CanonicalMatch, PageRecord, Relation } from "./query/page.ts";
 export { findCanonical, findCanonicalPage, findRelated, getPage } from "./query/page.ts";
 export type { LintFinding, LintFindingKind, LintReport } from "./query/lint.ts";
-export { LINT_FINDING_KINDS, lint, lintCitations, lintKnowledgeBase } from "./query/lint.ts";
+export {
+  ADVISORY_LINT_KINDS,
+  isAdvisory,
+  LINT_FINDING_KINDS,
+  lint,
+  lintCitations,
+  lintKnowledgeBase,
+} from "./query/lint.ts";
 export { countPagesCiting } from "./query/citing.ts";
 export type { PageInfo, PageRequest } from "./query/paging.ts";
 export { DEFAULT_PAGE_LIMIT, InvalidCursorError, MAX_PAGE_LIMIT } from "./query/paging.ts";

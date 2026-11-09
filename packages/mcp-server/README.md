@@ -33,7 +33,7 @@ another — it needs no filesystem access to the knowledge base itself, only to 
 | `find_canonical` | Resolve a term, including aliases, to the page that defines it. Paged: `count` is the total; follow `nextCursor`. |
 | `check_drift` | Which pages their sources have moved out from under. |
 | `list_recent_changes` | What changed in a source since a revision. |
-| `lint_knowledge_base` | Unresolvable links, missing provenance, unknown page types, and a count of the citations it could not check. Filter by `kinds`. Paged: `count` is the total; follow `nextCursor`. |
+| `lint_knowledge_base` | Unresolvable links, missing provenance, unknown page types, and a count of the citations it could not check. Findings of an advisory kind (`uncited-sentence`) carry `advisory: true`, counted in `advisory_count`. Filter by `kinds`. Paged: `count` is the total; follow `nextCursor`. |
 | `cite` | The citation for a place in a source, in this knowledge base's footnote format, pinned to the source's current revision when accreta can read the source. Read-only. |
 | `update_verified_revision` | Write. Registered only when `ACCRETA_ALLOW_WRITES=1`. |
 
