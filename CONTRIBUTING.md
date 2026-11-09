@@ -150,7 +150,7 @@ otherwise entirely Bun repository: bun cannot do the OIDC exchange
 2FA-bypass tokens that were the alternative — sensitive operations in August 2026, direct
 publishing in January 2027.
 
-Publishing seven packages is not atomic: npm takes them one at a time, and any of them can
+Publishing eight packages is not atomic: npm takes them one at a time, and any of them can
 fail — a scope without a trusted publisher configured, a network blip. The workflow therefore
 skips whatever is already at the tag's version, so re-running a half-finished release picks up
 where it stopped instead of dying on the first package that already succeeded. Re-running is

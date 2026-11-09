@@ -21,6 +21,7 @@ export const PACKAGES = [
   "@accreta/adapter-git",
   "@accreta/adapter-delegated",
   "@accreta/adapters",
+  "@accreta/judges",
   "@accreta/mcp-server",
   "accreta",
 ];
