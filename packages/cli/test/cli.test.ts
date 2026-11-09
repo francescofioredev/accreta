@@ -1822,7 +1822,7 @@ describe("accreta lint, advisory findings", () => {
   test("an uncited sentence is listed apart and leaves the exit code at zero", async () => {
     await setup("lint:\n  uncited_sentences: true\n");
     expect(await cli("lint")).toBe(0);
-    expect(stdout()).toContain("advisory");
+    expect(stdout()).toContain("advisory (listed for review; they do not change the exit code)");
     expect(stdout()).toContain("uncited-sentence (1)");
     expect(stdout()).toContain("1 advisory finding(s)");
   });
@@ -1840,6 +1840,16 @@ describe("accreta lint, advisory findings", () => {
     writePage("b.md", "---\ntype: note\nrelated: [[missing]]\n---\n\n# B\n");
     await cli("reindex");
     expect(await cli("lint")).toBe(1);
+  });
+
+  test("a page without advisory findings prints no empty advisory heading", async () => {
+    await setup("lint:\n  uncited_sentences: true\n");
+    writePage("b.md", "---\ntype: note\nrelated: [[missing]]\n---\n\n# B\n");
+    await cli("reindex");
+    output = [];
+    expect(await cli("lint", "--limit", "1")).toBe(1);
+    expect(stdout()).toContain("dangling-link");
+    expect(stdout()).not.toContain("advisory (listed");
   });
 
   test("off unless the key is set", async () => {

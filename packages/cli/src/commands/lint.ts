@@ -111,7 +111,7 @@ export async function runLint(
       }
     };
     printKinds(false);
-    if (advisory > 0) {
+    if (findings.some((f) => isAdvisory(f.kind))) {
       ctx.out("\nadvisory (listed for review; they do not change the exit code)");
       printKinds(true);
     }

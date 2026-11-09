@@ -61,6 +61,18 @@ test("list items are sentences; a bare link or a label is not", () => {
   ]);
 });
 
+test("a sentence is reported at its own line, not its paragraph's first", () => {
+  const body = "First line is cited.[^a]\nSecond line is bare and long.\n\n[^a]: x";
+  expect(uncitedSentences(body, MARK)).toEqual([
+    { line: 2, text: "Second line is bare and long." },
+  ]);
+});
+
+test("a fence ends a definition, and a multi-line comment is skipped", () => {
+  expect(texts("[^a]: x\n\n```\ncode\n```\nProse after the fence here.")).toHaveLength(1);
+  expect(texts("<!-- a comment\nwith several words inside -->\n")).toEqual([]);
+});
+
 test("the marker is configurable", () => {
   expect(texts("Le nubi raffreddano il pianeta (deduzione).", "(deduzione)")).toEqual([]);
   expect(texts("Le nubi raffreddano il pianeta (inference).", "(deduzione)")).toHaveLength(1);

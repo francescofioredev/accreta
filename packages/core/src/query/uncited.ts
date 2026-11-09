@@ -11,6 +11,8 @@ const MIN_WORDS = 3;
 const LIST_MARKER_RE = /^ {0,3}(?:[-*+]|\d+[.)])\s+/;
 const SKIPPED_LINE_RE = /^(?: {0,3}\||\s*<|\s*\[[^\]]+\]:\s*\S)/;
 
+const norm = (line: string) => line.trim().replace(/\s+/g, " ");
+
 const hasReference = (sentence: string) => [...sentence.matchAll(REFERENCE_RE)].length > 0;
 
 const endsWithMarker = (sentence: string, marker: string) =>
@@ -29,16 +31,23 @@ function wordCount(sentence: string): number {
 /** Prose sentences with neither a footnote nor the marker; a sentence that is only the marker marks the one before. */
 export function uncitedSentences(body: string, marker: string): UncitedSentence[] {
   const out: UncitedSentence[] = [];
-  let paragraph: { line: number; text: string[] } | null = null;
+  let paragraph: { text: string[]; lines: number[] } | null = null;
+  let inComment = false;
   let fenced = false;
   let inDefinition = false;
   let afterBlank = false;
 
   const flush = () => {
     if (paragraph === null) return;
-    const parts = sentences(paragraph.text.join(" ").replace(/\s+/g, " ").trim());
+    const { text, lines } = paragraph;
+    const starts = text.map((_, i) => text.slice(0, i).join(" ").length + (i > 0 ? 1 : 0));
+    const lineAt = (offset: number) => lines[starts.findLastIndex((start) => start <= offset)]!;
+    let offset = 0;
+    const parts = sentences(text.join(" "));
     parts.forEach((part, index) => {
       const sentence = part.trim();
+      const at = offset;
+      offset += part.length + 1;
       const markerOnly =
         endsWithMarker(sentence, marker) && wordCount(sentence.replace(marker, "")) === 0;
       if (markerOnly) {
@@ -50,7 +59,7 @@ export function uncitedSentences(body: string, marker: string): UncitedSentence[
       }
       if (hasReference(sentence) || endsWithMarker(sentence, marker)) return;
       if (wordCount(sentence) < MIN_WORDS) return;
-      out.push({ line: paragraph!.line, text: sentence });
+      out.push({ line: lineAt(at), text: sentence });
     });
     paragraph = null;
   };
@@ -61,10 +70,20 @@ export function uncitedSentences(body: string, marker: string): UncitedSentence[
     if (FENCE_RE.test(line)) {
       flush();
       fenced = !fenced;
+      inDefinition = false;
       afterBlank = false;
       return;
     }
     if (fenced) return;
+    if (inComment) {
+      inComment = !line.includes("-->");
+      return;
+    }
+    if (/^\s*<!--/.test(line) && !line.includes("-->")) {
+      flush();
+      inComment = true;
+      return;
+    }
     if (DEFINITION_RE.test(line)) {
       flush();
       inDefinition = true;
@@ -92,15 +111,18 @@ export function uncitedSentences(body: string, marker: string): UncitedSentence[
       flush();
       const text = line.replace(LIST_MARKER_RE, "");
       if (/^(?:([-*_])(\s*\1){2,})\s*$/.test(line.trim())) return;
-      paragraph = { line: index + 1, text: [text] };
+      paragraph = { text: [norm(text)], lines: [index + 1] };
       return;
     }
     if (BLOCK_START_RE.test(line)) {
       flush();
       return;
     }
-    if (paragraph === null) paragraph = { line: index + 1, text: [line] };
-    else paragraph.text.push(line);
+    if (paragraph === null) paragraph = { text: [norm(line)], lines: [index + 1] };
+    else {
+      paragraph.text.push(norm(line));
+      paragraph.lines.push(index + 1);
+    }
   });
   flush();
   return out;
