@@ -1,6 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { checkConfig, compileCitationTemplate, DEFAULT_CONFIG, sqliteSupport } from "@accreta/core";
+import {
+  checkConfig,
+  compileCitationTemplate,
+  DEFAULT_CONFIG,
+  sqliteSupport,
+  verdictFileProblem,
+} from "@accreta/core";
 import {
   clashingIds,
   declaredId,
@@ -61,7 +67,17 @@ export async function doctor(ctx: CommandContext, version: string): Promise<numb
       `    → it needs 3 to 40 characters on one line, with a letter or digit; "${DEFAULT_CONFIG.inferenceMarker}" is in force`,
     );
   }
-
+  if (workspace.config.verdictFileRejected !== undefined) {
+    ctx.out(
+      `  refused: provenance.verdict_file "${printable(workspace.config.verdictFileRejected)}" is not usable`,
+    );
+    ctx.out("    → it must be a relative .jsonl path inside the root and outside .git");
+  }
+  const verdictProblem = verdictFileProblem(workspace.root, workspace.config);
+  if (verdictProblem !== undefined) {
+    ctx.out(`  broken: ${printableMessage(verdictProblem)}; verdicts are neither read nor written`);
+    exitCode = 1;
+  }
   ctx.out("\nruntime");
   const runtime = process.versions.bun ? `bun ${process.versions.bun}` : `node ${process.version}`;
   const unsupported = sqliteSupport();

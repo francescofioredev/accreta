@@ -2059,6 +2059,60 @@ describe("accreta lint --judge", () => {
     expect(existsSync(join(root, "knowledge", "verdicts.jsonl"))).toBe(false);
   });
 
+  test("a verdict_file that is a page or outside the root is refused; the page is left alone", async () => {
+    await setup("");
+    const original = readFileSync(join(root, "knowledge", "p.md"), "utf-8");
+    const config = (file: string) =>
+      writeFileSync(
+        join(root, "accreta.config.yaml"),
+        `provenance:\n  format: "{source} @ {rev} · {path}#{locator}"\n  verdict_file: ${file}\n`,
+      );
+    config("knowledge/p.md");
+    expect(await cli("verdict", "p.md", "w", "unsupported", "--model", "m")).toBe(0);
+    expect(readFileSync(join(root, "knowledge", "p.md"), "utf-8")).toBe(original);
+    expect(existsSync(join(root, "knowledge", "verdicts.jsonl"))).toBe(true);
+    output = [];
+    await cli("doctor");
+    expect(stdout()).toContain('verdict_file "knowledge/p.md" is not usable');
+
+    const outside = mkdtempSync(join(tmpdir(), "accreta-outside-"));
+    try {
+      symlinkSync(outside, join(root, "out"));
+      config("out/v.jsonl");
+      errors = [];
+      expect(await cli("verdict", "p.md", "w", "unsupported", "--model", "m")).toBe(1);
+      expect(stderr()).toContain("outside");
+      expect(readdirSync(outside)).toEqual([]);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  test("an unpinned footnote and a duplicated one take no verdict; a footnote id cannot escape the terminal", async () => {
+    await setup("");
+    const page = join(root, "knowledge", "p.md");
+    const original = readFileSync(page, "utf-8");
+    writeFileSync(page, original.replace(/\[\^s\]: docs @ \w+/, "[^s]: docs @ unknown"));
+    await cli("reindex");
+    errors = [];
+    expect(await cli("verdict", "p.md", "s", "supported", "--model", "m")).toBe(1);
+
+    writeFileSync(page, original + "\n[^w]: docs @ ffffffffffff · a.md#L2\n");
+    await cli("reindex");
+    errors = [];
+    expect(await cli("verdict", "p.md", "w", "supported", "--model", "m")).toBe(1);
+    expect(stderr()).toContain("more than once");
+
+    writeFileSync(
+      page,
+      original.replace("[^o]", "[^o\u001b[2J]").replace(/\[\^s\]/g, "[^s\u001b[2J]"),
+    );
+    await cli("reindex");
+    output = [];
+    await cli("verdict", "p.md", "s\u001b[2J", "supported", "--model", "m");
+    expect(stdout()).not.toContain("\u001b");
+  });
+
   test("a hostile line in the verdict file cannot rewrite the output", async () => {
     await setup("");
     await cli("verdict", "p.md", "w", "unsupported", "--model", "m");

@@ -95,12 +95,18 @@ describe("provenance.inference_marker and provenance.verdict_file", () => {
     expect(marker('""').inferenceMarkerRejected).toBeUndefined();
   });
 
-  test.each(['"/etc/verdicts.jsonl"', '"../out.jsonl"', '"a/../../b"'])(
-    "a verdict file at %s is ignored",
-    (value) => {
-      expect(parseConfig(`provenance:\n  verdict_file: ${value}\n`).verdictFile).toBeUndefined();
-    },
-  );
+  test.each([
+    '"/etc/verdicts.jsonl"',
+    '"../out.jsonl"',
+    '"a/../../b"',
+    '"knowledge/p.md"',
+    '"accreta.config.yaml"',
+    '".git/hooks/v.jsonl"',
+  ])("a verdict file at %s is ignored", (value) => {
+    const config = parseConfig(`provenance:\n  verdict_file: ${value}\n`);
+    expect(config.verdictFile).toBeUndefined();
+    expect(config.verdictFileRejected).toBeDefined();
+  });
 
   test("a relative verdict file is kept", () => {
     expect(parseConfig("provenance:\n  verdict_file: kb/v.jsonl\n").verdictFile).toBe("kb/v.jsonl");

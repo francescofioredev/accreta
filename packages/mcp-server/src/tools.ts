@@ -810,6 +810,7 @@ export interface RecordVerdictInput {
 function verdictToken(line: {
   page: string;
   footnote: string;
+  citation: string;
   revision: string;
   sentence: string;
   verdict: string;
@@ -817,7 +818,15 @@ function verdictToken(line: {
 }): string {
   return createHash("sha256")
     .update(
-      [line.page, line.footnote, line.revision, line.sentence, line.verdict, line.model].join("\0"),
+      [
+        line.page,
+        line.footnote,
+        line.citation,
+        line.revision,
+        line.sentence,
+        line.verdict,
+        line.model,
+      ].join("\0"),
     )
     .digest("hex")
     .slice(0, 16);
@@ -860,7 +869,14 @@ export function recordVerdictTool(ctx: ToolContext, input: RecordVerdictInput, w
       _provenance: provenance(VERDICT_FIELDS),
     };
   }
-  writeVerdict(ctx.root, ctx.config, plan.line);
+  try {
+    writeVerdict(ctx.root, ctx.config, plan.line);
+  } catch (error) {
+    return {
+      ok: false as const,
+      message: `The verdict file cannot be written: ${error instanceof Error ? error.message : String(error)}.`,
+    };
+  }
   return {
     ok: true as const,
     verdict: plan.line,

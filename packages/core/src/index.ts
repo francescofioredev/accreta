@@ -131,6 +131,7 @@ export {
   sentenceHash,
   verdictFindings,
   verdictKey,
+  verdictFileProblem,
   verdictPathFor,
   writeVerdict,
   type KeyedCitation,

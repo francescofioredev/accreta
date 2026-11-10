@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { openIndex, planVerdict, writeVerdict } from "@accreta/core";
 import { findWorkspace } from "../workspace.ts";
-import { printable, printJson, type CommandContext } from "./shared.ts";
+import { printable, printableMessage, printJson, type CommandContext } from "./shared.ts";
 
 /** Record that a re-read citation does or does not back its sentence, in the verdict file. */
 export async function verdict(
@@ -34,11 +34,19 @@ export async function verdict(
       ctx.err(printable(plan.message));
       return 1;
     }
-    const file = writeVerdict(workspace.root, workspace.config, plan.line);
+    let file: string;
+    try {
+      file = writeVerdict(workspace.root, workspace.config, plan.line);
+    } catch (error) {
+      ctx.err(
+        `The verdict file cannot be written: ${printableMessage(error instanceof Error ? error.message : String(error))}.`,
+      );
+      return 1;
+    }
     if (args.json) printJson(ctx, { ok: true, verdict: plan.line });
     else {
       ctx.out(
-        `Recorded ${plan.line.verdict} for [^${plan.line.footnote}] on ${printable(plan.line.page)} at ${printable(plan.line.revision)} (writer cli, model ${printable(plan.line.model)}, declared).`,
+        `Recorded ${plan.line.verdict} for [^${printable(plan.line.footnote)}] on ${printable(plan.line.page)} at ${printable(plan.line.revision)} (writer cli, model ${printable(plan.line.model)}, declared).`,
       );
       ctx.out(
         `Written to ${printable(file.slice(workspace.root.length + 1))}; commit it with the page.`,

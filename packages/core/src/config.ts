@@ -25,6 +25,8 @@ export interface AccretaConfig {
   inferenceMarkerRejected?: string;
   /** Relative path of the verdict file; absent means `verdicts.jsonl` beside the pages. */
   verdictFile?: string;
+  /** The `verdict_file` that was set but refused, so doctor can say the default is in force. */
+  verdictFileRejected?: string;
   /** Whether lint reports prose sentences with neither a footnote nor the inference marker. */
   lintUncitedSentences: boolean;
   /** Page types `uncited-sentence` skips. */
@@ -152,14 +154,23 @@ function markerFields(
     : { inferenceMarker: DEFAULT_CONFIG.inferenceMarker, inferenceMarkerRejected: marker };
 }
 
-function verdictFileField(value: unknown): Pick<AccretaConfig, "verdictFile"> {
+function verdictFileField(
+  value: unknown,
+): Pick<AccretaConfig, "verdictFile" | "verdictFileRejected"> {
   const path = asString(value, "").trim();
-  return path !== "" && validVerdictPath(path) ? { verdictFile: path } : {};
+  if (path === "") return {};
+  return validVerdictPath(path) ? { verdictFile: path } : { verdictFileRejected: path };
 }
 
+// A .jsonl name keeps the file from being a page, the config or a git file; the rest keeps it inside the root.
 function validVerdictPath(path: string): boolean {
+  const parts = path.split(/[\\/]/);
   return (
-    !isAbsolute(path) && !path.split(/[\\/]/).includes("..") && !/[\p{Cc}\p{Zl}\p{Zp}]/u.test(path)
+    path.endsWith(".jsonl") &&
+    !isAbsolute(path) &&
+    !parts.includes("..") &&
+    !parts.some((part) => part.toLowerCase().startsWith(".git")) &&
+    !/[\p{Cc}\p{Zl}\p{Zp}]/u.test(path)
   );
 }
 

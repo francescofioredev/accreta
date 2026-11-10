@@ -1021,6 +1021,22 @@ describe("record_verdict", () => {
     expect(result.advisory_count).toBe(1);
   });
 
+  test("a token does not survive a re-cite of the footnote to other lines", () => {
+    page();
+    build(true);
+    const token = (recordVerdictTool(ctx, input, "mcp") as { confirm_token: string }).confirm_token;
+    ctx.db.close();
+    writePage(
+      "v.md",
+      "---\ntype: note\n---\n\n# V\n\nA claim the line does not back.[^a]\n\n[^a]: src @ rev1 · f.md#L9\n",
+    );
+    build(true);
+    expect(recordVerdictTool(ctx, { ...input, confirm_token: token }, "mcp")).toMatchObject({
+      dry_run: true,
+    });
+    expect(readVerdictFile(root, config).lines).toEqual([]);
+  });
+
   test("a footnote the page does not have is refused with no token", () => {
     page();
     build(true);

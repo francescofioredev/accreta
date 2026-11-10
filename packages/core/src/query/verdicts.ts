@@ -1,6 +1,14 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join, relative, isAbsolute } from "node:path";
 import { footnoteKey } from "../citations.ts";
 import type { AccretaConfig } from "../config.ts";
 import type { Database } from "../index-db/db.ts";
@@ -103,7 +111,8 @@ export function keyedCitations(db: Database): KeyedCitation[] {
   for (const r of rows) {
     if (r.source === null || r.path === null || r.locator === null) continue;
     if ((count.get(`${r.page_path}\0${footnoteKey(r.footnote)}`) ?? 0) > 1) continue;
-    const pinned = r.revision !== null && r.revision !== "" && r.revision !== UNPINNED_REVISION;
+    if (r.revision === UNPINNED_REVISION) continue;
+    const pinned = r.revision !== null && r.revision !== "";
     const revision = pinned
       ? (r.revision as string)
       : r.source === r.page_source && r.last_verified_revision
@@ -171,9 +180,29 @@ export function parseVerdicts(text: string): VerdictFile {
   return { lines, unreadable };
 }
 
+/** Why the verdict file cannot be used: a path that leaves the root through a symlink, or a file that is not one. */
+export function verdictFileProblem(root: string, config: AccretaConfig): string | undefined {
+  const path = verdictPathFor(root, config);
+  try {
+    if (existsSync(path) && lstatSync(path).isSymbolicLink())
+      return "the verdict file is a symlink";
+    let dir = dirname(path);
+    while (!existsSync(dir)) dir = dirname(dir);
+    const inside = relative(realpathSync(root), realpathSync(dir));
+    if (inside.startsWith("..") || isAbsolute(inside)) {
+      return "the verdict file's directory resolves outside the knowledge base's root";
+    }
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+  return undefined;
+}
+
 export function readVerdictFile(root: string, config: AccretaConfig): VerdictFile {
   const path = verdictPathFor(root, config);
-  if (!existsSync(path)) return { lines: [], unreadable: 0 };
+  if (verdictFileProblem(root, config) !== undefined || !existsSync(path)) {
+    return { lines: [], unreadable: 0 };
+  }
   return parseVerdicts(readFileSync(path, "utf-8"));
 }
 
@@ -230,6 +259,15 @@ export function planVerdict(
     (c) => c.pagePath === page.path && footnoteKey(c.footnote) === id,
   );
   if (all.length === 0) {
+    const rows = db
+      .prepare(`SELECT footnote FROM citations WHERE page_path = ?`)
+      .all(page.path) as { footnote: string }[];
+    if (rows.filter((r) => footnoteKey(r.footnote) === id).length > 1) {
+      return {
+        ok: false,
+        message: `${input.page} defines that footnote more than once; fix the duplicate (lint lists it) before recording a verdict.`,
+      };
+    }
     return {
       ok: false,
       message: `${input.page} has no footnote [^${input.footnote.replace(/^\[?\^/, "").replace(/\]$/, "")}] with a source, path, locator and revision to pin a verdict to (a page's \`last_verified_revision\` stands in only when the footnote format has no {rev}, and only for the page's own source). Run \`accreta reindex\` if the page changed.`,
@@ -256,6 +294,14 @@ export function planVerdict(
 /** Append a verdict, dropping older lines for the same footnote: one current key, so the rest are voided. */
 export function writeVerdict(root: string, config: AccretaConfig, line: VerdictLine): string {
   const path = verdictPathFor(root, config);
+  const problem = verdictFileProblem(root, config);
+  if (problem !== undefined) throw new Error(problem);
+  if (existsSync(path)) {
+    const held = parseVerdicts(readFileSync(path, "utf-8"));
+    if (held.lines.length === 0 && held.unreadable > 0) {
+      throw new Error("the verdict file holds no verdict this build can read; it is left alone");
+    }
+  }
   const kept = existsSync(path)
     ? readFileSync(path, "utf-8")
         .split(/\r?\n/)
