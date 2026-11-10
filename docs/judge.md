@@ -44,7 +44,7 @@ Two rules keep a cloned knowledge base from taking your key somewhere else:
 | `local`      | any server speaking the same wire format | `ACCRETA_JUDGE_URL`; a key only if your server asks for one |
 
 A `local` server that wants a key is reached the same way: set `ACCRETA_JUDGE_URL` and the key
-variable in the shell. A `url:` in the file would be refused, not guessed at.
+variable in the shell. A `url:` in the file is never used to reach it.
 
 ## Keys, least privilege
 
@@ -65,6 +65,7 @@ or a page.
 - the variable's name and whether it is set, never its value;
 - one live probe, with the latency and the model the server says answered;
 - a failure, and exit code 1, if a key sits in `accreta.config.yaml` or a knowledge-base page,
-  or if `judge.url` is in the file;
+  if `judge.url` is in the file and `ACCRETA_JUDGE_URL` is not set, or if `api_key_env` does not
+  name an `ACCRETA_JUDGE_` variable;
 - one warning, and exit code 0, if the judge cannot be reached: search and lint carry on
   without it.

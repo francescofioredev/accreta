@@ -44,7 +44,7 @@ export function createJudge(
   if (!url) throw new JudgeConfigError(`ACCRETA_JUDGE_URL is required for the ${name} route`);
 
   if (route.modelIn === "url" && !url.includes("{model}")) {
-    throw new JudgeConfigError(`judge.url for the ${name} route must contain {model}`);
+    throw new JudgeConfigError(`ACCRETA_JUDGE_URL for the ${name} route must contain {model}`);
   }
   const apiKey = env[settings.apiKeyEnv]?.trim() || undefined;
   if (route.keyRequired && !apiKey) {

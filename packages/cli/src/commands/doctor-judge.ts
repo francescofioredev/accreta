@@ -90,8 +90,7 @@ export async function reportJudge(
   if (named) {
     ctx.out(`  key: ${printable(variable)} is ${secret ? "set" : "not set"}`);
   } else {
-    ctx.out("  broken: api_key_env holds something that is not a variable name");
-    ctx.out("    → if it is a key, rotate it; name the variable that holds the key instead");
+    ctx.out("    → if api_key_env holds a key, rotate it; name the variable that holds it instead");
     exitCode = 1;
   }
   if (secret.length >= MIN_KEY_LENGTH) {
