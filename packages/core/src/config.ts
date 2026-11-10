@@ -1,3 +1,4 @@
+import { isAbsolute } from "node:path";
 import { parse as parseYaml } from "yaml";
 
 /**
@@ -20,6 +21,12 @@ export interface AccretaConfig {
   provenanceFormat: string;
   /** Literal that ends a sentence declared as inference, which needs no footnote. */
   inferenceMarker: string;
+  /** The `inference_marker` that was set but refused, so doctor can say the default is in force. */
+  inferenceMarkerRejected?: string;
+  /** Relative path of the verdict file; absent means `verdicts.jsonl` beside the pages. */
+  verdictFile?: string;
+  /** The `verdict_file` that was set but refused, so doctor can say the default is in force. */
+  verdictFileRejected?: string;
   /** Whether lint reports prose sentences with neither a footnote nor the inference marker. */
   lintUncitedSentences: boolean;
   /** Page types `uncited-sentence` skips. */
@@ -118,8 +125,8 @@ export function configFromObject(data: unknown): AccretaConfig {
     pageTypes: asStringArray(raw.page_types, DEFAULT_CONFIG.pageTypes),
     linkFields: asStringArray(raw.link_fields, DEFAULT_CONFIG.linkFields),
     provenanceFormat: asString(provenance.format, DEFAULT_CONFIG.provenanceFormat),
-    inferenceMarker:
-      asString(provenance.inference_marker, "").trim() || DEFAULT_CONFIG.inferenceMarker,
+    ...markerFields(provenance.inference_marker),
+    ...verdictFileField(provenance.verdict_file),
     lintUncitedSentences: lintBlock.uncited_sentences === true,
     uncitedExemptTypes: Array.isArray(lintBlock.uncited_exempt_types)
       ? lintBlock.uncited_exempt_types.filter((v): v is string => typeof v === "string")
@@ -129,6 +136,42 @@ export function configFromObject(data: unknown): AccretaConfig {
     }),
     ...("judge" in raw && { judge: asJudgeBlock(raw.judge) }),
   };
+}
+
+// A marker that is one line with a letter or digit in it; "." or ")" would exempt nearly every sentence.
+function markerFields(
+  value: unknown,
+): Pick<AccretaConfig, "inferenceMarker" | "inferenceMarkerRejected"> {
+  const marker = asString(value, "").trim();
+  if (marker === "") return { inferenceMarker: DEFAULT_CONFIG.inferenceMarker };
+  const usable =
+    [...marker].length >= 3 &&
+    [...marker].length <= 40 &&
+    !/[\p{Cc}\p{Zl}\p{Zp}]/u.test(marker) &&
+    /[\p{L}\p{N}]/u.test(marker);
+  return usable
+    ? { inferenceMarker: marker }
+    : { inferenceMarker: DEFAULT_CONFIG.inferenceMarker, inferenceMarkerRejected: marker };
+}
+
+function verdictFileField(
+  value: unknown,
+): Pick<AccretaConfig, "verdictFile" | "verdictFileRejected"> {
+  const path = asString(value, "").trim();
+  if (path === "") return {};
+  return validVerdictPath(path) ? { verdictFile: path } : { verdictFileRejected: path };
+}
+
+// A .jsonl name keeps the file from being a page, the config or a git file; the rest keeps it inside the root.
+function validVerdictPath(path: string): boolean {
+  const parts = path.split(/[\\/]/);
+  return (
+    path.endsWith(".jsonl") &&
+    !isAbsolute(path) &&
+    !parts.includes("..") &&
+    !parts.some((part) => part.toLowerCase().startsWith(".git")) &&
+    !/[\p{Cc}\p{Zl}\p{Zp}]/u.test(path)
+  );
 }
 
 const JUDGE_KEYS = new Set(["route", "url", "model", "api_key_env", "rerank", "support"]);

@@ -73,3 +73,42 @@ test("the repository's accreta.config.yaml is the default vocabulary", () => {
   const raw = readFileSync(join(import.meta.dir, "..", "..", "..", "accreta.config.yaml"), "utf-8");
   expect(parseConfig(raw)).toEqual(DEFAULT_CONFIG);
 });
+
+describe("provenance.inference_marker and provenance.verdict_file", () => {
+  const marker = (value: string) => parseConfig(`provenance:\n  inference_marker: ${value}\n`);
+
+  test("a usable marker is kept", () => {
+    expect(marker('"(my guess)"').inferenceMarker).toBe("(my guess)");
+    expect(marker('"(my guess)"').inferenceMarkerRejected).toBeUndefined();
+  });
+
+  test.each(['"."', '")"', '"ab"', '"(...)"', '"a\\nb"', `"${"x".repeat(41)}"`])(
+    "the degenerate marker %s falls back to the default and is named",
+    (value) => {
+      const config = marker(value);
+      expect(config.inferenceMarker).toBe(DEFAULT_CONFIG.inferenceMarker);
+      expect(config.inferenceMarkerRejected).toBeDefined();
+    },
+  );
+
+  test("an empty marker is the default, not a refusal", () => {
+    expect(marker('""').inferenceMarkerRejected).toBeUndefined();
+  });
+
+  test.each([
+    '"/etc/verdicts.jsonl"',
+    '"../out.jsonl"',
+    '"a/../../b"',
+    '"knowledge/p.md"',
+    '"accreta.config.yaml"',
+    '".git/hooks/v.jsonl"',
+  ])("a verdict file at %s is ignored", (value) => {
+    const config = parseConfig(`provenance:\n  verdict_file: ${value}\n`);
+    expect(config.verdictFile).toBeUndefined();
+    expect(config.verdictFileRejected).toBeDefined();
+  });
+
+  test("a relative verdict file is kept", () => {
+    expect(parseConfig("provenance:\n  verdict_file: kb/v.jsonl\n").verdictFile).toBe("kb/v.jsonl");
+  });
+});

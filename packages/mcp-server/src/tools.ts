@@ -28,6 +28,9 @@ import {
   type SearchHit,
   type SourceAdapter,
   type UnresolvableRevision,
+  planVerdict,
+  readVerdictFile,
+  writeVerdict,
 } from "@accreta/core";
 import { createJudge } from "@accreta/judges";
 import {
@@ -597,6 +600,7 @@ export async function lintTool(
       }
     }
   }
+  const verdicts = readVerdictFile(ctx.root, ctx.config);
   const report = await withPinnedIndex(ctx, "lint_knowledge_base", (db) =>
     lintKnowledgeBase(db, ctx.config, ctx.sources, {
       kinds: input.kinds,
@@ -604,6 +608,7 @@ export async function lintTool(
       page: judge ? undefined : { limit: input.limit, cursor: input.cursor },
       sourceFindings: unloadedFindings(countUnchecked(db, ctx.unloadedSources)),
       judge,
+      verdicts,
     }),
   );
   if (report.judgeUnavailable) {
@@ -615,6 +620,8 @@ export async function lintTool(
       citations_judged: report.citationsJudged ?? 0,
       citations_unjudged: report.citationsUnjudged ?? 0,
     }),
+    ...(verdicts.unreadable > 0 && { verdict_lines_ignored: verdicts.unreadable }),
+    ...(verdicts.problem && { verdict_file_problem: verdicts.problem }),
     pages_checked: report.pagesChecked,
     count: report.total,
     // Citations whose source could not be questioned. A number rather than
@@ -784,4 +791,97 @@ export function setFrontmatterField(raw: string, field: string, value: string): 
     `---\n${newBlock}\n---\n` +
     raw.slice((match.index ?? 0) + match[0].length)
   );
+}
+
+const VERDICT_FIELDS = [
+  "verdict.page",
+  "verdict.footnote",
+  "verdict.citation",
+  "verdict.revision",
+] as const;
+
+export interface RecordVerdictInput {
+  path: string;
+  footnote: string;
+  verdict: "supported" | "unsupported";
+  model: string;
+  confirm_token?: string;
+}
+
+function verdictToken(line: {
+  page: string;
+  footnote: string;
+  citation: string;
+  revision: string;
+  sentence: string;
+  verdict: string;
+  model: string;
+}): string {
+  return createHash("sha256")
+    .update(
+      [
+        line.page,
+        line.footnote,
+        line.citation,
+        line.revision,
+        line.sentence,
+        line.verdict,
+        line.model,
+      ].join("\0"),
+    )
+    .digest("hex")
+    .slice(0, 16);
+}
+
+/**
+ * Record a verdict on a re-read citation. Gated like `update_verified_revision`: off unless
+ * writes are enabled, then a dry run whose token the second call returns. `writer` comes from
+ * the server (`mcp` plus the client's name), never from the caller; `model` is declared.
+ */
+export function recordVerdictTool(ctx: ToolContext, input: RecordVerdictInput, writer: string) {
+  if (!ctx.writesEnabled) {
+    return {
+      ok: false as const,
+      message:
+        "Writes are disabled. Set ACCRETA_ALLOW_WRITES=1 in the server environment to enable this tool.",
+    };
+  }
+  const plan = planVerdict(ctx.db, ctx.config, {
+    page: input.path,
+    footnote: input.footnote,
+    verdict: input.verdict,
+    model: input.model,
+    writer,
+    date: new Date().toISOString().slice(0, 10),
+  });
+  if (!plan.ok) return { ok: false as const, message: plan.message };
+  const token = verdictToken(plan.line);
+  if (input.confirm_token !== token) {
+    return {
+      ok: false as const,
+      dry_run: true as const,
+      verdict: plan.line,
+      confirm_token: token,
+      message:
+        (input.confirm_token === undefined
+          ? "Dry run. Call again with this confirm_token to record it."
+          : "confirm_token does not match this verdict. Re-run the dry run and use the token it returns.") +
+        " The writer is set by the server; the model is shown as you declared it.",
+      _provenance: provenance(VERDICT_FIELDS),
+    };
+  }
+  try {
+    writeVerdict(ctx.root, ctx.config, plan.line);
+  } catch (error) {
+    return {
+      ok: false as const,
+      message: `The verdict file cannot be written: ${error instanceof Error ? error.message : String(error)}.`,
+    };
+  }
+  return {
+    ok: true as const,
+    verdict: plan.line,
+    message: "Recorded. The next lint reads it back.",
+    _provenance: provenance(VERDICT_FIELDS),
+  };
 }

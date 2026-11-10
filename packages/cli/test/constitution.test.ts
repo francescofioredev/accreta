@@ -27,6 +27,8 @@ function quotedFlags(text: string): Record<string, string[]> {
     "--limit": paged,
     "--cursor": paged,
     "--expect-revision": ["cite"],
+    "--judge": ["lint"],
+    "--model": ["verdict"],
   };
 }
 

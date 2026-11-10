@@ -25,7 +25,7 @@ type ToolResult = {
 type ToolHandler<I> = (input: I) => Promise<ToolResult>;
 import { registerPrompts } from "./prompts.ts";
 import { getPageOutput, searchPagesOutput } from "./schemas.ts";
-import type { ToolContext, UpdateVerifiedInput } from "./tools.ts";
+import type { RecordVerdictInput, ToolContext, UpdateVerifiedInput } from "./tools.ts";
 import {
   checkDriftTool,
   citeTool,
@@ -35,6 +35,7 @@ import {
   lintTool,
   listRecentChangesTool,
   searchPagesTool,
+  recordVerdictTool,
   updateVerifiedRevisionTool,
 } from "./tools.ts";
 
@@ -318,6 +319,34 @@ export function createServer(ctx: ToolContext): McpServer {
         },
       },
       async (input: UpdateVerifiedInput) => json(await updateVerifiedRevisionTool(ctx, input)),
+    );
+  }
+
+  if (ctx.writesEnabled) {
+    register(
+      "record_verdict",
+      {
+        description:
+          "Record whether a citation you re-read backs the sentence that cites it (band 3 of the citation cascade). Two-step like update_verified_revision: call without confirm_token for a dry run and a token, then again echoing it. `unsupported` makes lint list an advisory citation-unsupported; `supported` silences lint --judge's citation-unconfirmed for that sentence. An edit to the sentence, or a re-pin or verification bump, voids it. The server sets the writer (mcp and the client's name); the model is whatever you declare and is shown as declared. Record only after reading the cited lines yourself." +
+          PAGE_DERIVED,
+        inputSchema: {
+          path: z.string().min(1).describe("Page path or wikilink target."),
+          footnote: z.string().min(1).describe("Footnote id, as in [^id]."),
+          verdict: z.enum(["supported", "unsupported"]),
+          model: z.string().min(1).max(80).describe("The model that re-read the citation."),
+          confirm_token: z
+            .string()
+            .optional()
+            .describe("Token returned by the dry run. Omit for the dry run itself."),
+        },
+      },
+      async (input: RecordVerdictInput) => {
+        const client = server.server.getClientVersion()?.name;
+        const name = client
+          ? [...client.replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, "?")].slice(0, 40).join("")
+          : "";
+        return json(recordVerdictTool(ctx, input, name ? `mcp:${name}` : "mcp"));
+      },
     );
   }
 

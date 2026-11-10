@@ -18,6 +18,7 @@ import { mcp } from "./commands/mcp.ts";
 import { reindex } from "./commands/reindex.ts";
 import { search } from "./commands/search.ts";
 import { show } from "./commands/show.ts";
+import { verdict } from "./commands/verdict.ts";
 import { sourceAdd } from "./commands/source.ts";
 
 const USAGE = `accreta — a knowledge base an agent writes and keeps current
@@ -55,6 +56,12 @@ Usage: accreta <command> [arguments]
                            a missing place prints "footnote: none: location missing" and
                            exits 1, so check the exit code. footnote prints the footnotes
                            alone, one per line, and nothing if any place is missing
+  verdict <page> <footnote> supported|unsupported --model <name>
+                           Record the verdict of a re-read citation in the verdict file
+                           (provenance.verdict_file, default knowledge/verdicts.jsonl).
+                           lint lists "unsupported" as advisory citation-unsupported and
+                           "supported" silences lint --judge for that sentence; an edit to
+                           the sentence or a re-pin voids it
   mcp                      Start the MCP server on stdio; an agent client runs this
   mcp install --client <claude|cursor|codex|vscode> [--scope project|user]
                            Add that server to the client's config (--force replaces
@@ -102,6 +109,7 @@ function parseArgs(argv: string[]): ParsedArgs & {
   preset?: string;
   agentFile?: string;
   expectRevision?: string;
+  model?: string;
 } {
   const positional: string[] = [];
   const flags: string[] = [];
@@ -122,6 +130,7 @@ function parseArgs(argv: string[]): ParsedArgs & {
   let preset: string | undefined;
   let agentFile: string | undefined;
   let expectRevision: string | undefined;
+  let model: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     let arg = argv[i];
     if (arg === undefined) continue;
@@ -217,6 +226,10 @@ function parseArgs(argv: string[]): ParsedArgs & {
       agentFile = value();
       continue;
     }
+    if (arg === "--model") {
+      model = value();
+      continue;
+    }
     if (arg === "--expect-revision") {
       expectRevision = value();
       continue;
@@ -242,6 +255,7 @@ function parseArgs(argv: string[]): ParsedArgs & {
     preset,
     agentFile,
     expectRevision,
+    model,
   };
 }
 
@@ -322,6 +336,14 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
       return canonical(ctx, positional.join(" "), { json, limit, cursor });
     case "cite":
       return cite(ctx, rest, positional, { json, expectRevision: parsed.expectRevision });
+    case "verdict":
+      return verdict(ctx, {
+        page: positional[0],
+        footnote: positional[1],
+        value: positional[2],
+        model: parsed.model,
+        json,
+      });
     case "mcp":
       return mcp(ctx, rest);
     default:

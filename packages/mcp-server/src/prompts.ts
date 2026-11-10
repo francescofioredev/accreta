@@ -58,7 +58,7 @@ export function reverifyStalePagesText(source: string | undefined, writesEnabled
   ].join("\n");
 }
 
-export function verifyCitationsText(pages: readonly string[]): string {
+export function verifyCitationsText(pages: readonly string[], writesEnabled = false): string {
   return [
     `Verify the citations on ${pages.map((page) => JSON.stringify(page)).join(", ")}.`,
     "",
@@ -67,6 +67,7 @@ export function verifyCitationsText(pages: readonly string[]): string {
     "1. Call `check_drift`. Skip a page it lists under `stale` or `unresolvable`: that is `reverify_stale_pages`' work. Check a page in `delegated.pending` only if the revision you read through the connector is its `last_verified_revision`.",
     "2. Read each page with `get_page`. For each sentence with footnotes, open the lines they cite yourself: no accreta tool returns source text. A footnote's path is inside the root its source declares in sources/*.yaml. Step 1 left only pages whose sources are still at the pinned revision, so read the files as they stand (a delegated source, through its connector). Skip and report a footnote whose file `cite` returns with a null `revision`: it is uncommitted, so its lines may not be the pinned ones. Every fact in the sentence (a name, a value, a sequence, a condition, a default, a cause) must be in those lines.",
     "3. Fix each part the lines do not show, in this order. Split it into its own sentence: call `cite` on the file and keep its `revision`, read lines that show it, and cite them with that as `expect_revision`. Failing that, and only if it follows from the cited lines, rewrite it as your inference in a sentence of its own right after the cited one, with no footnote, ending in the inference marker (`provenance.inference_marker` in accreta.config.yaml, default `(inference)`). Otherwise remove it. A name, value or default the lines do not give is never an inference, and an inference never settles a disagreement between sources. A footnote on the wrong lines is re-cited the same way, with `expect_revision`, on the lines that show the sentence. Never add a claim, and never widen a range to cover a part.",
+    `   Start with footnotes \`lint_knowledge_base\` with \`judge: true\` lists as \`citation-unconfirmed\`. Once you have read the lines for one, record what you found ${writesEnabled ? "with `record_verdict`" : "by asking for `accreta verdict <page> <footnote> <verdict> --model <you>`"}, declaring your model: verdict supported if the lines show the sentence as it stands, unsupported if they do not and you could neither fix nor remove the part. Do not record a verdict for lines you did not read.`,
     "4. Leave `last_verified_revision` alone.",
     "5. Ask for `accreta reindex`, then call `lint_knowledge_base` and fix what it reports.",
     "6. Report the pages you skipped and why; then, per page, how many footnoted sentences you checked and how many parts you split off, rewrote as inference or removed.",
@@ -143,6 +144,7 @@ export function registerPrompts(server: McpServer, writesEnabled: boolean): void
             .split(",")
             .map((page) => page.trim())
             .filter((page) => page !== ""),
+          writesEnabled,
         ),
       ),
   );

@@ -1,6 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { checkConfig, compileCitationTemplate, DEFAULT_CONFIG, sqliteSupport } from "@accreta/core";
+import {
+  checkConfig,
+  compileCitationTemplate,
+  DEFAULT_CONFIG,
+  sqliteSupport,
+  verdictFileProblem,
+} from "@accreta/core";
 import {
   clashingIds,
   declaredId,
@@ -53,7 +59,25 @@ export async function doctor(ctx: CommandContext, version: string): Promise<numb
       "    → then re-cite every existing footnote with `accreta cite`: lint lists each one with a #locator as unparseable-citation, but one without can read as prose and drop out of lint and drift",
     );
   }
-
+  if (workspace.config.inferenceMarkerRejected !== undefined) {
+    ctx.out(
+      `  refused: provenance.inference_marker "${printable(workspace.config.inferenceMarkerRejected)}" is not a usable marker`,
+    );
+    ctx.out(
+      `    → it needs 3 to 40 characters on one line, with a letter or digit; "${DEFAULT_CONFIG.inferenceMarker}" is in force`,
+    );
+  }
+  if (workspace.config.verdictFileRejected !== undefined) {
+    ctx.out(
+      `  refused: provenance.verdict_file "${printable(workspace.config.verdictFileRejected)}" is not usable`,
+    );
+    ctx.out("    → it must be a relative .jsonl path inside the root and outside .git");
+  }
+  const verdictProblem = verdictFileProblem(workspace.root, workspace.config);
+  if (verdictProblem !== undefined) {
+    ctx.out(`  broken: ${printableMessage(verdictProblem)}; verdicts are neither read nor written`);
+    exitCode = 1;
+  }
   ctx.out("\nruntime");
   const runtime = process.versions.bun ? `bun ${process.versions.bun}` : `node ${process.version}`;
   const unsupported = sqliteSupport();

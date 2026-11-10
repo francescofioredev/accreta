@@ -12,5 +12,6 @@ export {
   listRecentChangesTool,
   searchPagesTool,
   setFrontmatterField,
+  recordVerdictTool,
   updateVerifiedRevisionTool,
 } from "./tools.ts";

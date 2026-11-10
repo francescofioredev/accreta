@@ -19,11 +19,13 @@ const CLI_TWIN: Record<string, string> = {
   lint_knowledge_base: "lint",
   check_drift: "drift",
   cite: "cite",
+  record_verdict: "verdict",
 };
 
 // Twins whose `--json` is another issue's work, so their shape is not compared yet.
 const JSON_PENDING: Record<string, string> = {
   check_drift: "drift --json reports what a change put in doubt, not check_drift's shape",
+  record_verdict: "the tool's reply is a dry run or a result; the CLI prints the written line",
 };
 
 // Tools with no CLI command yet. Each entry is owed a command, not a reason to stay here.
@@ -227,7 +229,7 @@ beforeAll(async () => {
   head = commit(["commit", "-qam", "second"]);
   write(
     "knowledge/notes/stale.md",
-    `---\ntype: note\nsource: repo\nlast_verified_revision: ${first}\n---\n\n# Stale\n\n` +
+    `---\ntype: note\nsource: repo\nlast_verified_revision: "${first}"\n---\n\n# Stale\n\n` +
       `A claim.[^c]\n\n[^c]: repo @ ${first.slice(0, 7)} · b.md#L1\n`,
   );
   write(

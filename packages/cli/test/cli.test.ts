@@ -376,7 +376,7 @@ describe("accreta drift", () => {
 
     writePage(
       "a.md",
-      `---\ntype: note\nsource: docs\nlast_verified_revision: ${revision}\n---\n\n# A\n`,
+      `---\ntype: note\nsource: docs\nlast_verified_revision: "${revision}"\n---\n\n# A\n`,
     );
     await cli("reindex");
     writeFileSync(join(docs, "a.md"), "rewritten", "utf-8");
@@ -430,7 +430,7 @@ describe("accreta drift", () => {
       const revision = /^docs @ (\S+)$/m.exec(spawnCli(env, "drift").out)?.[1];
       writePage(
         "a.md",
-        `---\ntype: note\nsource: docs\nlast_verified_revision: ${revision}\n---\n\n# A\n`,
+        `---\ntype: note\nsource: docs\nlast_verified_revision: "${revision}"\n---\n\n# A\n`,
       );
       await cli("reindex");
       writeFileSync(join(docs, "a.md"), "rewritten", "utf-8");
@@ -548,7 +548,7 @@ describe("accreta drift", () => {
     for (const name of ["one", "two", "three"]) {
       writePage(
         `${name}.md`,
-        `---\ntype: note\nsource: docs\nlast_verified_revision: ${revision}\n---\n\n# ${name}\n`,
+        `---\ntype: note\nsource: docs\nlast_verified_revision: "${revision}"\n---\n\n# ${name}\n`,
       );
     }
     await cli("reindex");
@@ -601,7 +601,7 @@ describe("accreta drift at line granularity", () => {
     const page = (name: string, citation: string) =>
       writePage(
         `${name}.md`,
-        `---\ntype: note\nsource: docs\nlast_verified_revision: ${revision}\n---\n\n# ${name}\n\n` +
+        `---\ntype: note\nsource: docs\nlast_verified_revision: "${revision}"\n---\n\n# ${name}\n\n` +
           `A claim.[^c]\n\n[^c]: docs @ ${revision.slice(0, 7)} · ${citation}\n`,
       );
     page("changed", "a.md#L3-L5");
@@ -651,7 +651,7 @@ describe("accreta drift at line granularity", () => {
     const page = (name: string, citation: string) =>
       writePage(
         `${name}.md`,
-        `---\ntype: note\nsource: docs\nlast_verified_revision: ${revision}\n---\n\n# ${name}\n\n` +
+        `---\ntype: note\nsource: docs\nlast_verified_revision: "${revision}"\n---\n\n# ${name}\n\n` +
           `A claim.[^c]\n\n[^c]: docs @ ${revision.slice(0, 7)} · ${citation}\n`,
       );
     page("changed", "a.md#L3-L5");
@@ -717,7 +717,7 @@ describe("accreta drift for a pull request", () => {
     const page = (name: string, citation: string) =>
       writePage(
         `${name}.md`,
-        `---\ntype: note\nsource: docs\nlast_verified_revision: ${from}\n---\n\n# ${name}\n\n` +
+        `---\ntype: note\nsource: docs\nlast_verified_revision: "${from}"\n---\n\n# ${name}\n\n` +
           `A claim.[^c]\n\n[^c]: docs @ ${from.slice(0, 7)} · ${citation}\n`,
       );
     page("first", "a.md#L3-L5");
@@ -817,13 +817,13 @@ describe("accreta drift for a pull request", () => {
     const short = from.slice(0, 7);
     writePage(
       "first.md",
-      `---\ntype: note\nsource: docs\nlast_verified_revision: ${from}\n---\n\n# first\n\n` +
+      `---\ntype: note\nsource: docs\nlast_verified_revision: "${from}"\n---\n\n# first\n\n` +
         `A claim.[^c] Another.[^d]\n\n[^c]: docs @ ${short} · a.md#L3-L5\n` +
         `[^d]: docs @ ${short} · a.md#L15-L16\n`,
     );
     writePage(
       "second.md",
-      `---\ntype: note\nsource: docs\nlast_verified_revision: ${from}\n---\n\n# second\n\n` +
+      `---\ntype: note\nsource: docs\nlast_verified_revision: "${from}"\n---\n\n# second\n\n` +
         `A claim.[^c]\n\n[^c]: docs @ ${short} · a.md#L18\n`,
     );
     await cli("reindex");
@@ -869,7 +869,7 @@ describe("accreta drift for a pull request", () => {
     for (const name of ["first", "second", "third"]) {
       writePage(
         `${name}.md`,
-        `---\ntype: note\nsource: docs\nlast_verified_revision: ${to}\n---\n\n# ${name}\n`,
+        `---\ntype: note\nsource: docs\nlast_verified_revision: "${to}"\n---\n\n# ${name}\n`,
       );
     }
     await cli("reindex");
@@ -956,7 +956,7 @@ describe("accreta drift --base", () => {
     ] as const) {
       writePage(
         `${name}.md`,
-        `---\ntype: note\nsource: docs\nlast_verified_revision: ${from}\n---\n\n# ${name}\n\n` +
+        `---\ntype: note\nsource: docs\nlast_verified_revision: "${from}"\n---\n\n# ${name}\n\n` +
           `A claim.[^c]\n\n[^c]: docs @ ${from.slice(0, 7)} · ${citation}\n`,
       );
     }
@@ -975,7 +975,7 @@ describe("accreta drift --base", () => {
       const now = headOf(docs);
       writePage(
         `${name}.md`,
-        `---\ntype: note\nsource: docs\nlast_verified_revision: ${now}\n---\n\n# ${name}\n\n` +
+        `---\ntype: note\nsource: docs\nlast_verified_revision: "${now}"\n---\n\n# ${name}\n\n` +
           `A claim.[^c]\n\n[^c]: docs @ ${now.slice(0, 7)} · ${citation}\n`,
       );
       await cli("reindex");
@@ -1057,7 +1057,7 @@ describe("accreta drift --base", () => {
     const pin = (revision: string) =>
       writePage(
         "a.md",
-        `---\ntype: note\nsource: docs\nlast_verified_revision: ${revision}\n---\n\n# A\n`,
+        `---\ntype: note\nsource: docs\nlast_verified_revision: "${revision}"\n---\n\n# A\n`,
       );
     pin("gone");
     await cli("reindex");
@@ -1712,6 +1712,21 @@ describe("accreta doctor", () => {
     expect(stdout()).toContain("still uses {start} and {end}");
   });
 
+  test("a degenerate inference marker is refused and named, with the default in force", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    writeFileSync(
+      join(root, "accreta.config.yaml"),
+      'knowledge_base: knowledge\nprovenance:\n  inference_marker: "."\n',
+      "utf-8",
+    );
+    output = [];
+
+    await cli("doctor");
+    expect(stdout()).toContain('inference_marker "." is not a usable marker');
+    expect(stdout()).toContain('"(inference)" is in force');
+  });
+
   test("a provenance format that names no revision is flagged once", async () => {
     await cli("init");
     rmSync(join(root, "sources", "example.yaml"), { force: true });
@@ -1886,7 +1901,7 @@ describe("accreta lint --judge", () => {
     const cite = (loc: string, r = rev) => `docs @ ${r} · a.md#${loc}`;
     writePage(
       "p.md",
-      `---\ntype: note\nsource: docs\ncanonical_source: "docs:a.md#L1"\nlast_verified_revision: ${rev}\n---\n\n# P\n\nIce melts at zero.[^s]\n\nBananas are blue.[^w]\n\nThe third line says so.[^o]\n\n[^s]: ${cite("L1")}\n[^w]: ${cite("L2")}\n[^o]: ${cite("L3", "0123456789ab")}\n`,
+      `---\ntype: note\nsource: docs\ncanonical_source: "docs:a.md#L1"\nlast_verified_revision: "${rev}"\n---\n\n# P\n\nIce melts at zero.[^s]\n\nBananas are blue.[^w]\n\nThe third line says so.[^o]\n\n[^s]: ${cite("L1")}\n[^w]: ${cite("L2")}\n[^o]: ${cite("L3", "0123456789ab")}\n`,
     );
     await cli("reindex");
     output = [];
@@ -1927,6 +1942,200 @@ describe("accreta lint --judge", () => {
     expect(body.nextCursor).toBeUndefined();
     expect(body.citations_judged).toBe(2);
     expect(fake.requests).toHaveLength(2);
+  });
+
+  const verdictLines = () =>
+    readFileSync(join(root, "knowledge", "verdicts.jsonl"), "utf-8")
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+
+  test("an unsupported verdict is an advisory finding with writer, model and date, no judge needed", async () => {
+    await setup("");
+    expect(await cli("verdict", "p.md", "w", "unsupported", "--model", "opus-x")).toBe(0);
+    expect(verdictLines()[0]).toMatchObject({
+      writer: "cli",
+      model: "opus-x",
+      verdict: "unsupported",
+    });
+    output = [];
+    expect(await cli("lint", "--json")).toBe(0);
+    const body = JSON.parse(stdout());
+    const found = body.findings.filter((f: { kind: string }) => f.kind === "citation-unsupported");
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ advisory: true });
+    expect(found[0].detail).toContain("cli");
+    expect(found[0].detail).toContain("opus-x");
+    expect(found[0].detail).toContain(new Date().toISOString().slice(0, 10));
+    expect(body.advisory_count).toBe(1);
+  });
+
+  test("a supported verdict silences citation-unconfirmed for that sentence only", async () => {
+    fake = await startFakeJudge({
+      choice: () => ({ supports: 0.1, contradicts: 0.45, says_nothing: 0.45 }),
+    });
+    process.env.ACCRETA_JUDGE_URL = fake.url;
+    await setup("judge:\n  route: local\n");
+    expect(await cli("verdict", "p.md", "[^w]", "supported", "--model", "human")).toBe(0);
+    output = [];
+    expect(await cli("lint", "--judge", "--json")).toBe(0);
+    const body = JSON.parse(stdout());
+    expect(body.findings.map((f: { kind: string }) => f.kind)).toEqual(["citation-unconfirmed"]);
+    expect(body.findings[0].detail).toContain("[^s]");
+    expect(fake.requests).toHaveLength(1);
+  });
+
+  test("an edit to the sentence, or a re-pin, voids the verdict", async () => {
+    await setup("");
+    await cli("verdict", "p.md", "w", "unsupported", "--model", "m");
+    const page = join(root, "knowledge", "p.md");
+    const original = readFileSync(page, "utf-8");
+    writeFileSync(page, original.replace("Bananas are blue.", "Bananas are very blue."));
+    await cli("reindex");
+    output = [];
+    await cli("lint", "--json");
+    expect(JSON.parse(stdout()).findings.map((f: { kind: string }) => f.kind)).toEqual([]);
+
+    writeFileSync(page, original);
+    await cli("reindex");
+    output = [];
+    await cli("lint", "--json");
+    expect(JSON.parse(stdout()).advisory_count).toBe(1);
+    writeFileSync(page, original.replace(/\[\^w\]: docs @ \w+/, "[^w]: docs @ ffffffffffff"));
+    await cli("reindex");
+    output = [];
+    await cli("lint", "--json");
+    expect(
+      JSON.parse(stdout()).findings.filter(
+        (f: { kind: string }) => f.kind === "citation-unsupported",
+      ),
+    ).toEqual([]);
+  });
+
+  test("a second verdict on a footnote replaces the first; other footnotes keep theirs", async () => {
+    await setup("");
+    await cli("verdict", "p.md", "w", "unsupported", "--model", "m1");
+    await cli("verdict", "p.md", "s", "supported", "--model", "m1");
+    await cli("verdict", "p.md", "w", "supported", "--model", "m2");
+    const lines = verdictLines();
+    expect(lines).toHaveLength(2);
+    expect(lines.find((l) => l.footnote === "w")).toMatchObject({
+      verdict: "supported",
+      model: "m2",
+    });
+  });
+
+  test("without a pinned revision the verdict is keyed to the page's last_verified_revision", async () => {
+    await setup("");
+    writeFileSync(
+      join(root, "accreta.config.yaml"),
+      'provenance:\n  format: "{source} · {path}#{locator}"\n',
+    );
+    const rev = (await loadSources(findWorkspace(root)).sources[0]!.revision()) as string;
+    const page = join(root, "knowledge", "q.md");
+    const body = (verified: string) =>
+      `---\ntype: note\nsource: docs\ncanonical_source: "docs:a.md#L1"\nlast_verified_revision: "${verified}"\n---\n\n# Q\n\nIce melts at zero.[^s]\n\n[^s]: docs · a.md#L1\n`;
+    writeFileSync(page, body(rev));
+    await cli("reindex");
+    expect(await cli("verdict", "q.md", "s", "unsupported", "--model", "m")).toBe(0);
+    expect(verdictLines().at(-1)).toMatchObject({ revision: rev });
+    writeFileSync(page, body("bumped0000000"));
+    await cli("reindex");
+    output = [];
+    await cli("lint", "--json");
+    expect(
+      JSON.parse(stdout()).findings.filter(
+        (f: { kind: string }) => f.kind === "citation-unsupported",
+      ),
+    ).toEqual([]);
+  });
+
+  test("verdict refuses without --model, for an unknown footnote, and an unreadable citation", async () => {
+    await setup("");
+    expect(await cli("verdict", "p.md", "w", "unsupported")).toBe(2);
+    expect(await cli("verdict", "p.md", "zz", "unsupported", "--model", "m")).toBe(1);
+    expect(stderr()).toContain("no footnote");
+    expect(await cli("verdict", "p.md", "w", "maybe", "--model", "m")).toBe(1);
+    expect(existsSync(join(root, "knowledge", "verdicts.jsonl"))).toBe(false);
+  });
+
+  test("a verdict_file that is a page or outside the root is refused; the page is left alone", async () => {
+    await setup("");
+    const original = readFileSync(join(root, "knowledge", "p.md"), "utf-8");
+    const config = (file: string) =>
+      writeFileSync(
+        join(root, "accreta.config.yaml"),
+        `provenance:\n  format: "{source} @ {rev} · {path}#{locator}"\n  verdict_file: ${file}\n`,
+      );
+    config("knowledge/p.md");
+    expect(await cli("verdict", "p.md", "w", "unsupported", "--model", "m")).toBe(0);
+    expect(readFileSync(join(root, "knowledge", "p.md"), "utf-8")).toBe(original);
+    expect(existsSync(join(root, "knowledge", "verdicts.jsonl"))).toBe(true);
+    output = [];
+    await cli("doctor");
+    expect(stdout()).toContain('verdict_file "knowledge/p.md" is not usable');
+
+    const outside = mkdtempSync(join(tmpdir(), "accreta-outside-"));
+    try {
+      symlinkSync(outside, join(root, "out"));
+      config("out/v.jsonl");
+      errors = [];
+      expect(await cli("verdict", "p.md", "w", "unsupported", "--model", "m")).toBe(1);
+      expect(stderr()).toContain("outside");
+      expect(readdirSync(outside)).toEqual([]);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  test("an unpinned footnote and a duplicated one take no verdict; a footnote id cannot escape the terminal", async () => {
+    await setup("");
+    const page = join(root, "knowledge", "p.md");
+    const original = readFileSync(page, "utf-8");
+    writeFileSync(page, original.replace(/\[\^s\]: docs @ \w+/, "[^s]: docs @ unknown"));
+    await cli("reindex");
+    errors = [];
+    expect(await cli("verdict", "p.md", "s", "supported", "--model", "m")).toBe(1);
+
+    writeFileSync(page, original + "\n[^w]: docs @ ffffffffffff · a.md#L2\n");
+    await cli("reindex");
+    errors = [];
+    expect(await cli("verdict", "p.md", "w", "supported", "--model", "m")).toBe(1);
+    expect(stderr()).toContain("more than once");
+
+    writeFileSync(
+      page,
+      original.replace("[^o]", "[^o\u001b[2J]").replace(/\[\^s\]/g, "[^s\u001b[2J]"),
+    );
+    await cli("reindex");
+    output = [];
+    await cli("verdict", "p.md", "s\u001b[2J", "supported", "--model", "m");
+    expect(stdout()).not.toContain("\u001b");
+  });
+
+  test("a verdict file that cannot be read is said so by lint, not skipped in silence", async () => {
+    await setup("");
+    mkdirSync(join(root, "knowledge", "verdicts.jsonl"));
+    errors = [];
+    expect(await cli("lint")).toBe(0);
+    expect(stderr()).toContain("Recorded verdicts were not read");
+  });
+
+  test("a hostile line in the verdict file cannot rewrite the output", async () => {
+    await setup("");
+    await cli("verdict", "p.md", "w", "unsupported", "--model", "m");
+    const file = join(root, "knowledge", "verdicts.jsonl");
+    const line = verdictLines()[0];
+    writeFileSync(
+      file,
+      JSON.stringify({ ...line, model: "evil\u001b[2Jx", writer: "a\nb" }) + "\nnot json\n",
+    );
+    output = [];
+    errors = [];
+    expect(await cli("lint")).toBe(0);
+    expect(stdout()).not.toContain("\u001b");
+    expect(stdout()).toContain("citation-unsupported");
+    expect(stderr()).toContain("1 line(s) of the verdict file");
   });
 
   test("without --judge no request is made", async () => {

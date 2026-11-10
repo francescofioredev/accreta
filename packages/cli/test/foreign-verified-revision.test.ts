@@ -49,7 +49,7 @@ test("lint names a last_verified_revision only another source has (#260)", async
   mkdirSync(join(root, "knowledge"), { recursive: true });
   writeFileSync(
     join(root, "knowledge", "a.md"),
-    `---\ntype: note\nsource: a\ncanonical_source: "a:doc.md#L1"\nlast_verified_revision: ${foreign}\n---\n\n# A\n`,
+    `---\ntype: note\nsource: a\ncanonical_source: "a:doc.md#L1"\nlast_verified_revision: "${foreign}"\n---\n\n# A\n`,
   );
   await cli("reindex");
   output = [];
