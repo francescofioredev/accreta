@@ -143,6 +143,6 @@ Decided 2026-11-10, Francesco Fiore (#153).
   and the sentence hash, so a re-pin of the citation changes the key.
 - **The MCP verdict tool is gated like `update_verified_revision`**: off unless
   `ACCRETA_ALLOW_WRITES=1`, then a dry run whose confirm token the second call must return
-  ([architecture](../architecture.md)). The gate covers the MCP tool only: any commit to the
-  knowledge base can add a verdict line.
+  ([architecture](../architecture.md)). The gate covers the MCP tool only: `accreta verdict`,
+  or any edit to the verdict file, adds a line lint reads back.
 - **ADR-0004 is not amended here.** Whether it needs a note on the verdict file is #398.
