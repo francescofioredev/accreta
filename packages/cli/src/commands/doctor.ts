@@ -53,6 +53,14 @@ export async function doctor(ctx: CommandContext, version: string): Promise<numb
       "    → then re-cite every existing footnote with `accreta cite`: lint lists each one with a #locator as unparseable-citation, but one without can read as prose and drop out of lint and drift",
     );
   }
+  if (workspace.config.inferenceMarkerRejected !== undefined) {
+    ctx.out(
+      `  refused: provenance.inference_marker "${printable(workspace.config.inferenceMarkerRejected)}" is not a usable marker`,
+    );
+    ctx.out(
+      `    → it needs 3 to 40 characters on one line, with a letter or digit; "${DEFAULT_CONFIG.inferenceMarker}" is in force`,
+    );
+  }
 
   ctx.out("\nruntime");
   const runtime = process.versions.bun ? `bun ${process.versions.bun}` : `node ${process.version}`;

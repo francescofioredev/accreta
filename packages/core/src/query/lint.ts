@@ -13,6 +13,7 @@ import { paginate, type PageInfo, type PageRequest } from "./paging.ts";
 import { supersessionFindings } from "./supersession.ts";
 import { judgeCitations, type SupportOptions } from "./support.ts";
 import { requireTable } from "./tables.ts";
+import { verdictFindings, type VerdictFile } from "./verdicts.ts";
 import { uncitedSentences } from "./uncited.ts";
 
 export const LINT_FINDING_KINDS = [
@@ -42,6 +43,7 @@ export const LINT_FINDING_KINDS = [
   "shared-alias",
   "uncited-sentence",
   "citation-unconfirmed",
+  "citation-unsupported",
 ] as const;
 
 export type LintFindingKind = (typeof LINT_FINDING_KINDS)[number];
@@ -50,6 +52,7 @@ export type LintFindingKind = (typeof LINT_FINDING_KINDS)[number];
 export const ADVISORY_LINT_KINDS: ReadonlySet<LintFindingKind> = new Set([
   "uncited-sentence",
   "citation-unconfirmed",
+  "citation-unsupported",
 ]);
 
 export const isAdvisory = (kind: LintFindingKind) => ADVISORY_LINT_KINDS.has(kind);
@@ -676,20 +679,29 @@ export async function lintKnowledgeBase(
     sourceFindings?: readonly LintFinding[];
     /** Asks a judge about each readable citation; absent, no request is made. */
     judge?: SupportOptions;
+    /** Recorded verdicts (band 3); read with or without a judge, since reading them costs no request. */
+    verdicts?: VerdictFile;
   } = {},
 ): Promise<LintReport & PageInfo> {
   const report = lint(db, config);
   const citations = await lintCitations(db, sources);
   const kinds = options.kinds && options.kinds.length > 0 ? new Set(options.kinds) : null;
+  const band3 = options.verdicts ? verdictFindings(db, options.verdicts) : undefined;
   const support =
     options.judge && (!kinds || kinds.has("citation-unconfirmed"))
-      ? await judgeCitations(db, sources, options.judge)
+      ? await judgeCitations(
+          db,
+          sources,
+          options.judge,
+          (row) => band3?.supported.has(`${row.pagePath}\0${footnoteKey(row.footnote)}`) ?? false,
+        )
       : undefined;
   const findings = [
     ...report.findings,
     ...(options.sourceFindings ?? []),
     ...citations.findings,
     ...(support?.findings ?? []),
+    ...(band3?.findings ?? []),
   ].filter((finding) => !kinds || kinds.has(finding.kind));
   const scope = `lint\0${kinds ? [...kinds].toSorted().join(",") : ""}`;
   const { items, total, nextCursor } = options.page

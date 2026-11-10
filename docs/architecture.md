@@ -217,6 +217,7 @@ already failing cannot be asked, and a stale one on Linux would answer with the 
 | `list_recent_changes` | What changed in a source since a given revision. |
 | `lint_knowledge_base` | Broken links, unknown page types, missing provenance, citations that do not resolve. |
 | `update_verified_revision` | Write tool. Off unless `ACCRETA_ALLOW_WRITES=1`; dry run, then confirm token. |
+| `record_verdict` | Write tool, gated the same way. Appends to the verdict file; the server sets the writer. |
 
 **CLI**, for humans: `init`, `reindex`, `lint`, `drift`, `doctor`, `source add`, `search`,
 `show`, `consumers`, `canonical`. `accreta help` lists their flags.

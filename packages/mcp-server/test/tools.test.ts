@@ -9,6 +9,7 @@ import {
   openIndex,
   parseConfig,
   parsePage,
+  readVerdictFile,
   UnknownRevisionError,
   type AccretaConfig,
   type SourceAdapter,
@@ -22,6 +23,7 @@ import {
   findConsumersTool,
   getPageTool,
   lintTool,
+  recordVerdictTool,
   listRecentChangesTool,
   searchPagesTool,
   setFrontmatterField,
@@ -969,5 +971,61 @@ describe("page-derived fields are named as such", () => {
     // A block naming nothing trains the reader to skip it.
     expect(await checkDriftTool(ctx, {})).not.toHaveProperty("_provenance");
     expect(getPageTool(ctx, { path: "nothing/here" })).not.toHaveProperty("_provenance");
+  });
+});
+
+describe("record_verdict", () => {
+  const page = () =>
+    writePage(
+      "v.md",
+      "---\ntype: note\n---\n\n# V\n\nA claim the line does not back.[^a]\n\n[^a]: src @ rev1 · f.md#L1\n",
+    );
+  const input = { path: "v.md", footnote: "a", verdict: "unsupported" as const, model: "claude-x" };
+
+  test("is refused when writes are off", () => {
+    page();
+    build(false);
+    expect(recordVerdictTool(ctx, input, "mcp:probe")).toMatchObject({ ok: false });
+    expect(readVerdictFile(root, config).lines).toEqual([]);
+  });
+
+  test("a dry run returns a token; the confirmed call writes the server's writer and the declared model", async () => {
+    page();
+    build(true);
+    const dry = recordVerdictTool(ctx, input, "mcp:probe");
+    expect(dry).toMatchObject({ ok: false, dry_run: true });
+    const token = (dry as { confirm_token: string }).confirm_token;
+    expect(recordVerdictTool(ctx, { ...input, confirm_token: "nope" }, "mcp:probe")).toMatchObject({
+      dry_run: true,
+    });
+    expect(readVerdictFile(root, config).lines).toEqual([]);
+    expect(
+      recordVerdictTool(ctx, { ...input, verdict: "supported", confirm_token: token }, "mcp:probe"),
+    ).toMatchObject({ dry_run: true });
+
+    const done = recordVerdictTool(ctx, { ...input, confirm_token: token }, "mcp:probe");
+    expect(done).toMatchObject({ ok: true });
+    expect(readVerdictFile(root, config).lines[0]).toMatchObject({
+      writer: "mcp:probe",
+      model: "claude-x",
+      verdict: "unsupported",
+      revision: "rev1",
+    });
+
+    const result = await lintTool(ctx);
+    const found = result.findings.filter((f) => f.kind === "citation-unsupported");
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ advisory: true });
+    expect(found[0]?.detail).toContain("mcp:probe");
+    expect(found[0]?.detail).toContain("claude-x");
+    expect(result.advisory_count).toBe(1);
+  });
+
+  test("a footnote the page does not have is refused with no token", () => {
+    page();
+    build(true);
+    const refused = recordVerdictTool(ctx, { ...input, footnote: "zz" }, "mcp");
+    expect(refused).toMatchObject({ ok: false });
+    expect(refused).not.toHaveProperty("confirm_token");
   });
 });

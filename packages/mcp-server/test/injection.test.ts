@@ -76,6 +76,24 @@ const PROBES: Record<string, Probe[]> = {
   ],
 };
 
+PROBES.record_verdict = [
+  { path: "concepts/injected", footnote: "1", verdict: "unsupported", model: "probe" },
+  {
+    path: "notes/CANARY-FILENAME",
+    footnote: "CANARY-FOOTNOTE",
+    verdict: "supported",
+    model: "probe",
+  },
+  (dryRun) => ({
+    path: "concepts/injected",
+    footnote: "1",
+    verdict: "unsupported",
+    model: "probe",
+    confirm_token: (dryRun as { confirm_token?: string }).confirm_token,
+  }),
+  { path: "notes/nothing", footnote: "x", verdict: "unsupported", model: "probe" },
+];
+
 // Read probes refused by design; the error text is still swept, as an unmarked string.
 const EXPECTED_ERRORS = ['cite {"target":"broken:a.md"}', 'cite {"target":"failing:a.md"}'];
 

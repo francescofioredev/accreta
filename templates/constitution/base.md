@@ -188,6 +188,7 @@ With a shell, use the CLI. Without one, the MCP tool beside it does the same.
 | `accreta drift` | `check_drift` | the pages their sources moved under |
 | `accreta lint` | `lint_knowledge_base` | what is wrong with the knowledge base |
 | — | `list_recent_changes` | what changed in a source since a revision |
+| `accreta verdict <page> <footnote> <verdict>` | `record_verdict` | records whether a re-read citation backs its sentence; over MCP only with `ACCRETA_ALLOW_WRITES=1` |
 | — | `update_verified_revision` | records a verified revision; only with `ACCRETA_ALLOW_WRITES=1` |
 
 - **`--json`** prints the MCP tool's reply. Use it when you parse the output rather than read it.
@@ -237,7 +238,11 @@ After an ingest, a session that did not write the pages checks them. Skip a page
 lists as in doubt, to re-pin, behind the source or on a revision it cannot place, and a delegated
 one unless you read it at its `last_verified_revision`. Re-read the lines each footnote cites and
 fix each part they do not show as rule 1 says, citing new lines as Ingesting 1 and 4 say. Never
-add a claim. End with Ingesting step 6. Over MCP this is the prompt `verify_citations`.
+add a claim. Start with footnotes `accreta lint --judge` lists as `citation-unconfirmed`, and
+record what you find with `accreta verdict <page> <footnote> supported|unsupported --model <you>`:
+`supported` silences the judge for that sentence, `unsupported` is listed by lint, and an edit to
+the sentence or a re-pin voids either. End with Ingesting step 6. Over MCP this is
+the prompt `verify_citations`.
 
 ### Never write a speculative page
 

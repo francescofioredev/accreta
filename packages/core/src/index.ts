@@ -120,3 +120,23 @@ export {
   SUPPORT_VERDICTS,
   resolveJudgeSettings,
 } from "./judge.ts";
+
+export {
+  currentVerdicts,
+  describeVerdict,
+  keyedCitations,
+  parseVerdicts,
+  planVerdict,
+  readVerdictFile,
+  sentenceHash,
+  verdictFindings,
+  verdictKey,
+  verdictPathFor,
+  writeVerdict,
+  type KeyedCitation,
+  type VerdictFile,
+  type VerdictLine,
+  type VerdictPlan,
+  type VerdictRefusal,
+  type VerdictValue,
+} from "./query/verdicts.ts";

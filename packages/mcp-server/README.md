@@ -36,6 +36,7 @@ another — it needs no filesystem access to the knowledge base itself, only to 
 | `lint_knowledge_base` | Unresolvable links, missing provenance, unknown page types, and a count of the citations it could not check. Findings of an advisory kind (`uncited-sentence`, `citation-unconfirmed`) carry `advisory: true`, counted in `advisory_count`. `judge: true` also asks the configured judge about each readable citation (`citation-unconfirmed`, advisory). Filter by `kinds`. Paged: `count` is the total; follow `nextCursor`. |
 | `cite` | The citation for a place in a source, in this knowledge base's footnote format, pinned to the source's current revision when accreta can read the source. Read-only. |
 | `update_verified_revision` | Write. Registered only when `ACCRETA_ALLOW_WRITES=1`. |
+| `record_verdict` | Write. Registered only when `ACCRETA_ALLOW_WRITES=1`; dry run, then confirm token. Records whether a re-read citation backs its sentence in the verdict file; the server sets the writer, the caller declares the model. |
 
 ## Which fields a page author wrote
 
@@ -91,7 +92,7 @@ not examined. `unchecked_reasons` groups that count by the source's own reason.
 
 ## Writes
 
-`update_verified_revision` is the only tool that writes the knowledge base, and it is gated twice.
+`update_verified_revision` and `record_verdict` are the only tools that write the knowledge base, and each is gated twice.
 `check_drift` is a read tool, but for an `fs` source it creates, replaces and deletes snapshot
 files under the state directory beside the index.
 

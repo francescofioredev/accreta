@@ -1712,6 +1712,21 @@ describe("accreta doctor", () => {
     expect(stdout()).toContain("still uses {start} and {end}");
   });
 
+  test("a degenerate inference marker is refused and named, with the default in force", async () => {
+    await cli("init");
+    rmSync(join(root, "sources", "example.yaml"), { force: true });
+    writeFileSync(
+      join(root, "accreta.config.yaml"),
+      'knowledge_base: knowledge\nprovenance:\n  inference_marker: "."\n',
+      "utf-8",
+    );
+    output = [];
+
+    await cli("doctor");
+    expect(stdout()).toContain('inference_marker "." is not a usable marker');
+    expect(stdout()).toContain('"(inference)" is in force');
+  });
+
   test("a provenance format that names no revision is flagged once", async () => {
     await cli("init");
     rmSync(join(root, "sources", "example.yaml"), { force: true });
@@ -1927,6 +1942,138 @@ describe("accreta lint --judge", () => {
     expect(body.nextCursor).toBeUndefined();
     expect(body.citations_judged).toBe(2);
     expect(fake.requests).toHaveLength(2);
+  });
+
+  const verdictLines = () =>
+    readFileSync(join(root, "knowledge", "verdicts.jsonl"), "utf-8")
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+
+  test("an unsupported verdict is an advisory finding with writer, model and date, no judge needed", async () => {
+    await setup("");
+    expect(await cli("verdict", "p.md", "w", "unsupported", "--model", "opus-x")).toBe(0);
+    expect(verdictLines()[0]).toMatchObject({
+      writer: "cli",
+      model: "opus-x",
+      verdict: "unsupported",
+    });
+    output = [];
+    expect(await cli("lint", "--json")).toBe(0);
+    const body = JSON.parse(stdout());
+    const found = body.findings.filter((f: { kind: string }) => f.kind === "citation-unsupported");
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ advisory: true });
+    expect(found[0].detail).toContain("cli");
+    expect(found[0].detail).toContain("opus-x");
+    expect(found[0].detail).toContain(new Date().toISOString().slice(0, 10));
+    expect(body.advisory_count).toBe(1);
+  });
+
+  test("a supported verdict silences citation-unconfirmed for that sentence only", async () => {
+    fake = await startFakeJudge({
+      choice: () => ({ supports: 0.1, contradicts: 0.45, says_nothing: 0.45 }),
+    });
+    process.env.ACCRETA_JUDGE_URL = fake.url;
+    await setup("judge:\n  route: local\n");
+    expect(await cli("verdict", "p.md", "[^w]", "supported", "--model", "human")).toBe(0);
+    output = [];
+    expect(await cli("lint", "--judge", "--json")).toBe(0);
+    const body = JSON.parse(stdout());
+    expect(body.findings.map((f: { kind: string }) => f.kind)).toEqual(["citation-unconfirmed"]);
+    expect(body.findings[0].detail).toContain("[^s]");
+    expect(fake.requests).toHaveLength(1);
+  });
+
+  test("an edit to the sentence, or a re-pin, voids the verdict", async () => {
+    await setup("");
+    await cli("verdict", "p.md", "w", "unsupported", "--model", "m");
+    const page = join(root, "knowledge", "p.md");
+    const original = readFileSync(page, "utf-8");
+    writeFileSync(page, original.replace("Bananas are blue.", "Bananas are very blue."));
+    await cli("reindex");
+    output = [];
+    await cli("lint", "--json");
+    expect(JSON.parse(stdout()).findings.map((f: { kind: string }) => f.kind)).toEqual([]);
+
+    writeFileSync(page, original);
+    await cli("reindex");
+    output = [];
+    await cli("lint", "--json");
+    expect(JSON.parse(stdout()).advisory_count).toBe(1);
+    writeFileSync(page, original.replace(/\[\^w\]: docs @ \w+/, "[^w]: docs @ ffffffffffff"));
+    await cli("reindex");
+    output = [];
+    await cli("lint", "--json");
+    expect(
+      JSON.parse(stdout()).findings.filter(
+        (f: { kind: string }) => f.kind === "citation-unsupported",
+      ),
+    ).toEqual([]);
+  });
+
+  test("a second verdict on a footnote replaces the first; other footnotes keep theirs", async () => {
+    await setup("");
+    await cli("verdict", "p.md", "w", "unsupported", "--model", "m1");
+    await cli("verdict", "p.md", "s", "supported", "--model", "m1");
+    await cli("verdict", "p.md", "w", "supported", "--model", "m2");
+    const lines = verdictLines();
+    expect(lines).toHaveLength(2);
+    expect(lines.find((l) => l.footnote === "w")).toMatchObject({
+      verdict: "supported",
+      model: "m2",
+    });
+  });
+
+  test("without a pinned revision the verdict is keyed to the page's last_verified_revision", async () => {
+    await setup("");
+    writeFileSync(
+      join(root, "accreta.config.yaml"),
+      'provenance:\n  format: "{source} · {path}#{locator}"\n',
+    );
+    const rev = (await loadSources(findWorkspace(root)).sources[0]!.revision()) as string;
+    const page = join(root, "knowledge", "q.md");
+    const body = (verified: string) =>
+      `---\ntype: note\nsource: docs\ncanonical_source: "docs:a.md#L1"\nlast_verified_revision: ${verified}\n---\n\n# Q\n\nIce melts at zero.[^s]\n\n[^s]: docs · a.md#L1\n`;
+    writeFileSync(page, body(rev));
+    await cli("reindex");
+    expect(await cli("verdict", "q.md", "s", "unsupported", "--model", "m")).toBe(0);
+    expect(verdictLines().at(-1)).toMatchObject({ revision: rev });
+    writeFileSync(page, body("bumped0000000"));
+    await cli("reindex");
+    output = [];
+    await cli("lint", "--json");
+    expect(
+      JSON.parse(stdout()).findings.filter(
+        (f: { kind: string }) => f.kind === "citation-unsupported",
+      ),
+    ).toEqual([]);
+  });
+
+  test("verdict refuses without --model, for an unknown footnote, and an unreadable citation", async () => {
+    await setup("");
+    expect(await cli("verdict", "p.md", "w", "unsupported")).toBe(2);
+    expect(await cli("verdict", "p.md", "zz", "unsupported", "--model", "m")).toBe(1);
+    expect(stderr()).toContain("no footnote");
+    expect(await cli("verdict", "p.md", "w", "maybe", "--model", "m")).toBe(1);
+    expect(existsSync(join(root, "knowledge", "verdicts.jsonl"))).toBe(false);
+  });
+
+  test("a hostile line in the verdict file cannot rewrite the output", async () => {
+    await setup("");
+    await cli("verdict", "p.md", "w", "unsupported", "--model", "m");
+    const file = join(root, "knowledge", "verdicts.jsonl");
+    const line = verdictLines()[0];
+    writeFileSync(
+      file,
+      JSON.stringify({ ...line, model: "evil\u001b[2Jx", writer: "a\nb" }) + "\nnot json\n",
+    );
+    output = [];
+    errors = [];
+    expect(await cli("lint")).toBe(0);
+    expect(stdout()).not.toContain("\u001b");
+    expect(stdout()).toContain("citation-unsupported");
+    expect(stderr()).toContain("1 line(s) of the verdict file");
   });
 
   test("without --judge no request is made", async () => {
