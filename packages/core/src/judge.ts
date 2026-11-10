@@ -76,6 +76,8 @@ export const JUDGE_DEFAULTS = {
 export interface JudgeSettings {
   route?: string;
   url?: string;
+  /** The url came from `ACCRETA_JUDGE_URL`, not from the file: only then may a key go to it. */
+  urlFromEnv: boolean;
   model?: string;
   apiKeyEnv: string;
   rerankTop: number;
@@ -113,6 +115,7 @@ export function resolveJudgeSettings(
   const settings: JudgeSettings = {
     route: text("ROUTE") ?? block.route,
     url: text("URL") ?? block.url,
+    urlFromEnv: text("URL") !== undefined,
     model: text("MODEL") ?? block.model,
     apiKeyEnv: text("API_KEY_ENV") ?? block.apiKeyEnv ?? JUDGE_DEFAULTS.apiKeyEnv,
     rerankTop:
