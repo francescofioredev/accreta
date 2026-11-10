@@ -417,9 +417,18 @@ export class FsSource implements SourceAdapter {
 
   /** One tree hash serves a judge pass's many excerpts; a short life keeps it from outliving an edit. */
   private recentRevision(): Promise<string> {
-    const now = Date.now();
-    if (!this.recent || now - this.recent.at > 2000) {
-      this.recent = { at: now, revision: this.revision() };
+    if (!this.recent || Date.now() - this.recent.at > 2000) {
+      // The clock starts once the scan is done, or a slow scan would expire its own memo.
+      const entry = { at: Number.POSITIVE_INFINITY, revision: this.revision() };
+      entry.revision.then(
+        () => {
+          entry.at = Date.now();
+        },
+        () => {
+          if (this.recent === entry) this.recent = undefined;
+        },
+      );
+      this.recent = entry;
     }
     return this.recent.revision;
   }

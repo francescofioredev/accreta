@@ -1862,9 +1862,12 @@ describe("accreta lint, advisory findings", () => {
 
 describe("accreta lint --judge", () => {
   let fake: FakeJudge | undefined;
+  const savedUrl = process.env.ACCRETA_JUDGE_URL;
   afterEach(async () => {
     await fake?.close();
     fake = undefined;
+    if (savedUrl === undefined) delete process.env.ACCRETA_JUDGE_URL;
+    else process.env.ACCRETA_JUDGE_URL = savedUrl;
   });
 
   const setup = async (judgeBlock: string) => {
@@ -1898,7 +1901,8 @@ describe("accreta lint --judge", () => {
         return { supports: p, contradicts: (1 - p) / 2, says_nothing: (1 - p) / 2 };
       },
     });
-    await setup(`judge:\n  route: local\n  url: ${fake.url}\n`);
+    process.env.ACCRETA_JUDGE_URL = fake.url;
+    await setup("judge:\n  route: local\n");
     expect(await cli("lint", "--judge", "--json")).toBe(0);
     const body = JSON.parse(stdout());
     const kinds = body.findings.map((f: { kind: string }) => f.kind);
@@ -1912,9 +1916,23 @@ describe("accreta lint --judge", () => {
     expect(JSON.stringify(fake.requests.map((r) => r.body.state))).not.toContain("third line");
   });
 
+  test("a judged lint is not paged, so --limit does not split the judge's work", async () => {
+    fake = await startFakeJudge({
+      choice: () => ({ supports: 0.1, contradicts: 0.45, says_nothing: 0.45 }),
+    });
+    process.env.ACCRETA_JUDGE_URL = fake.url;
+    await setup("judge:\n  route: local\n");
+    expect(await cli("lint", "--judge", "--json", "--limit", "1")).toBe(0);
+    const body = JSON.parse(stdout());
+    expect(body.nextCursor).toBeUndefined();
+    expect(body.citations_judged).toBe(2);
+    expect(fake.requests).toHaveLength(2);
+  });
+
   test("without --judge no request is made", async () => {
     fake = await startFakeJudge();
-    await setup(`judge:\n  route: local\n  url: ${fake.url}\n`);
+    process.env.ACCRETA_JUDGE_URL = fake.url;
+    await setup("judge:\n  route: local\n");
     expect(await cli("lint")).toBe(0);
     expect(fake.requests).toHaveLength(0);
     expect(stdout()).not.toContain("judged");
@@ -1929,7 +1947,8 @@ describe("accreta lint --judge", () => {
 
   test("an unreachable judge degrades with one warning and exits zero", async () => {
     fake = await startFakeJudge({ failWith: [500, 500, 500, 500, 500, 500, 500, 500] });
-    await setup(`judge:\n  route: local\n  url: ${fake.url}\n`);
+    process.env.ACCRETA_JUDGE_URL = fake.url;
+    await setup("judge:\n  route: local\n");
     expect(await cli("lint", "--judge", "--json")).toBe(0);
     expect(stderr()).toContain("became unavailable");
     expect(JSON.parse(stdout()).citations_judged).toBe(0);

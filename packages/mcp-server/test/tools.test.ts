@@ -175,12 +175,13 @@ describe("lint_knowledge_base with judge", () => {
     const fake = await startFakeJudge({
       choice: () => ({ supports: 0.2, contradicts: 0.3, says_nothing: 0.5 }),
     });
+    process.env.ACCRETA_JUDGE_URL = fake.url;
     try {
       cited();
       build();
       ctx.config = {
         ...config,
-        judge: parseConfig(`judge:\n  route: local\n  url: ${fake.url}\n`).judge,
+        judge: parseConfig("judge:\n  route: local\n").judge,
       };
       ctx.sources.set("src", stub());
       const result = await lintTool(ctx, { judge: true });
@@ -191,6 +192,7 @@ describe("lint_knowledge_base with judge", () => {
       expect(result.advisory_count).toBe(1);
       expect(result.citations_judged).toBe(1);
     } finally {
+      delete process.env.ACCRETA_JUDGE_URL;
       await fake.close();
     }
   });
@@ -199,6 +201,7 @@ describe("lint_knowledge_base with judge", () => {
     const fake = await startFakeJudge({
       choice: () => ({ supports: 0.2, contradicts: 0.3, says_nothing: 0.5 }),
     });
+    process.env.ACCRETA_JUDGE_URL = fake.url;
     try {
       writePage(
         "k.md",
@@ -207,7 +210,7 @@ describe("lint_knowledge_base with judge", () => {
       build();
       ctx.config = {
         ...config,
-        judge: parseConfig(`judge:\n  route: local\n  url: ${fake.url}\n`).judge,
+        judge: parseConfig("judge:\n  route: local\n").judge,
       };
       ctx.sources.set("src", stub());
       const result = await lintTool(ctx, { judge: true, limit: 1 });
@@ -215,6 +218,7 @@ describe("lint_knowledge_base with judge", () => {
       expect(result.citations_unjudged).toBe(1);
       expect(result.nextCursor).toBeUndefined();
     } finally {
+      delete process.env.ACCRETA_JUDGE_URL;
       await fake.close();
     }
   });

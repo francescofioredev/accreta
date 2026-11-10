@@ -71,7 +71,7 @@ export async function runLint(
     let report: Awaited<ReturnType<typeof lintKnowledgeBase>>;
     try {
       report = await lintKnowledgeBase(db, workspace.config, sources, {
-        page,
+        page: judge ? undefined : page,
         sourceFindings: unloadedFindings(countUnchecked(db, loaded.unloaded)),
         judge: judge
           ? {
