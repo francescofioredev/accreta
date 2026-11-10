@@ -1806,3 +1806,55 @@ describe("accreta doctor", () => {
     expect(lint.out).toContain(`id \`docs\` is also declared in ${a}`);
   });
 });
+
+describe("accreta lint, advisory findings", () => {
+  const setup = async (config: string) => {
+    await cli("init");
+    writeFileSync(join(root, "accreta.config.yaml"), config);
+    writePage(
+      "a.md",
+      '---\ntype: note\ncanonical_source: "s:x.md#L1"\nlast_verified_revision: abc\n---\n\n# A\n\nA bare claim with several words.\n',
+    );
+    await cli("reindex");
+    output = [];
+  };
+
+  test("an uncited sentence is listed apart and leaves the exit code at zero", async () => {
+    await setup("lint:\n  uncited_sentences: true\n");
+    expect(await cli("lint")).toBe(0);
+    expect(stdout()).toContain("advisory (listed for review; they do not change the exit code)");
+    expect(stdout()).toContain("uncited-sentence (1)");
+    expect(stdout()).toContain("1 advisory finding(s)");
+  });
+
+  test("--json marks it and counts it, still exiting zero", async () => {
+    await setup("lint:\n  uncited_sentences: true\n");
+    expect(await cli("lint", "--json")).toBe(0);
+    const body = JSON.parse(stdout());
+    expect(body.advisory_count).toBe(1);
+    expect(body.findings[0]).toMatchObject({ kind: "uncited-sentence", advisory: true });
+  });
+
+  test("a blocking finding beside it still exits one", async () => {
+    await setup("lint:\n  uncited_sentences: true\n");
+    writePage("b.md", "---\ntype: note\nrelated: [[missing]]\n---\n\n# B\n");
+    await cli("reindex");
+    expect(await cli("lint")).toBe(1);
+  });
+
+  test("a page without advisory findings prints no empty advisory heading", async () => {
+    await setup("lint:\n  uncited_sentences: true\n");
+    writePage("b.md", "---\ntype: note\nrelated: [[missing]]\n---\n\n# B\n");
+    await cli("reindex");
+    output = [];
+    expect(await cli("lint", "--limit", "1")).toBe(1);
+    expect(stdout()).toContain("dangling-link");
+    expect(stdout()).not.toContain("advisory (listed");
+  });
+
+  test("off unless the key is set", async () => {
+    await setup("page_types: [note]\n");
+    expect(await cli("lint")).toBe(0);
+    expect(stdout()).toContain("nothing to report");
+  });
+});

@@ -7,6 +7,7 @@ import {
   findCanonicalPage,
   findRelated,
   getPage,
+  isAdvisory,
   lintKnowledgeBase,
   namesRef,
   pageChanges,
@@ -591,7 +592,8 @@ export async function lintTool(
     citations_checked: report.citationsChecked,
     citations_unchecked: report.citationsUnchecked,
     unchecked_reasons: report.uncheckedReasons,
-    findings: report.findings,
+    advisory_count: report.advisoryCount ?? 0,
+    findings: report.findings.map((f) => (isAdvisory(f.kind) ? { ...f, advisory: true } : f)),
     nextCursor: report.nextCursor,
     // An unloaded-source finding quotes sources/*.yaml.
     _provenance: provenance(LINT_FIELDS, DRIFT_NOTICE),

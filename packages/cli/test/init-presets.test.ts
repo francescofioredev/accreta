@@ -245,6 +245,7 @@ describe("init without its templates", () => {
 describe("renderConfig", () => {
   test("round-trips values a bare YAML scalar would misread", () => {
     const vocabulary = {
+      ...DEFAULT_CONFIG,
       knowledgeBase: "notes: kb",
       pageTypes: ["concept", "true", "a #b"],
       linkFields: ["related", "- x"],

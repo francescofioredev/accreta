@@ -43,9 +43,11 @@ checked.
 **A citation covers its whole sentence.** Every fact in a cited sentence — a name, a value, a
 sequence, a condition, a cause — must be in the cited lines, in your words or theirs. Split off
 any that is not and give it its own footnote from `cite`, or drop it; never widen a range to
-cover it. Only what follows from a cited fact may stay as an inference: yours ("this suggests"),
-in a sentence of its own with no footnote, right after that fact. It never settles a
-disagreement (rule 3).
+cover it. Only what follows from a cited fact may stay as an inference: yours, in a sentence of its
+own with no footnote, right after that fact, ending in the inference marker (`(inference)`
+unless `provenance.inference_marker` sets another), so lint can tell it from a claim you forgot
+to cite. It never settles a disagreement (rule 3). When you answer a question, end any
+sentence that does not come from a page with the same marker.
 
 ```markdown
 Before: The assessed likely range is 2.5 to 4.0 degrees Celsius, narrowed by paleoclimate evidence.[^ecs]
@@ -322,6 +324,9 @@ an interruption to work around.
   and another's title, so `canonical` has no single answer for it. Keep the alias on the page
   that defines the concept; if two pages really do, that is a contradiction to record. The finding
   names at most 20 pages; run `canonical <name>` for the full list.
+- **uncited sentences** — when `lint.uncited_sentences` is on: a prose sentence with neither a
+  footnote nor the inference marker. Cite it, mark it as inference, or remove it. This is
+  advisory: it never fails the run.
 
 It also prints how many citations it could not check, grouped by why. That is not a finding:
 nobody looked. The reason may be a source accreta cannot reach, a git file with uncommitted

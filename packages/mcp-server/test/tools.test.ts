@@ -132,6 +132,25 @@ describe("read tools", () => {
     const { findings } = await lintTool(ctx);
     expect(findings.filter((f) => f.kind === "unknown-page-type")).toEqual([]);
   });
+
+  test("lint marks uncited-sentence as advisory and counts it when the knowledge base turns it on", async () => {
+    writePage(
+      "bare.md",
+      "---\ntype: note\n---\n\n# Bare\n\nThis sentence has no footnote and no marker at all.\n",
+    );
+    ctx.db.close();
+    config.lintUncitedSentences = true;
+    try {
+      build();
+      const result = await lintTool(ctx);
+      const found = result.findings.filter((f) => f.kind === "uncited-sentence");
+      expect(found.length).toBeGreaterThan(0);
+      expect(found.every((f) => (f as { advisory?: boolean }).advisory === true)).toBe(true);
+      expect(result.advisory_count).toBe(found.length);
+    } finally {
+      config.lintUncitedSentences = false;
+    }
+  });
 });
 
 describe("source-backed tools", () => {

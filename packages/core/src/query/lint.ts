@@ -12,6 +12,7 @@ import {
 import { paginate, type PageInfo, type PageRequest } from "./paging.ts";
 import { supersessionFindings } from "./supersession.ts";
 import { requireTable } from "./tables.ts";
+import { uncitedSentences } from "./uncited.ts";
 
 export const LINT_FINDING_KINDS = [
   "broken-link",
@@ -38,9 +39,15 @@ export const LINT_FINDING_KINDS = [
   "inconsistent-supersession",
   "unreadable-supersession-fields",
   "shared-alias",
+  "uncited-sentence",
 ] as const;
 
 export type LintFindingKind = (typeof LINT_FINDING_KINDS)[number];
+
+/** Kinds that are listed but never change lint's exit code (ADR-0014). */
+export const ADVISORY_LINT_KINDS: ReadonlySet<LintFindingKind> = new Set(["uncited-sentence"]);
+
+export const isAdvisory = (kind: LintFindingKind) => ADVISORY_LINT_KINDS.has(kind);
 
 export interface LintFinding {
   kind: LintFindingKind;
@@ -65,6 +72,8 @@ export interface LintReport {
   citationsUnchecked: number;
   /** Why they went unchecked, by the source's own detail, with the `source:path` values it covers. */
   uncheckedReasons: { detail: string; citations: number; paths: string[] }[];
+  /** Findings of advisory kinds, over the whole list rather than a page of it. */
+  advisoryCount?: number;
 }
 
 interface BrokenRow {
@@ -254,6 +263,7 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
   findings.push(...orphanFootnoteFindings(db));
   findings.push(...supersessionFindings(db, config));
   findings.push(...sharedAliasFindings(db));
+  if (config.lintUncitedSentences) findings.push(...uncitedSentenceFindings(db, config));
 
   return {
     findings,
@@ -262,6 +272,25 @@ export function lint(db: Database, config: AccretaConfig): LintReport {
     citationsUnchecked: 0,
     uncheckedReasons: [],
   };
+}
+
+// Read from the stored body, so the index format stays as it is.
+function uncitedSentenceFindings(db: Database, config: AccretaConfig): LintFinding[] {
+  const exempt = new Set(config.uncitedExemptTypes);
+  const rows = db.prepare(`SELECT path, type, body FROM pages ORDER BY path`).all() as {
+    path: string;
+    type: string;
+    body: string;
+  }[];
+  return rows
+    .filter((row) => !exempt.has(row.type))
+    .flatMap((row) =>
+      uncitedSentences(row.body, config.inferenceMarker).map(({ line, text }) => ({
+        kind: "uncited-sentence" as const,
+        path: row.path,
+        detail: `body line ${line}: "${text.length > 100 ? `${text.slice(0, 100)}…` : text}" has no footnote and does not end in ${config.inferenceMarker}`,
+      })),
+    );
 }
 
 // ADR-0007 pages cap the number of findings, not their size.
@@ -657,5 +686,6 @@ export async function lintKnowledgeBase(
     citationsChecked: citations.citationsChecked,
     citationsUnchecked: citations.citationsUnchecked,
     uncheckedReasons: citations.uncheckedReasons,
+    advisoryCount: findings.filter((finding) => isAdvisory(finding.kind)).length,
   };
 }
