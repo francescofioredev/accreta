@@ -42,7 +42,13 @@ export function createJudge(
     );
   }
   const url = fileUrl ? settings.url : (settings.url ?? route.url);
-  if (!url) throw new JudgeConfigError(`judge.url is required for the ${name} route`);
+  if (!url) {
+    throw new JudgeConfigError(
+      route.keyRequired
+        ? `ACCRETA_JUDGE_URL is required for the ${name} route`
+        : `judge.url is required for the ${name} route`,
+    );
+  }
 
   if (route.modelIn === "url" && !url.includes("{model}")) {
     throw new JudgeConfigError(`judge.url for the ${name} route must contain {model}`);

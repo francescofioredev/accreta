@@ -166,11 +166,12 @@ describe("the key", () => {
   test("a refused key does not echo it", async () => {
     const server = await fake({ failWith: [401] });
     const judge = createJudge(
-      parseConfig(`judge:\n  route: local\n  url: ${server.url}\n`),
-      { ACCRETA_JUDGE_KEY: "sk-do-not-print" },
+      parseConfig(`judge:\n  route: local\n`),
+      { ACCRETA_JUDGE_KEY: "sk-do-not-print", ACCRETA_JUDGE_URL: server.url },
       fast,
     );
     const error = await judge!.probe!().catch((e: unknown) => e);
+    expect(server.requests[0]?.headers.authorization).toBe("Bearer sk-do-not-print");
     expect(error).toBeInstanceOf(JudgeUnavailableError);
     expect(String((error as Error).message)).not.toContain("sk-do-not-print");
     expect(server.requests).toHaveLength(1);
@@ -267,7 +268,21 @@ describe("bad config", () => {
   test("cloudflare needs a url", () => {
     expect(() =>
       createJudge(parseConfig("judge:\n  route: cloudflare\n"), { ACCRETA_JUDGE_KEY: "k" }),
-    ).toThrow("judge.url is required");
+    ).toThrow("ACCRETA_JUDGE_URL");
+  });
+  test("an env route override cannot send the key to a file url", async () => {
+    const server = await fake();
+    const config = parseConfig(`judge:\n  route: local\n  url: ${server.url}\n`);
+    expect(() =>
+      createJudge(config, { ACCRETA_JUDGE_ROUTE: "typesafe", ACCRETA_JUDGE_KEY: "k" }),
+    ).toThrow("ACCRETA_JUDGE_URL");
+    expect(server.requests).toHaveLength(0);
+  });
+  test("a blank ACCRETA_JUDGE_URL does not count as an override", () => {
+    const config = parseConfig("judge:\n  route: typesafe\n  url: http://x\n");
+    expect(() => createJudge(config, { ACCRETA_JUDGE_KEY: "k", ACCRETA_JUDGE_URL: "  " })).toThrow(
+      "ACCRETA_JUDGE_URL",
+    );
   });
   test("an env override can change the route", () => {
     expect(() =>
