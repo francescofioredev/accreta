@@ -111,9 +111,9 @@ amendment of 2026-11-10), and lint no longer reads it back.
 
 **Advisory is now mechanical.** Core holds `ADVISORY_LINT_KINDS` (#392). `lint`'s exit code
 counts only non-advisory findings, and JSON marks each advisory finding `advisory: true` and adds
-`advisory_count`. The advisory kinds are `uncited-sentence` (#391, built in #392),
-`citation-unconfirmed` for band 2, which `lint --judge` adds (#401), and `citation-unsupported` for
-band 3, which lint reads back from the verdict file (#405). This is
+`advisory_count`. The advisory kinds are `uncited-sentence` (#391, built in #392) and
+`citation-unconfirmed` for band 2, which `lint --judge` adds (#401). `citation-unsupported` for
+band 3, read back from the verdict file, is to join them with #405. This is
 the "never as lint errors that fail CI by default" consequence above, made checkable.
 
 **`uncited-sentence` is off by default in v0.3** (`lint.uncited_sentences`). With it on, the
