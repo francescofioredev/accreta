@@ -52,6 +52,9 @@ export async function runLint(
     const loaded = loadSources(workspace);
     const sources = new Map(loaded.sources.map((adapter) => [adapter.id, adapter]));
     const verdicts = readVerdictFile(workspace.root, workspace.config);
+    if (verdicts.problem) {
+      ctx.err(`Recorded verdicts were not read: ${printableMessage(verdicts.problem)}.`);
+    }
     if (verdicts.unreadable > 0) {
       ctx.err(
         `${verdicts.unreadable} line(s) of the verdict file are not verdicts and were ignored.`,

@@ -143,6 +143,8 @@ export function keyedCitations(db: Database): KeyedCitation[] {
 
 export interface VerdictFile {
   lines: VerdictLine[];
+  /** Why the file was not read at all; lint says so rather than reporting nothing. */
+  problem?: string;
   /** Lines that were not a verdict this build can read; they are ignored, not repaired. */
   unreadable: number;
 }
@@ -180,12 +182,24 @@ export function parseVerdicts(text: string): VerdictFile {
   return { lines, unreadable };
 }
 
+function lstatExists(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Why the verdict file cannot be used: a path that leaves the root through a symlink, or a file that is not one. */
 export function verdictFileProblem(root: string, config: AccretaConfig): string | undefined {
   const path = verdictPathFor(root, config);
   try {
-    if (existsSync(path) && lstatSync(path).isSymbolicLink())
-      return "the verdict file is a symlink";
+    if (lstatExists(path)) {
+      const stat = lstatSync(path);
+      if (stat.isSymbolicLink()) return "the verdict file is a symlink";
+      if (!stat.isFile()) return "the verdict file is not a regular file";
+    }
     let dir = dirname(path);
     while (!existsSync(dir)) dir = dirname(dir);
     const inside = relative(realpathSync(root), realpathSync(dir));
@@ -200,9 +214,9 @@ export function verdictFileProblem(root: string, config: AccretaConfig): string 
 
 export function readVerdictFile(root: string, config: AccretaConfig): VerdictFile {
   const path = verdictPathFor(root, config);
-  if (verdictFileProblem(root, config) !== undefined || !existsSync(path)) {
-    return { lines: [], unreadable: 0 };
-  }
+  const problem = verdictFileProblem(root, config);
+  if (problem !== undefined) return { lines: [], unreadable: 0, problem };
+  if (!existsSync(path)) return { lines: [], unreadable: 0 };
   return parseVerdicts(readFileSync(path, "utf-8"));
 }
 

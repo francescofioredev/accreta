@@ -621,6 +621,7 @@ export async function lintTool(
       citations_unjudged: report.citationsUnjudged ?? 0,
     }),
     ...(verdicts.unreadable > 0 && { verdict_lines_ignored: verdicts.unreadable }),
+    ...(verdicts.problem && { verdict_file_problem: verdicts.problem }),
     pages_checked: report.pagesChecked,
     count: report.total,
     // Citations whose source could not be questioned. A number rather than

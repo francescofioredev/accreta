@@ -2113,6 +2113,14 @@ describe("accreta lint --judge", () => {
     expect(stdout()).not.toContain("\u001b");
   });
 
+  test("a verdict file that cannot be read is said so by lint, not skipped in silence", async () => {
+    await setup("");
+    mkdirSync(join(root, "knowledge", "verdicts.jsonl"));
+    errors = [];
+    expect(await cli("lint")).toBe(0);
+    expect(stderr()).toContain("Recorded verdicts were not read");
+  });
+
   test("a hostile line in the verdict file cannot rewrite the output", async () => {
     await setup("");
     await cli("verdict", "p.md", "w", "unsupported", "--model", "m");
