@@ -82,6 +82,13 @@
         "yaml": "^2.7.0",
       },
     },
+    "packages/judges": {
+      "name": "@accreta/judges",
+      "version": "0.2.0-rc.1",
+      "dependencies": {
+        "@accreta/core": "0.2.0-rc.1",
+      },
+    },
     "packages/mcp-server": {
       "name": "@accreta/mcp-server",
       "version": "0.2.0-rc.1",
@@ -110,6 +117,8 @@
     "@accreta/bench": ["@accreta/bench@workspace:bench"],
 
     "@accreta/core": ["@accreta/core@workspace:packages/core"],
+
+    "@accreta/judges": ["@accreta/judges@workspace:packages/judges"],
 
     "@accreta/mcp-server": ["@accreta/mcp-server@workspace:packages/mcp-server"],
 

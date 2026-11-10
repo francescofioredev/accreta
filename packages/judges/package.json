@@ -1,0 +1,45 @@
+{
+  "name": "@accreta/judges",
+  "version": "0.2.0-rc.1",
+  "type": "module",
+  "license": "MIT",
+  "description": "An optional, advisory judge for accreta: a client for the TypeSafe wire format and the routes that speak it.",
+  "homepage": "https://github.com/francescofioredev/accreta#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/francescofioredev/accreta.git",
+    "directory": "packages/judges"
+  },
+  "bugs": "https://github.com/francescofioredev/accreta/issues",
+  "engines": {
+    "node": "^22.16.0 || >=24",
+    "bun": ">=1.4.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "@accreta/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "@accreta/source": "./src/testing.ts",
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@accreta/core": "0.2.0-rc.1"
+  },
+  "scripts": {
+    "build": "bun ../../scripts/build-package.ts",
+    "prepack": "bun ../../scripts/build-package.ts",
+    "postpack": "bun ../../scripts/build-package.ts --clean"
+  }
+}

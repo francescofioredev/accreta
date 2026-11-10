@@ -17,6 +17,7 @@ export const PUBLISHABLE = [
   "packages/adapters/git",
   "packages/adapters/delegated",
   "packages/adapters/registry",
+  "packages/judges",
   "packages/mcp-server",
   "packages/cli",
 ];
