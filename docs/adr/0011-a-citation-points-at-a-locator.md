@@ -138,3 +138,40 @@ The first consequence above says `formatCitation` has no production callers. It 
 `cite()` (#124) renders the footnote it hands the agent, and `formatCanonicalSource` renders the
 matching `canonical_source`. `cite()` never pins the adapter, and it refuses a citation that
 `parseCitation` or `compileCitationTemplate` cannot read back.
+
+## Amendment, 2026-11-09: a configured judge reads the cited lines
+
+Decided 2026-11-09, Francesco Fiore (#153, question A1). ADR-0014 has a judge read "the cited
+lines and nothing else", which the rule above forbade. `SourceAdapter` gains an optional
+`excerpt(path, locator, revision)`, used only with a configured judge. The `fs` and `git` adapters
+are to implement it. A citation into a source without `excerpt()`, or whose `excerpt()` answers
+`unknown` (a delegated source does), is counted in `citations_unjudged`, never reported as a
+finding: the "I did not look" rule above, applied to reading.
+
+The sentence "accreta asks a source about revisions and locations, and never reads it" now reads:
+accreta reads only the cited lines, and only for a configured judge. The consequence "Nothing in
+accreta reads a source's content" narrows the same way. Those lines are what the judge is sent, so
+with a remote judge they leave the machine: ADR-0014's consequence on content sent to a third party
+now covers source content as well as page content. The interface names the one method that hands
+source content to accreta, so a reviewer can find every such read through its callers.
+
+This narrows the rejection of the alternative "Keep `read()` and add `locate()` alongside it":
+`excerpt()` is a method some sources decline, which that paragraph called the capability flag
+ADR-0002 rejected. The newline count it called the actual defect stays out of the core, because the
+adapter reads its own locator.
+
+## Amendment, 2026-11-09: an uncited sentence is either marked inference or a gap
+
+Decided 2026-11-09, Francesco Fiore (#391, question A3). A page sentence with no footnote is
+inference only when it ends in the literal `provenance.inference_marker`, default `(inference)`.
+The literal is configuration, so a knowledge base written in another language sets its own. It
+replaces the wording convention ("this suggests") in constitution rule 1 and in the
+`verify_citations` prompt. Any other prose sentence without a footnote is reported as uncited by
+the advisory lint kind `uncited-sentence` when `lint.uncited_sentences` is on (off by default;
+ADR-0014, amendment of 2026-11-09).
+
+## Amendment, 2026-11-10: what makes accreta read the cited lines
+
+2026-11-10, lead decision (orchestrating session), open to veto (#153). "Only for a configured
+judge" means both: the configuration has a `judge:` block, and the command was run with
+`--judge`. accreta calls `excerpt()` only then. Neither alone reads a source.

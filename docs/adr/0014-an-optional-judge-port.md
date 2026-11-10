@@ -80,3 +80,78 @@ RFCs and on code.
   that fail CI by default.
 - **`stillHolds` stays proposed until the study's audit settles the drift labels** (#152). That
   audit decides whether it is worth wiring at all. The rest is built in #153.
+
+## Amendment, 2026-11-09: citation support in three bands
+
+Decided 2026-11-09, Francesco Fiore: Gate 0 for the three bands, questions A2 and A4 for the
+verdict file and the `uncited-sentence` default (#153, #391). Citation support has three bands.
+Bands 1 and 2 cover each footnote whose cited lines `lint --judge` can read (ADR-0011, amendment
+of 2026-11-09):
+
+- **Band 1.** The judge gives p(supports) at or above τ (`judge.support.threshold`, default 0.73,
+  the SciFact calibration in [T2](../research/2026-09-jev/experiments/t2-citation-support.md)).
+  No finding.
+- **Band 2.** Below τ: advisory `citation-unconfirmed`, whose detail names the judge, the model,
+  the probability and τ. The agent's `verify_citations` pass re-reads these footnotes first.
+  accreta never calls a stronger model itself: the agent's pass is that tier.
+- **Band 3.** A verdict recorded in the verdict file, read back by lint. A recorded "unsupported"
+  yields advisory `citation-unsupported`. A recorded "supported" silences band 2 while the
+  verdict holds.
+
+This replaces "`lint` may report `citation-unsupported`" above: a judge's own finding is
+`citation-unconfirmed`, and `citation-unsupported` comes only from a recorded verdict. A citation
+whose lines cannot be read is counted in `citations_unjudged`, never a finding.
+
+**Verdicts live in a tracked file in the knowledge base** (path in config), one line per verdict,
+keyed by page, footnote, citation text and a hash of the sentence. The file is not part of the
+index, which stays derived (ADR-0004). `accreta verdict` and an MCP tool are to write it. An edit
+to the sentence or a re-pin of the citation voids the verdict (the key names the pinned revision:
+amendment of 2026-11-10), and lint no longer reads it back.
+
+**Advisory is now mechanical.** Core holds `ADVISORY_LINT_KINDS` (#392). `lint`'s exit code
+counts only non-advisory findings, and JSON marks each advisory finding `advisory: true` and adds
+`advisory_count`. The advisory kinds are `uncited-sentence` (#391, built in #392), and
+`citation-unconfirmed` and `citation-unsupported`, which `lint --judge` adds with #153. This is
+the "never as lint errors that fail CI by default" consequence above, made checkable.
+
+**`uncited-sentence` is off by default in v0.3** (`lint.uncited_sentences`). With it on, the
+10-page climate demo gives 21 advisory findings (#392). The default is decided after the noise
+is measured. The inference marker it checks for is recorded in ADR-0011's amendment of
+2026-11-09.
+
+## Amendment, 2026-11-10: the judge's URL and key name come from the environment
+
+Decided 2026-11-10, Francesco Fiore (#393, #153). On every route, keyed or keyless, the judge URL
+can be overridden only by `ACCRETA_JUDGE_URL`, never by `judge.url` in `accreta.config.yaml`. A
+preset route uses its fixed host unless `ACCRETA_JUDGE_URL` is set. A `url:` in a cloned
+configuration would otherwise decide where the judge key (on a keyed route), the claim and its
+cited lines are sent (ADR-0011, amendment of 2026-11-09). #393 applies the rule to keyed routes;
+#153 extends it to keyless ones.
+
+2026-11-10, lead decision (orchestrating session), open to veto (#153). `judge.api_key_env`
+accepts only names that start with `ACCRETA_JUDGE_`. #393 requires the `ACCRETA_` prefix; #153
+narrows it. A cloned configuration could otherwise send the value of another `ACCRETA_` variable
+to the judge host.
+
+## Amendment, 2026-11-10: what a verdict records, and how the MCP tool writes one
+
+Decided 2026-11-10, Francesco Fiore (#153):
+
+- **Each line of the verdict file records its writer, the model and the date.** Lint's band 3
+  output shows all three, as band 2's detail names the judge and the model.
+- **When the footnote format has no `{rev}`, the revision in the verdict key is the page's
+  `last_verified_revision` for that source.** A verification bump therefore voids that page's
+  verdicts.
+
+2026-11-10, lead decision (orchestrating session), open to veto (#153):
+
+- **The verdict key names the pinned revision explicitly**, beside page, footnote, citation text
+  and the sentence hash, so a re-pin of the citation changes the key.
+- **The tool fills the writer**: `cli`, or `mcp` plus the client's name, never a value the caller
+  passes. **The model is declared by the caller and shown as declared**, because the MCP server
+  cannot know which model its client runs.
+- **The MCP verdict tool is gated like `update_verified_revision`**: off unless
+  `ACCRETA_ALLOW_WRITES=1`, then a dry run whose confirm token the second call must return
+  ([architecture](../architecture.md)). The gate covers the MCP tool only: `accreta verdict`,
+  or any edit to the verdict file, adds a line lint reads back.
+- **ADR-0004 is not amended here.** Whether it needs a note on the verdict file is #398.
