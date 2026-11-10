@@ -67,11 +67,12 @@ export async function runLint(
         }
       }
     }
+    const shownPage = judge ? undefined : page;
     // Without a page every finding prints, as before paging existed; with one, as MCP pages it.
     let report: Awaited<ReturnType<typeof lintKnowledgeBase>>;
     try {
       report = await lintKnowledgeBase(db, workspace.config, sources, {
-        page: judge ? undefined : page,
+        page: shownPage,
         sourceFindings: unloadedFindings(countUnchecked(db, loaded.unloaded)),
         judge: judge
           ? {
@@ -151,7 +152,7 @@ export async function runLint(
       for (const [kind, group] of byKind) {
         if (isAdvisory(group[0]!.kind) !== advisoryKinds) continue;
         // A page holds only some of each kind, so its count must not read as the kind's total.
-        ctx.out(`\n${kind} (${group.length}${page ? " on this page" : ""})`);
+        ctx.out(`\n${kind} (${group.length}${shownPage ? " on this page" : ""})`);
         for (const finding of group)
           ctx.out(`  ${printable(finding.path)}: ${printable(finding.detail)}`);
       }
@@ -168,7 +169,7 @@ export async function runLint(
     );
     ctx.out(checked);
     if (unchecked) ctx.out(unchecked);
-    if (page) reportPage(ctx, findings.length, report.total, "finding(s)", report.nextCursor);
+    if (shownPage) reportPage(ctx, findings.length, report.total, "finding(s)", report.nextCursor);
 
     // A non-zero exit so CI can fail on an unresolvable link.
     return blocking > 0 ? 1 : 0;

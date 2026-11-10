@@ -175,6 +175,7 @@ describe("lint_knowledge_base with judge", () => {
     const fake = await startFakeJudge({
       choice: () => ({ supports: 0.2, contradicts: 0.3, says_nothing: 0.5 }),
     });
+    const savedUrl = process.env.ACCRETA_JUDGE_URL;
     process.env.ACCRETA_JUDGE_URL = fake.url;
     try {
       cited();
@@ -192,7 +193,8 @@ describe("lint_knowledge_base with judge", () => {
       expect(result.advisory_count).toBe(1);
       expect(result.citations_judged).toBe(1);
     } finally {
-      delete process.env.ACCRETA_JUDGE_URL;
+      if (savedUrl === undefined) delete process.env.ACCRETA_JUDGE_URL;
+      else process.env.ACCRETA_JUDGE_URL = savedUrl;
       await fake.close();
     }
   });
@@ -201,6 +203,7 @@ describe("lint_knowledge_base with judge", () => {
     const fake = await startFakeJudge({
       choice: () => ({ supports: 0.2, contradicts: 0.3, says_nothing: 0.5 }),
     });
+    const savedUrl = process.env.ACCRETA_JUDGE_URL;
     process.env.ACCRETA_JUDGE_URL = fake.url;
     try {
       writePage(
@@ -218,7 +221,8 @@ describe("lint_knowledge_base with judge", () => {
       expect(result.citations_unjudged).toBe(1);
       expect(result.nextCursor).toBeUndefined();
     } finally {
-      delete process.env.ACCRETA_JUDGE_URL;
+      if (savedUrl === undefined) delete process.env.ACCRETA_JUDGE_URL;
+      else process.env.ACCRETA_JUDGE_URL = savedUrl;
       await fake.close();
     }
   });
