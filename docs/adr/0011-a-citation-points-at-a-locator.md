@@ -152,13 +152,13 @@ The sentence "accreta asks a source about revisions and locations, and never rea
 accreta reads only the cited lines, and only for a configured judge. The consequence "Nothing in
 accreta reads a source's content" narrows the same way. Those lines are what the judge is sent, so
 with a remote judge they leave the machine: ADR-0014's consequence on content sent to a third party
-now covers source content as well as page content. The interface names the one method that reads a
-source, so a reviewer can find every read through its callers.
+now covers source content as well as page content. The interface names the one method that hands
+source content to accreta, so a reviewer can find every such read through its callers.
 
-This narrows the rejected alternative "Keep `read()` and add `locate()` alongside it":
-`excerpt()` is a method some sources decline, which that paragraph called a capability flag. The
-newline count it called the actual defect stays out of the core, because the adapter reads its own
-locator.
+This narrows the rejection of the alternative "Keep `read()` and add `locate()` alongside it":
+`excerpt()` is a method some sources decline, which that paragraph called the capability flag
+ADR-0002 rejected. The newline count it called the actual defect stays out of the core, because the
+adapter reads its own locator.
 
 ## Amendment, 2026-11-09: an uncited sentence is either marked inference or a gap
 
