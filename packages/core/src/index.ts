@@ -141,3 +141,5 @@ export {
   type VerdictRefusal,
   type VerdictValue,
 } from "./query/verdicts.ts";
+export type { Reranked, RerankOptions } from "./query/rerank.ts";
+export { rerank, summaryOf, SUMMARY_CHARS } from "./query/rerank.ts";

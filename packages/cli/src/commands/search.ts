@@ -1,7 +1,19 @@
-import { getPage, searchPages, type SearchHit } from "@accreta/core";
+import {
+  getPage,
+  JudgeConfigError,
+  JudgeUnavailableError,
+  rerank,
+  resolveJudgeSettings,
+  searchPages,
+  summaryOf,
+  type Reranked,
+  type SearchHit,
+} from "@accreta/core";
+import { createJudge } from "@accreta/judges";
 import {
   parseLimit,
   printable,
+  printableMessage,
   printJson,
   provenance,
   withIndex,
@@ -10,6 +22,7 @@ import {
 
 // search_pages refuses a limit above this rather than letting the core clamp it silently.
 const MAX_LIMIT = 50;
+const DEFAULT_LIMIT = 20;
 
 // A page's path is its filename, which the author chose and which can hold any sentence.
 const HIT_FIELDS = [
@@ -27,11 +40,22 @@ export interface SearchOptions {
   source?: string;
   limit?: string;
   json?: boolean;
+  rerank?: boolean;
 }
 
-export function search(ctx: CommandContext, query: string, options: SearchOptions = {}): number {
+// A search waits on the judge; a stalled one costs this long, not the client's 90 s default.
+const RERANK_TIMEOUT_MS = 15_000;
+const RERANK_RETRY = { attempts: 2, baseMs: 250 };
+
+export async function search(
+  ctx: CommandContext,
+  query: string,
+  options: SearchOptions = {},
+): Promise<number> {
   if (!query) {
-    ctx.err("Usage: accreta search <query> [--type <type>] [--source <id>] [--limit <n>] [--json]");
+    ctx.err(
+      "Usage: accreta search <query> [--type <type>] [--source <id>] [--limit <n>] [--rerank] [--json]",
+    );
     return 2;
   }
   const limit = parseLimit(options.limit, MAX_LIMIT);
@@ -39,33 +63,87 @@ export function search(ctx: CommandContext, query: string, options: SearchOption
     ctx.err(`--limit takes a whole number from 1 to ${MAX_LIMIT}.`);
     return 2;
   }
-  return withIndex(ctx, (db, workspace) => {
-    const hits = searchPages(db, { query, types: options.types, source: options.source, limit });
 
-    if (options.json) {
-      const results = hits.map((hit) => {
-        const page = getPage(db, hit.path, workspace.config);
-        return hitOut(hit, page ? matchedAliasesOf(query, page.frontmatter) : []);
-      });
-      printJson(ctx, { count: hits.length, results, _provenance: provenance(HIT_FIELDS) });
-      return 0;
-    }
-
-    if (hits.length === 0) {
-      ctx.out("No matches.");
-      return 0;
-    }
-    for (const hit of hits) {
-      ctx.out(`${printable(hit.path)}  [${printable(hit.type)}]`);
-      ctx.out(`  ${printable(hit.title)}`);
-      ctx.out(`  ${printable(hit.snippet.replace(/\s+/g, " ").trim())}`);
-    }
-    ctx.out(`\n${hits.length} result(s).`);
-    return 0;
+  const want = limit ?? DEFAULT_LIMIT;
+  // The index closes before the judge is awaited, so everything the output needs is read here.
+  const found = withIndex(ctx, (db, workspace) => {
+    const settings = options.rerank
+      ? resolveJudgeSettings(workspace.config.judge, process.env)
+      : null;
+    // The judge may promote a hit from below the limit, so it sees `rerank.top` of them.
+    const fetch = settings ? Math.min(Math.max(want, settings.rerankTop), MAX_LIMIT) : limit;
+    const hits = searchPages(db, {
+      query,
+      types: options.types,
+      source: options.source,
+      limit: fetch,
+    });
+    const pages = new Map(hits.map((hit) => [hit.path, getPage(db, hit.path, workspace.config)]));
+    return { hits, pages, workspace, settings };
   });
+
+  let hits: Reranked<SearchHit>[] = found.hits;
+  let note: string | undefined;
+  if (options.rerank) {
+    if (!found.settings) {
+      note =
+        "No judge is configured (no judge: block in accreta.config.yaml); results are not reranked.";
+    } else {
+      try {
+        const judge = createJudge(found.workspace.config, process.env, {
+          retry: RERANK_RETRY,
+          timeoutMs: RERANK_TIMEOUT_MS,
+        });
+        if (judge) {
+          hits = await rerank(found.hits, query, judge, {
+            top: found.settings.rerankTop,
+            summary: (hit) => summaryOf(found.pages.get(hit.path)?.body ?? ""),
+          });
+        }
+      } catch (error) {
+        if (!(error instanceof JudgeConfigError || error instanceof JudgeUnavailableError)) {
+          throw error;
+        }
+        note = `The judge could not rerank (${error.message}); results are in search order.`;
+      }
+    }
+    hits = hits.slice(0, want);
+  }
+  if (note) ctx.err(printableMessage(note, ""));
+
+  if (options.json) {
+    const results = hits.map((hit) => {
+      const page = found.pages.get(hit.path);
+      return hitOut(hit, page ? matchedAliasesOf(query, page.frontmatter) : []);
+    });
+    printJson(ctx, {
+      count: hits.length,
+      results,
+      ...(note ? { rerank_note: note } : {}),
+      _provenance: provenance(HIT_FIELDS),
+    });
+    return 0;
+  }
+
+  if (hits.length === 0) {
+    ctx.out("No matches.");
+    return 0;
+  }
+  for (const hit of hits) {
+    ctx.out(`${printable(hit.path)}  [${printable(hit.type)}]`);
+    ctx.out(`  ${printable(hit.title)}`);
+    ctx.out(`  ${printable(hit.snippet.replace(/\s+/g, " ").trim())}`);
+    if (hit.probability !== undefined) {
+      ctx.out(
+        `  judged p=${hit.probability.toFixed(2)} by ${printable(hit.judge ?? "")} ${printable(hit.model ?? "")}`,
+      );
+    }
+  }
+  ctx.out(`\n${hits.length} result(s).`);
+  return 0;
 }
 
-function hitOut(hit: SearchHit, matchedAliases: string[]) {
+function hitOut(hit: Reranked<SearchHit>, matchedAliases: string[]) {
   return {
     path: hit.path,
     type: hit.type,
@@ -74,6 +152,9 @@ function hitOut(hit: SearchHit, matchedAliases: string[]) {
     snippet: hit.snippet,
     last_verified_revision: hit.lastVerifiedRevision,
     ...(matchedAliases.length > 0 ? { matched_aliases: matchedAliases } : {}),
+    ...(hit.probability !== undefined
+      ? { judge: hit.judge, model: hit.model, probability: hit.probability }
+      : {}),
   };
 }
 

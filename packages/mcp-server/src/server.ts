@@ -34,6 +34,7 @@ import {
   getPageTool,
   lintTool,
   listRecentChangesTool,
+  rerankedSearchTool,
   searchPagesTool,
   recordVerdictTool,
   updateVerifiedRevisionTool,
@@ -151,11 +152,23 @@ export function createServer(ctx: ToolContext): McpServer {
           .describe("Restrict to these page types, as configured in accreta.config.yaml."),
         source: z.string().optional().describe("Restrict to pages derived from this source."),
         limit: z.number().int().positive().max(50).optional().describe("Max results; default 20."),
+        rerank: z
+          .boolean()
+          .optional()
+          .describe(
+            "Reorder the hits with the configured judge (needs a judge: block). Sends each hit's title and the start of its body to the judge, which is a service outside this machine. Reranked hits carry judge, model and probability; if the judge cannot answer, rerank_note says so and the order is the search's.",
+          ),
       },
       outputSchema: searchPagesOutput,
     },
-    async (input: { query: string; types?: string[]; source?: string; limit?: number }) =>
-      structured(searchPagesTool(ctx, input)),
+    async (input: {
+      query: string;
+      types?: string[];
+      source?: string;
+      limit?: number;
+      rerank?: boolean;
+    }) =>
+      structured(input.rerank ? await rerankedSearchTool(ctx, input) : searchPagesTool(ctx, input)),
   );
 
   register(

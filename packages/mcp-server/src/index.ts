@@ -10,6 +10,7 @@ export {
   getPageTool,
   lintTool,
   listRecentChangesTool,
+  rerankedSearchTool,
   searchPagesTool,
   setFrontmatterField,
   recordVerdictTool,

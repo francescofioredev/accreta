@@ -9,12 +9,15 @@ import {
   getPage,
   isAdvisory,
   JudgeConfigError,
+  JudgeUnavailableError,
   lintKnowledgeBase,
   namesRef,
   pageChanges,
   parseCitation,
+  rerank,
   resolveJudgeSettings,
   searchPages,
+  summaryOf,
   UnknownRevisionError,
   type AccretaConfig,
   type CanonicalMatch,
@@ -23,6 +26,7 @@ import {
   type LintFindingKind,
   type PageChange,
   type PageRequest,
+  type Reranked,
   type PageRecord,
   type Relation,
   type SearchHit,
@@ -145,7 +149,7 @@ const HIT_FIELDS = [
   "results[].matched_aliases",
 ] as const;
 
-function hitOut(hit: SearchHit, matchedAliases: string[]): HitOutput {
+function hitOut(hit: Reranked<SearchHit>, matchedAliases: string[]): HitOutput {
   return {
     path: hit.path,
     type: hit.type,
@@ -156,6 +160,9 @@ function hitOut(hit: SearchHit, matchedAliases: string[]): HitOutput {
     // Omitted rather than empty: most hits match on title or body, and an empty
     // array on every one of them is noise in a response that is already budgeted.
     ...(matchedAliases.length > 0 ? { matched_aliases: matchedAliases } : {}),
+    ...(hit.probability !== undefined
+      ? { judge: hit.judge, model: hit.model, probability: hit.probability }
+      : {}),
   };
 }
 
@@ -233,6 +240,68 @@ export function searchPagesTool(
     return hitOut(hit, page ? matchedAliasesOf(input.query, page.frontmatter) : []);
   });
   return { count: hits.length, results, _provenance: provenance(HIT_FIELDS) };
+}
+
+// A search waits on the judge; a stalled one costs this long, not the client's 90 s default.
+const RERANK_TIMEOUT_MS = 15_000;
+const RERANK_RETRY = { attempts: 2, baseMs: 250 };
+const DEFAULT_SEARCH_LIMIT = 20;
+const MAX_SEARCH_LIMIT = 50;
+
+/** `search_pages` with `rerank: true`; without a usable judge it answers as `searchPagesTool` does, and says why. */
+export async function rerankedSearchTool(
+  ctx: ToolContext,
+  input: { query: string; types?: string[]; source?: string; limit?: number },
+): Promise<SearchPagesOutput> {
+  const { query, types, source, limit } = input;
+  const settings = resolveJudgeSettings(ctx.config.judge, process.env);
+  const want = limit ?? DEFAULT_SEARCH_LIMIT;
+  // The judge may promote a hit from below the limit, so it sees `rerank.top` of them.
+  const fetch = settings ? Math.min(Math.max(want, settings.rerankTop), MAX_SEARCH_LIMIT) : limit;
+
+  // Everything the answer needs is read before the judge is awaited, so a reindex meanwhile is harmless.
+  const db = ctx.db;
+  const found = {
+    hits: searchPages(db, { query, types, source, limit: fetch }),
+    pages: new Map<string, ReturnType<typeof getPage>>(),
+  };
+  for (const hit of found.hits) found.pages.set(hit.path, getPage(db, hit.path, ctx.config));
+
+  let hits: Reranked<SearchHit>[] = found.hits;
+  let note: string | undefined;
+  if (!settings) {
+    note =
+      "No judge is configured (no judge: block in accreta.config.yaml); results are not reranked.";
+  } else {
+    try {
+      const judge = createJudge(ctx.config, process.env, {
+        retry: RERANK_RETRY,
+        timeoutMs: RERANK_TIMEOUT_MS,
+      });
+      if (judge) {
+        hits = await rerank(found.hits, query, judge, {
+          top: settings.rerankTop,
+          summary: (hit) => summaryOf(found.pages.get(hit.path)?.body ?? ""),
+        });
+      }
+    } catch (error) {
+      if (!(error instanceof JudgeConfigError || error instanceof JudgeUnavailableError)) {
+        throw error;
+      }
+      note = `The judge could not rerank (${error.message}); results are in search order.`;
+    }
+  }
+  hits = hits.slice(0, want);
+  const results = hits.map((hit) => {
+    const page = found.pages.get(hit.path);
+    return hitOut(hit, page ? matchedAliasesOf(input.query, page.frontmatter) : []);
+  });
+  return {
+    count: hits.length,
+    results,
+    ...(note ? { rerank_note: note } : {}),
+    _provenance: provenance(HIT_FIELDS),
+  };
 }
 
 export function getPageTool(ctx: ToolContext, input: { path: string }): GetPageOutput {

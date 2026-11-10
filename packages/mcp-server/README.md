@@ -27,7 +27,7 @@ another — it needs no filesystem access to the knowledge base itself, only to 
 
 | Tool | Purpose |
 |---|---|
-| `search_pages` | Full-text search with type and source filters. The primary discovery tool. |
+| `search_pages` | Full-text search with type and source filters. The primary discovery tool. `rerank: true` asks the configured judge to reorder the hits (see `docs/judge.md`); each reranked hit carries `judge`, `model` and `probability`. |
 | `get_page` | Fetch a page by path or wikilink target. |
 | `find_consumers` | Impact analysis across the link graph, both directions. Paged: `count` is the total; follow `nextCursor`. |
 | `find_canonical` | Resolve a term, including aliases, to the page that defines it. Paged: `count` is the total; follow `nextCursor`. |
