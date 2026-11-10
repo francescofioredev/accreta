@@ -121,26 +121,35 @@ is measured. The inference marker it checks for is recorded in ADR-0011's amendm
 
 ## Amendment, 2026-11-10: the judge's URL and key name come from the environment
 
-Decided 2026-11-10, Francesco Fiore (#393, #153).
+Decided 2026-11-10, Francesco Fiore (#393, #153). On every route, keyed or keyless, the judge URL
+can be overridden only by `ACCRETA_JUDGE_URL`, never by `judge.url` in `accreta.config.yaml`. A
+preset route uses its fixed host unless `ACCRETA_JUDGE_URL` is set. A `url:` in a cloned
+configuration would otherwise decide where the judge key (on a keyed route), the claim and its
+cited lines are sent (ADR-0011, amendment of 2026-11-09). #393 applies the rule to keyed routes;
+#153 extends it to keyless ones.
 
-- **On every route, keyed or keyless, the judge URL can be overridden only by
-  `ACCRETA_JUDGE_URL`**, never by `judge.url` in `accreta.config.yaml`. A preset route uses its
-  fixed host unless `ACCRETA_JUDGE_URL` is set. A `url:` in a cloned configuration would
-  otherwise decide where the judge key (on a keyed route), the claim and its cited lines are sent
-  (ADR-0011, amendment of 2026-11-09). #393 applies the rule to keyed routes; #153 extends it to
-  keyless ones.
-- **`judge.api_key_env` accepts only names that start with `ACCRETA_JUDGE_`.** #393 requires the
-  `ACCRETA_` prefix; #153 narrows it. A cloned configuration could otherwise send the value of
-  another `ACCRETA_` variable to the judge host.
+2026-11-10, lead decision (orchestrating session), open to veto (#153). `judge.api_key_env`
+accepts only names that start with `ACCRETA_JUDGE_`. #393 requires the `ACCRETA_` prefix; #153
+narrows it. A cloned configuration could otherwise send the value of another `ACCRETA_` variable
+to the judge host.
 
 ## Amendment, 2026-11-10: what a verdict records, and how the MCP tool writes one
 
-Decided 2026-11-10, Francesco Fiore (#153).
+Decided 2026-11-10, Francesco Fiore (#153):
 
 - **Each line of the verdict file records its writer, the model and the date.** Lint's band 3
   output shows all three, as band 2's detail names the judge and the model.
+- **When the footnote format has no `{rev}`, the revision in the verdict key is the page's
+  `last_verified_revision` for that source.** A verification bump therefore voids that page's
+  verdicts.
+
+2026-11-10, lead decision (orchestrating session), open to veto (#153):
+
 - **The verdict key names the pinned revision explicitly**, beside page, footnote, citation text
   and the sentence hash, so a re-pin of the citation changes the key.
+- **The tool fills the writer**: `cli`, or `mcp` plus the client's name, never a value the caller
+  passes. **The model is declared by the caller and shown as declared**, because the MCP server
+  cannot know which model its client runs.
 - **The MCP verdict tool is gated like `update_verified_revision`**: off unless
   `ACCRETA_ALLOW_WRITES=1`, then a dry run whose confirm token the second call must return
   ([architecture](../architecture.md)). The gate covers the MCP tool only: `accreta verdict`,

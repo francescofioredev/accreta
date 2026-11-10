@@ -172,6 +172,6 @@ ADR-0014, amendment of 2026-11-09).
 
 ## Amendment, 2026-11-10: what makes accreta read the cited lines
 
-Decided 2026-11-10, Francesco Fiore (#153). "Only for a configured judge" means both: the
+2026-11-10, lead decision (orchestrating session), open to veto (#153). "Only for a configured judge" means both: the
 configuration has a `judge:` block, and the command was run with `--judge`. accreta calls
 `excerpt()` only then. Neither alone reads a source.
