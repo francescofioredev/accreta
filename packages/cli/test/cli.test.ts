@@ -1901,7 +1901,7 @@ describe("accreta lint --judge", () => {
     const cite = (loc: string, r = rev) => `docs @ ${r} · a.md#${loc}`;
     writePage(
       "p.md",
-      `---\ntype: note\nsource: docs\ncanonical_source: "docs:a.md#L1"\nlast_verified_revision: ${rev}\n---\n\n# P\n\nIce melts at zero.[^s]\n\nBananas are blue.[^w]\n\nThe third line says so.[^o]\n\n[^s]: ${cite("L1")}\n[^w]: ${cite("L2")}\n[^o]: ${cite("L3", "0123456789ab")}\n`,
+      `---\ntype: note\nsource: docs\ncanonical_source: "docs:a.md#L1"\nlast_verified_revision: "${rev}"\n---\n\n# P\n\nIce melts at zero.[^s]\n\nBananas are blue.[^w]\n\nThe third line says so.[^o]\n\n[^s]: ${cite("L1")}\n[^w]: ${cite("L2")}\n[^o]: ${cite("L3", "0123456789ab")}\n`,
     );
     await cli("reindex");
     output = [];
@@ -2034,7 +2034,7 @@ describe("accreta lint --judge", () => {
     const rev = (await loadSources(findWorkspace(root)).sources[0]!.revision()) as string;
     const page = join(root, "knowledge", "q.md");
     const body = (verified: string) =>
-      `---\ntype: note\nsource: docs\ncanonical_source: "docs:a.md#L1"\nlast_verified_revision: ${verified}\n---\n\n# Q\n\nIce melts at zero.[^s]\n\n[^s]: docs · a.md#L1\n`;
+      `---\ntype: note\nsource: docs\ncanonical_source: "docs:a.md#L1"\nlast_verified_revision: "${verified}"\n---\n\n# Q\n\nIce melts at zero.[^s]\n\n[^s]: docs · a.md#L1\n`;
     writeFileSync(page, body(rev));
     await cli("reindex");
     expect(await cli("verdict", "q.md", "s", "unsupported", "--model", "m")).toBe(0);
