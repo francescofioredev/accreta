@@ -1933,7 +1933,9 @@ describe("accreta lint --judge", () => {
     fake = await startFakeJudge();
     process.env.ACCRETA_JUDGE_URL = fake.url;
     await setup("judge:\n  route: local\n");
-    expect(await cli("lint")).toBe(0);
+    const code = await cli("lint");
+    // On a failure the findings are the only clue to which fixture line went red.
+    expect({ code, out: stdout(), err: stderr() }).toMatchObject({ code: 0 });
     expect(fake.requests).toHaveLength(0);
     expect(stdout()).not.toContain("judged");
   });
