@@ -524,13 +524,6 @@ export class GitSource implements SourceAdapter {
     return false;
   }
 
-  /**
-   * Whether a citation names something that is really in this source.
-   *
-   * A path that climbs out of the root is refused rather than reported as an
-   * error: it names nothing this source can offer, and reading it to find out
-   * is exactly what `resolveCitedFile` exists to prevent.
-   */
   async excerpt(path: string, locator: string, revision: string): Promise<ExcerptResult> {
     const range = parseLineLocator(locator);
     const unreadable: ExcerptResult = {
@@ -550,6 +543,13 @@ export class GitSource implements SourceAdapter {
     }
   }
 
+  /**
+   * Whether a citation names something that is really in this source.
+   *
+   * A path that climbs out of the root is refused rather than reported as an
+   * error: it names nothing this source can offer, and reading it to find out
+   * is exactly what `resolveCitedFile` exists to prevent.
+   */
   async locate(path: string, locator?: string): Promise<LocationVerdict> {
     const full = resolveCitedFile(this.root, path, this.id);
     if (typeof full !== "string") return full;

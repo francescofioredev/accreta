@@ -14,6 +14,7 @@ import {
   DRIFT_NOTICE,
   loadSources,
   printable,
+  printableMessage,
   printJson,
   provenance,
   readPage,
@@ -60,7 +61,9 @@ export async function runLint(
           judge = createJudge(workspace.config);
         } catch (error) {
           if (!(error instanceof JudgeConfigError)) throw error;
-          ctx.err(`The judge is not usable (${error.message}); linting without one.`);
+          ctx.err(
+            `The judge is not usable (${printableMessage(error.message)}); linting without one.`,
+          );
         }
       }
     }
@@ -87,7 +90,7 @@ export async function runLint(
 
     if (report.judgeUnavailable) {
       ctx.err(
-        `The judge became unavailable (${report.judgeUnavailable}); the rest was not judged.`,
+        `The judge became unavailable (${printableMessage(report.judgeUnavailable)}); the rest was not judged.`,
       );
     }
     if (options.json) {

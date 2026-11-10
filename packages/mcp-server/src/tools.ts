@@ -600,7 +600,8 @@ export async function lintTool(
   const report = await withPinnedIndex(ctx, "lint_knowledge_base", (db) =>
     lintKnowledgeBase(db, ctx.config, ctx.sources, {
       kinds: input.kinds,
-      page: { limit: input.limit, cursor: input.cursor },
+      // A judged pass is not repeated per page, and a probability must not move a cursor.
+      page: judge ? undefined : { limit: input.limit, cursor: input.cursor },
       sourceFindings: unloadedFindings(countUnchecked(db, ctx.unloadedSources)),
       judge,
     }),

@@ -413,16 +413,20 @@ export class FsSource implements SourceAdapter {
     return [...changed].toSorted();
   }
 
-  /**
-   * Whether a citation names something that is really in this source.
-   *
-   * A path that climbs out of the root is refused rather than reported as an
-   * error: it names nothing this source can offer, and reading it to find out
-   * is exactly what `resolveCitedFile` exists to prevent.
-   */
+  private recent: { at: number; revision: Promise<string> } | undefined;
+
+  /** One tree hash serves a judge pass's many excerpts; a short life keeps it from outliving an edit. */
+  private recentRevision(): Promise<string> {
+    const now = Date.now();
+    if (!this.recent || now - this.recent.at > 2000) {
+      this.recent = { at: now, revision: this.revision() };
+    }
+    return this.recent.revision;
+  }
+
   async excerpt(path: string, locator: string, revision: string): Promise<ExcerptResult> {
     // A directory keeps no history: only the revision it is at now can be read.
-    if (revision !== (await this.revision())) {
+    if (revision !== (await this.recentRevision())) {
       return { status: "unknown", detail: `source "${this.id}" keeps no history of ${revision}` };
     }
     const range = parseLineLocator(locator);
@@ -437,6 +441,13 @@ export class FsSource implements SourceAdapter {
       : { status: "text", text: cited };
   }
 
+  /**
+   * Whether a citation names something that is really in this source.
+   *
+   * A path that climbs out of the root is refused rather than reported as an
+   * error: it names nothing this source can offer, and reading it to find out
+   * is exactly what `resolveCitedFile` exists to prevent.
+   */
   async locate(path: string, locator?: string): Promise<LocationVerdict> {
     const full = resolveCitedFile(this.root, path, this.id);
     if (typeof full !== "string") return full;

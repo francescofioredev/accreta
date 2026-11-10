@@ -1,4 +1,4 @@
-import { readFootnotes, footnoteKey } from "../citations.ts";
+import { footnoteKey } from "../citations.ts";
 import type { Database } from "../index-db/db.ts";
 import { JudgeUnavailableError, type Judge } from "../judge.ts";
 import { UNPINNED_REVISION, type SourceAdapter } from "../source/adapter.ts";
@@ -24,10 +24,11 @@ interface Row {
   page_path: string;
   footnote: string;
   line: number;
-  source: string;
-  revision: string;
-  path: string;
-  locator: string;
+  source: string | null;
+  revision: string | null;
+  path: string | null;
+  locator: string | null;
+  claim: string;
 }
 
 // A judge sees the cited lines and nothing else (ADR-0014); a larger range is not one claim's evidence.
@@ -45,25 +46,10 @@ export async function judgeCitations(
 ): Promise<SupportReport> {
   const rows = db
     .prepare(
-      `SELECT page_path, footnote, line, source, revision, path, locator FROM citations
-       WHERE source IS NOT NULL AND path IS NOT NULL AND locator IS NOT NULL AND revision IS NOT NULL
-         AND revision != '' AND revision != ?
+      `SELECT page_path, footnote, line, source, revision, path, locator, claim FROM citations
        ORDER BY page_path, line`,
     )
-    .all(UNPINNED_REVISION) as Row[];
-  const bodies = new Map<string, Map<string, string>>();
-  const claimOf = (pagePath: string, footnote: string): string | undefined => {
-    let claims = bodies.get(pagePath);
-    if (!claims) {
-      const page = db.prepare("SELECT body FROM pages WHERE path = ?").get(pagePath) as
-        { body: string } | undefined;
-      claims = new Map(
-        readFootnotes(page?.body ?? "").footnotes.map((f) => [footnoteKey(f.id), f.claim]),
-      );
-      bodies.set(pagePath, claims);
-    }
-    return claims.get(footnoteKey(footnote));
-  };
+    .all() as Row[];
 
   const excerpts = new Map<string, Promise<string | null>>();
   const verdicts = new Map<string, ReturnType<Judge["supports"]>>();
@@ -78,17 +64,28 @@ export async function judgeCitations(
     if (seen.has(id)) continue; // a duplicate definition is lint's finding, not a second judgement
     seen.add(id);
     if (skip?.({ pagePath: row.page_path, footnote: row.footnote })) continue;
-    const adapter = sources.get(row.source);
-    const claim = claimOf(row.page_path, row.footnote)?.trim();
-    if (unavailable || !adapter?.excerpt || !claim) {
+    const claim = row.claim.trim();
+    const adapter = row.source === null ? undefined : sources.get(row.source);
+    const readable =
+      row.path !== null &&
+      row.locator !== null &&
+      row.revision !== null &&
+      row.revision !== "" &&
+      row.revision !== UNPINNED_REVISION;
+    if (unavailable || !adapter?.excerpt || !claim || !readable) {
       unjudged++;
       continue;
     }
-    const key = `${row.source}\0${row.path}\0${row.locator}\0${row.revision}`;
+    const { path, locator, revision } = row as Row & {
+      path: string;
+      locator: string;
+      revision: string;
+    };
+    const key = `${row.source}\0${path}\0${locator}\0${revision}`;
     let excerpt = excerpts.get(key);
     if (excerpt === undefined) {
       excerpt = adapter
-        .excerpt(row.path, row.locator, row.revision)
+        .excerpt(path, locator, revision)
         .then((r) => (r.status === "text" && r.text.length <= MAX_EXCERPT_CHARS ? r.text : null))
         .catch(() => null);
       excerpts.set(key, excerpt);
@@ -112,7 +109,7 @@ export async function judgeCitations(
         findings.push({
           kind: "citation-unconfirmed",
           path: row.page_path,
-          detail: `[^${row.footnote}] (line ${row.line}): judge ${result.judge} (${result.model}) put p(supports) at ${p.toFixed(2)}, below ${options.threshold}; re-read ${row.path}#${row.locator} at ${row.revision}`,
+          detail: `[^${row.footnote}] (line ${row.line}): judge ${result.judge} (${result.model}) put p(supports) at ${p.toFixed(2)}, below ${options.threshold}; re-read ${path}#${locator} at ${revision}`,
         });
       }
     } catch (error) {

@@ -195,6 +195,30 @@ describe("lint_knowledge_base with judge", () => {
     }
   });
 
+  test("a footnote with no locator is counted unjudged, and a judged call is not paged", async () => {
+    const fake = await startFakeJudge({
+      choice: () => ({ supports: 0.2, contradicts: 0.3, says_nothing: 0.5 }),
+    });
+    try {
+      writePage(
+        "k.md",
+        "---\ntype: note\n---\n\n# K\n\nClaim one is here.[^a]\n\nClaim two is here.[^b]\n\n[^a]: src @ rev1 · f.md#L1\n[^b]: src @ rev1 · h.md\n",
+      );
+      build();
+      ctx.config = {
+        ...config,
+        judge: parseConfig(`judge:\n  route: local\n  url: ${fake.url}\n`).judge,
+      };
+      ctx.sources.set("src", stub());
+      const result = await lintTool(ctx, { judge: true, limit: 1 });
+      expect(result.citations_judged).toBe(1);
+      expect(result.citations_unjudged).toBe(1);
+      expect(result.nextCursor).toBeUndefined();
+    } finally {
+      await fake.close();
+    }
+  });
+
   test("without a judge block it says so and makes no request", async () => {
     cited();
     build();

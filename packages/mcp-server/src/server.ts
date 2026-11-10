@@ -267,7 +267,7 @@ export function createServer(ctx: ToolContext): McpServer {
           .boolean()
           .optional()
           .describe(
-            "Also ask the configured judge whether each readable citation's lines support its sentence. Advisory (`citation-unconfirmed`); needs a judge: block; sends the cited lines to the judge.",
+            "Also ask the configured judge whether each readable citation's lines support its sentence. Advisory (`citation-unconfirmed`); needs a judge: block; sends the cited lines to the judge. A judged call is not paged: limit and cursor are ignored.",
           ),
         ...pageInput("findings"),
       },
