@@ -50,9 +50,11 @@ raw data is private; these aggregates are the whole public record.
   $0.030 per chunk, 5.5 times the small model in the same arrangement. Anchor precision 0.86,
   against 0.986 for the small model in that arrangement. A blind pairwise judge on 12 chunks
   scored both 0.56 against the serial map: no quality gain. Twelve chunks is directional only.
+  Its term recall against the serial map, 0.44, fell below the registered floor of 0.59.
   Registered as a gain of 10 points or more, refuted below 5: **refuted**.
 - **Stalls.** 6 of 12 parallel rounds stalled: the stream was cut and nothing arrived for eight
-  minutes (2 of 7 on the first book, 4 of 5 on the second). Serial rounds stalled 0 of 5 on the
+  minutes (2 of 7 on the first book, 4 of 5 on the second; 5 of 6 in earlier attempts under
+  different stall handling, not counted). Serial rounds stalled 0 of 5 on the
   first book, and 1 of 1 on the second, in a window where four parallel rounds in a row also
   stalled. **The stalls cannot be separated from API instability**; concurrency is not
   established as their cause. On the second book the one arm run, 16 chunks per agent with three
@@ -81,8 +83,9 @@ raw data is private; these aggregates are the whole public record.
 
 **A map is never citable.** Lint rejects a footnote, a frontmatter `source` or a
 `canonical_source` whose path falls inside `maps.dir` through any source. A page cites the
-source's lines, which the agent reads after the map pointed at them. Maps may be searchable, and
-a map hit returns the source locator it points at. It is never returned as a page. The rule binds
+source's lines, which the agent should read after the map points at them. Maps may be
+searchable; what a map hit returns beyond the source locator is open (see Open). A map is never
+returned as a page. The rule binds
 paths: a copy of a map behind another path, a map reached through a delegated source, or an answer
 that lint never sees, all escape it (see Open).
 
@@ -167,8 +170,8 @@ compilation keeps the deferral and writes the result down.
 
 **Agent swarms inside a source as the default map pass.** Three agents in parallel inside one book
 took 0.77 times the serial wall time, where 0.45 was predicted; larger batches cost more per
-chunk; a stronger model was the fastest arm but cost 5.5 times as much for no measured quality
-gain. Allowed, since chunks are disjoint; not the default, and not a claim.
+chunk; a stronger model was the fastest arm but cost 5.5 times as much, with no measured quality
+gain and term recall below the registered floor. Allowed, since chunks are disjoint; not the default, and not a claim.
 
 **Maps as a citable layer.** A citation into a map points at the agent's paraphrase, so the
 agent's words become evidence for themselves. It would also inherit the map's error without
@@ -185,7 +188,8 @@ indexed from them is derived and rebuilt wholesale with the rest.
   stays derived (ADR-0004). The build walks only pages today, so indexing map lines is new build
   code; it adds rows to every rebuild, measured against ADR-0008's figures before shipping.
 - **A source whose scope covers `maps.dir`** moves its revision when a map changes: an `fs` source
-  on write, if its extensions match; a `git` source on commit, if its paths cover the directory.
+  on write, if its extensions match; a `git` source on any commit that touches its scope (every
+  commit, when it has no `paths` and sits at the repository top).
   Pages pinned to it then go stale. That is the question a source enclosing the knowledge base
   already raises, and it needs one answer for both.
 - **Map text is untrusted, and the re-read is the agent's procedure, not a check.** A map line is
@@ -199,8 +203,8 @@ indexed from them is derived and rebuilt wholesale with the rest.
   support it, or carry an instruction toward an action rather than a claim.
 - **Areas.** If ADR-0018 is accepted, a map file takes the audience of the source it is for, map
   search is filtered inside the query like every other channel, and `accreta codeowners` gives
-  `maps.dir` an owner line: per map file, the owners of its source's audience, else
-  `policy_owners`. A map is the file that steers which source lines get cited, so it should not be
+  `maps.dir` an owner line: per map file, the codeowners of the roles that maintain its source's
+  audience area, else `policy_owners`. A map is the file that steers which source lines get cited, so it should not be
   the cheapest file to change. An agent paraphrasing one source into another's map is a residual
   risk with no check. The rejection of citations into `maps.dir` needs path resolution against a
   directory, the same `label-flow` needs for `knowledge_base`; it is built either way, and must
