@@ -75,15 +75,25 @@ export async function reportJudge(
       ctx.out(`  unknown: judge.${printable(key)} is not a setting and is ignored`);
     }
   }
-  if (settings.url !== undefined && !settings.urlFromEnv) {
+  if (settings.urlInFile && !settings.urlFromEnv) {
     ctx.out(`  broken: judge.url in ${CONFIG_FILENAME} is not read`);
     ctx.out("    → set ACCRETA_JUDGE_URL instead; only the environment may move the judge");
     exitCode = 1;
+  } else if (settings.urlInFile) {
+    ctx.out(`  note: judge.url in ${CONFIG_FILENAME} is ignored; ACCRETA_JUDGE_URL wins`);
   }
 
   const variable = settings.apiKeyEnv;
-  const secret = env[variable]?.trim() ?? "";
-  ctx.out(`  key: ${printable(variable)} is ${secret ? "set" : "not set"}`);
+  // A pasted key in api_key_env is not a variable name; never echo it.
+  const named = variable.startsWith("ACCRETA_JUDGE_");
+  const secret = named ? (env[variable]?.trim() ?? "") : "";
+  if (named) {
+    ctx.out(`  key: ${printable(variable)} is ${secret ? "set" : "not set"}`);
+  } else {
+    ctx.out("  broken: api_key_env holds something that is not a variable name");
+    ctx.out("    → if it is a key, rotate it; name the variable that holds the key instead");
+    exitCode = 1;
+  }
   if (secret.length >= MIN_KEY_LENGTH) {
     for (const file of filesHolding(workspace, secret)) {
       ctx.out(`  broken: the key in ${printable(variable)} is written in ${printable(file)}`);

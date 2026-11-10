@@ -78,6 +78,8 @@ export interface JudgeSettings {
   url?: string;
   /** The url came from `ACCRETA_JUDGE_URL`, not from the file: only then may a key go to it. */
   urlFromEnv: boolean;
+  /** The config file has a `url`, which is never read. */
+  urlInFile: boolean;
   model?: string;
   apiKeyEnv: string;
   rerankTop: number;
@@ -116,6 +118,7 @@ export function resolveJudgeSettings(
     route: text("ROUTE") ?? block.route,
     url: text("URL") ?? block.url,
     urlFromEnv: text("URL") !== undefined,
+    urlInFile: block.url !== undefined,
     model: text("MODEL") ?? block.model,
     apiKeyEnv: text("API_KEY_ENV") ?? block.apiKeyEnv ?? JUDGE_DEFAULTS.apiKeyEnv,
     rerankTop:

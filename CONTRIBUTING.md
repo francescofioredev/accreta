@@ -125,8 +125,8 @@ cd packages/cli && bun pm pack --dry-run  # eyeball the file list
 The `--dry-run` is worth the ten seconds. It prints exactly what would ship, which is the one
 moment where an accidentally included secret or an oversized directory is cheap to notice.
 
-Bump all seven publishable packages in one commit — `@accreta/core`, the four adapters,
-`accreta` and `@accreta/mcp-server`. They depend on each other by version, and `workspace:*` is
+Bump all eight publishable packages in one commit — `@accreta/core`, the four adapters,
+`accreta`, `@accreta/mcp-server` and `@accreta/judges`. They depend on each other by version, and `workspace:*` is
 resolved at publish time, so one left behind names a version that was never published. Then tag
 `vX.Y.Z` and push it; `.github/workflows/publish.yml` does the rest.
 

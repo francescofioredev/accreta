@@ -30,7 +30,8 @@ Each setting can be overridden by `ACCRETA_JUDGE_ROUTE`, `ACCRETA_JUDGE_MODEL`,
 Two rules keep a cloned knowledge base from taking your key somewhere else:
 
 - **The URL comes only from the environment.** `ACCRETA_JUDGE_URL` moves a route; a `url:` in
-  `accreta.config.yaml` is refused on every route. The `typesafe` route has a fixed host.
+  `accreta.config.yaml` is never read: doctor and the judge refuse it, or ignore it when
+  `ACCRETA_JUDGE_URL` is set. The `typesafe` route has a default host.
 - **`api_key_env` must name a variable starting with `ACCRETA_JUDGE_`.** The key is read from
   that variable and from nowhere else; it is never a config value.
 
@@ -55,7 +56,7 @@ vendor's console; they change.
 - **local**: whatever your server needs, and no more.
 
 Put it in the environment (a shell profile, a secret manager), never in `accreta.config.yaml`
-or a page. Tests use a different variable, `ACCRETA_JUDGE_TEST_KEY`.
+or a page.
 
 ## Check it
 

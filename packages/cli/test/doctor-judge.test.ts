@@ -101,6 +101,28 @@ describe("accreta doctor: the judge", () => {
     expect(text()).not.toContain(SECRET);
   });
 
+  test("a key pasted as the variable name is not printed", async () => {
+    configure("judge:\n  route: local\n  api_key_env: sk-live-PASTED-0123456789\n");
+    expect(await doctor()).toBe(1);
+    expect(text()).not.toContain("sk-live-PASTED");
+    process.env.ACCRETA_JUDGE_API_KEY_ENV = "sk-live-PASTED-0123456789";
+    try {
+      expect(await doctor()).toBe(1);
+      expect(text()).not.toContain("sk-live-PASTED");
+    } finally {
+      delete process.env.ACCRETA_JUDGE_API_KEY_ENV;
+    }
+  });
+
+  test("a file url next to an env url is a note, not a failure", async () => {
+    const server = await startFakeJudge();
+    configure("judge:\n  route: local\n  url: http://127.0.0.1:1\n");
+    process.env.ACCRETA_JUDGE_URL = server.url;
+    expect(await doctor()).toBe(0);
+    expect(judgeSection()).toContain("ACCRETA_JUDGE_URL wins");
+    await server.close();
+  });
+
   test("a url in the config file fails doctor", async () => {
     configure("judge:\n  route: local\n  url: http://127.0.0.1:1\n");
     expect(await doctor()).toBe(1);
