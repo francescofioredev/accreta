@@ -49,6 +49,7 @@ async function call(args: Record<string, unknown>) {
       count: number;
       results: { title: string; judge?: string; model?: string; probability?: number }[];
       rerank_note?: string;
+      _provenance: { page_derived_fields: string[] };
     };
   } finally {
     await client.close();
@@ -87,6 +88,7 @@ test("rerank: true reorders and labels each hit with judge, model and probabilit
   expect(out.results.map((r) => r.title)).toEqual(["Charlie", "Bravo", "Alpha"]);
   expect(out.results[0]).toMatchObject({ judge: "local", model: "fake-jev-3", probability: 0.95 });
   expect(out.rerank_note).toBeUndefined();
+  expect(out._provenance.page_derived_fields).toContain("results[].model");
   expect(fake.requests).toHaveLength(1);
   await fake.close();
 });
@@ -117,6 +119,7 @@ test("rerank with no judge block says so and keeps the search order", async () =
   const out = await call({ query: "tropopause", rerank: true });
   expect(out.results).toEqual(plain.results);
   expect(out.rerank_note).toMatch(/No judge is configured/);
+  expect(out._provenance.page_derived_fields).toContain("rerank_note");
 });
 
 test("an unreachable judge degrades to the search order with a note", async () => {

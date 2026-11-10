@@ -72,6 +72,7 @@ describe("accreta search --rerank", () => {
     const results = json().results;
     expect(results.map((r: { title: string }) => r.title)).toEqual(["Bravo", "Charlie", "Alpha"]);
     expect(results[0]).toMatchObject({ judge: "local", model: "fake-jev-7", probability: 0.9 });
+    expect(json()._provenance.page_derived_fields).toContain("results[].model");
     expect(fake.requests).toHaveLength(1);
     const state = fake.requests[0]!.body.state as {
       query: string;
@@ -123,6 +124,7 @@ describe("accreta search --rerank", () => {
     expect(await cli("search", "tropopause", "--rerank", "--json")).toBe(0);
     expect(paths()).toEqual(plain);
     expect(json().rerank_note).toMatch(/No judge is configured/);
+    expect(json()._provenance.page_derived_fields).toContain("rerank_note");
     expect(errors.join("\n")).toMatch(/No judge is configured/);
   });
 
