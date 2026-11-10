@@ -43,6 +43,7 @@ export {
 export { INDEX_FORMAT } from "./index-db/format.ts";
 
 export type {
+  ExcerptResult,
   LocationVerdict,
   LocatorChange,
   ParsedCitation,
@@ -61,6 +62,7 @@ export {
   parseLineLocator,
   resolveCitedFile,
   resolveInside,
+  sliceLines,
 } from "./source/adapter.ts";
 export type { Citation, CiteOptions } from "./source/cite.ts";
 export { cite } from "./source/cite.ts";

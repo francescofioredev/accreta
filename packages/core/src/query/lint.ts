@@ -11,6 +11,7 @@ import {
 } from "../source/adapter.ts";
 import { paginate, type PageInfo, type PageRequest } from "./paging.ts";
 import { supersessionFindings } from "./supersession.ts";
+import { judgeCitations, type SupportOptions } from "./support.ts";
 import { requireTable } from "./tables.ts";
 import { uncitedSentences } from "./uncited.ts";
 
@@ -40,12 +41,16 @@ export const LINT_FINDING_KINDS = [
   "unreadable-supersession-fields",
   "shared-alias",
   "uncited-sentence",
+  "citation-unconfirmed",
 ] as const;
 
 export type LintFindingKind = (typeof LINT_FINDING_KINDS)[number];
 
 /** Kinds that are listed but never change lint's exit code (ADR-0014). */
-export const ADVISORY_LINT_KINDS: ReadonlySet<LintFindingKind> = new Set(["uncited-sentence"]);
+export const ADVISORY_LINT_KINDS: ReadonlySet<LintFindingKind> = new Set([
+  "uncited-sentence",
+  "citation-unconfirmed",
+]);
 
 export const isAdvisory = (kind: LintFindingKind) => ADVISORY_LINT_KINDS.has(kind);
 
@@ -74,6 +79,11 @@ export interface LintReport {
   uncheckedReasons: { detail: string; citations: number; paths: string[] }[];
   /** Findings of advisory kinds, over the whole list rather than a page of it. */
   advisoryCount?: number;
+  /** Set only when a judge was asked: citations it gave a verdict on, and ones it could not see. */
+  citationsJudged?: number;
+  citationsUnjudged?: number;
+  /** Why the judge stopped, when it became unavailable mid-pass. */
+  judgeUnavailable?: string;
 }
 
 interface BrokenRow {
@@ -664,15 +674,22 @@ export async function lintKnowledgeBase(
     kinds?: readonly LintFindingKind[];
     /** Findings about the sources themselves, such as one that did not load; only the caller knows them. */
     sourceFindings?: readonly LintFinding[];
+    /** Asks a judge about each readable citation; absent, no request is made. */
+    judge?: SupportOptions;
   } = {},
 ): Promise<LintReport & PageInfo> {
   const report = lint(db, config);
   const citations = await lintCitations(db, sources);
   const kinds = options.kinds && options.kinds.length > 0 ? new Set(options.kinds) : null;
+  const support =
+    options.judge && (!kinds || kinds.has("citation-unconfirmed"))
+      ? await judgeCitations(db, sources, options.judge)
+      : undefined;
   const findings = [
     ...report.findings,
     ...(options.sourceFindings ?? []),
     ...citations.findings,
+    ...(support?.findings ?? []),
   ].filter((finding) => !kinds || kinds.has(finding.kind));
   const scope = `lint\0${kinds ? [...kinds].toSorted().join(",") : ""}`;
   const { items, total, nextCursor } = options.page
@@ -687,5 +704,10 @@ export async function lintKnowledgeBase(
     citationsUnchecked: citations.citationsUnchecked,
     uncheckedReasons: citations.uncheckedReasons,
     advisoryCount: findings.filter((finding) => isAdvisory(finding.kind)).length,
+    ...(support && {
+      citationsJudged: support.judged,
+      citationsUnjudged: support.unjudged,
+      judgeUnavailable: support.unavailable,
+    }),
   };
 }

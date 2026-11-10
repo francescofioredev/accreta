@@ -7,12 +7,14 @@ import {
   DEFAULT_CONFIG,
   DelegatedSourceError,
   openIndex,
+  parseConfig,
   parsePage,
   UnknownRevisionError,
   type AccretaConfig,
   type SourceAdapter,
 } from "@accreta/core";
 import { buildRegistry } from "@accreta/adapters";
+import { startFakeJudge } from "@accreta/judges/testing";
 import {
   checkDriftTool,
   citeTool,
@@ -150,6 +152,63 @@ describe("read tools", () => {
     } finally {
       config.lintUncitedSentences = false;
     }
+  });
+});
+
+describe("lint_knowledge_base with judge", () => {
+  const stub = (): SourceAdapter => ({
+    id: "src",
+    revision: async () => "rev1",
+    changedSince: async () => [],
+    locate: async () => ({ verdict: "found" }),
+    excerpt: async () => ({ status: "text", text: "the cited line" }),
+    citation: () => "",
+    pinRevision: () => {},
+  });
+  const cited = () =>
+    writePage(
+      "j.md",
+      "---\ntype: note\n---\n\n# J\n\nA claim the line does not back.[^a]\n\n[^a]: src @ rev1 · f.md#L1\n",
+    );
+
+  test("a below-threshold verdict is an advisory citation-unconfirmed, with judge and probability", async () => {
+    const fake = await startFakeJudge({
+      choice: () => ({ supports: 0.2, contradicts: 0.3, says_nothing: 0.5 }),
+    });
+    try {
+      cited();
+      build();
+      ctx.config = {
+        ...config,
+        judge: parseConfig(`judge:\n  route: local\n  url: ${fake.url}\n`).judge,
+      };
+      ctx.sources.set("src", stub());
+      const result = await lintTool(ctx, { judge: true });
+      const found = result.findings.filter((f) => f.kind === "citation-unconfirmed");
+      expect(found).toHaveLength(1);
+      expect(found[0]).toMatchObject({ advisory: true });
+      expect(found[0]?.detail).toContain("0.20");
+      expect(result.advisory_count).toBe(1);
+      expect(result.citations_judged).toBe(1);
+    } finally {
+      await fake.close();
+    }
+  });
+
+  test("without a judge block it says so and makes no request", async () => {
+    cited();
+    build();
+    ctx.sources.set("src", stub());
+    const result = await lintTool(ctx, { judge: true });
+    expect(result.judge_note).toContain("No judge is configured");
+    expect(result.citations_judged).toBe(0);
+  });
+
+  test("judge off by default: no judge fields at all", async () => {
+    cited();
+    build();
+    const result = await lintTool(ctx);
+    expect(result).not.toHaveProperty("citations_judged");
   });
 });
 

@@ -81,6 +81,7 @@ const CURRENT_EDGES: Edge[] = [
   { dependent: "accreta", dependency: "@accreta/mcp-server" },
   { dependent: "@accreta/mcp-server", dependency: "@accreta/core" },
   { dependent: "@accreta/mcp-server", dependency: "@accreta/adapters" },
+  { dependent: "@accreta/mcp-server", dependency: "@accreta/judges" },
 ];
 
 test("the entry points are the two packages nobody depends on", () => {

@@ -22,8 +22,10 @@ import {
   formatCitation,
   parseLineLocator,
   resolveCitedFile,
+  sliceLines,
   UNPINNED_REVISION,
   UnknownRevisionError,
+  type ExcerptResult,
   type LocationVerdict,
   type SourceAdapter,
 } from "@accreta/core";
@@ -418,6 +420,23 @@ export class FsSource implements SourceAdapter {
    * error: it names nothing this source can offer, and reading it to find out
    * is exactly what `resolveCitedFile` exists to prevent.
    */
+  async excerpt(path: string, locator: string, revision: string): Promise<ExcerptResult> {
+    // A directory keeps no history: only the revision it is at now can be read.
+    if (revision !== (await this.revision())) {
+      return { status: "unknown", detail: `source "${this.id}" keeps no history of ${revision}` };
+    }
+    const range = parseLineLocator(locator);
+    const full = resolveCitedFile(this.root, path, this.id);
+    if (!range || typeof full !== "string" || outOfScope(path, this.extensions)) {
+      return { status: "unknown", detail: `source "${this.id}" cannot read ${path}` };
+    }
+    const text = await readFile(full, "utf-8").catch(() => null);
+    const cited = text === null ? null : sliceLines(text, range);
+    return cited === null
+      ? { status: "unknown", detail: `source "${this.id}" cannot read ${path}` }
+      : { status: "text", text: cited };
+  }
+
   async locate(path: string, locator?: string): Promise<LocationVerdict> {
     const full = resolveCitedFile(this.root, path, this.id);
     if (typeof full !== "string") return full;
