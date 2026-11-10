@@ -376,7 +376,7 @@ describe("accreta drift", () => {
 
     writePage(
       "a.md",
-      `---\ntype: note\nsource: docs\nlast_verified_revision: ${revision}\n---\n\n# A\n`,
+      `---\ntype: note\nsource: docs\nlast_verified_revision: "${revision}"\n---\n\n# A\n`,
     );
     await cli("reindex");
     writeFileSync(join(docs, "a.md"), "rewritten", "utf-8");
@@ -430,7 +430,7 @@ describe("accreta drift", () => {
       const revision = /^docs @ (\S+)$/m.exec(spawnCli(env, "drift").out)?.[1];
       writePage(
         "a.md",
-        `---\ntype: note\nsource: docs\nlast_verified_revision: ${revision}\n---\n\n# A\n`,
+        `---\ntype: note\nsource: docs\nlast_verified_revision: "${revision}"\n---\n\n# A\n`,
       );
       await cli("reindex");
       writeFileSync(join(docs, "a.md"), "rewritten", "utf-8");
@@ -548,7 +548,7 @@ describe("accreta drift", () => {
     for (const name of ["one", "two", "three"]) {
       writePage(
         `${name}.md`,
-        `---\ntype: note\nsource: docs\nlast_verified_revision: ${revision}\n---\n\n# ${name}\n`,
+        `---\ntype: note\nsource: docs\nlast_verified_revision: "${revision}"\n---\n\n# ${name}\n`,
       );
     }
     await cli("reindex");
@@ -601,7 +601,7 @@ describe("accreta drift at line granularity", () => {
     const page = (name: string, citation: string) =>
       writePage(
         `${name}.md`,
-        `---\ntype: note\nsource: docs\nlast_verified_revision: ${revision}\n---\n\n# ${name}\n\n` +
+        `---\ntype: note\nsource: docs\nlast_verified_revision: "${revision}"\n---\n\n# ${name}\n\n` +
           `A claim.[^c]\n\n[^c]: docs @ ${revision.slice(0, 7)} · ${citation}\n`,
       );
     page("changed", "a.md#L3-L5");
@@ -651,7 +651,7 @@ describe("accreta drift at line granularity", () => {
     const page = (name: string, citation: string) =>
       writePage(
         `${name}.md`,
-        `---\ntype: note\nsource: docs\nlast_verified_revision: ${revision}\n---\n\n# ${name}\n\n` +
+        `---\ntype: note\nsource: docs\nlast_verified_revision: "${revision}"\n---\n\n# ${name}\n\n` +
           `A claim.[^c]\n\n[^c]: docs @ ${revision.slice(0, 7)} · ${citation}\n`,
       );
     page("changed", "a.md#L3-L5");
@@ -717,7 +717,7 @@ describe("accreta drift for a pull request", () => {
     const page = (name: string, citation: string) =>
       writePage(
         `${name}.md`,
-        `---\ntype: note\nsource: docs\nlast_verified_revision: ${from}\n---\n\n# ${name}\n\n` +
+        `---\ntype: note\nsource: docs\nlast_verified_revision: "${from}"\n---\n\n# ${name}\n\n` +
           `A claim.[^c]\n\n[^c]: docs @ ${from.slice(0, 7)} · ${citation}\n`,
       );
     page("first", "a.md#L3-L5");
@@ -817,13 +817,13 @@ describe("accreta drift for a pull request", () => {
     const short = from.slice(0, 7);
     writePage(
       "first.md",
-      `---\ntype: note\nsource: docs\nlast_verified_revision: ${from}\n---\n\n# first\n\n` +
+      `---\ntype: note\nsource: docs\nlast_verified_revision: "${from}"\n---\n\n# first\n\n` +
         `A claim.[^c] Another.[^d]\n\n[^c]: docs @ ${short} · a.md#L3-L5\n` +
         `[^d]: docs @ ${short} · a.md#L15-L16\n`,
     );
     writePage(
       "second.md",
-      `---\ntype: note\nsource: docs\nlast_verified_revision: ${from}\n---\n\n# second\n\n` +
+      `---\ntype: note\nsource: docs\nlast_verified_revision: "${from}"\n---\n\n# second\n\n` +
         `A claim.[^c]\n\n[^c]: docs @ ${short} · a.md#L18\n`,
     );
     await cli("reindex");
@@ -869,7 +869,7 @@ describe("accreta drift for a pull request", () => {
     for (const name of ["first", "second", "third"]) {
       writePage(
         `${name}.md`,
-        `---\ntype: note\nsource: docs\nlast_verified_revision: ${to}\n---\n\n# ${name}\n`,
+        `---\ntype: note\nsource: docs\nlast_verified_revision: "${to}"\n---\n\n# ${name}\n`,
       );
     }
     await cli("reindex");
@@ -956,7 +956,7 @@ describe("accreta drift --base", () => {
     ] as const) {
       writePage(
         `${name}.md`,
-        `---\ntype: note\nsource: docs\nlast_verified_revision: ${from}\n---\n\n# ${name}\n\n` +
+        `---\ntype: note\nsource: docs\nlast_verified_revision: "${from}"\n---\n\n# ${name}\n\n` +
           `A claim.[^c]\n\n[^c]: docs @ ${from.slice(0, 7)} · ${citation}\n`,
       );
     }
@@ -975,7 +975,7 @@ describe("accreta drift --base", () => {
       const now = headOf(docs);
       writePage(
         `${name}.md`,
-        `---\ntype: note\nsource: docs\nlast_verified_revision: ${now}\n---\n\n# ${name}\n\n` +
+        `---\ntype: note\nsource: docs\nlast_verified_revision: "${now}"\n---\n\n# ${name}\n\n` +
           `A claim.[^c]\n\n[^c]: docs @ ${now.slice(0, 7)} · ${citation}\n`,
       );
       await cli("reindex");
@@ -1057,7 +1057,7 @@ describe("accreta drift --base", () => {
     const pin = (revision: string) =>
       writePage(
         "a.md",
-        `---\ntype: note\nsource: docs\nlast_verified_revision: ${revision}\n---\n\n# A\n`,
+        `---\ntype: note\nsource: docs\nlast_verified_revision: "${revision}"\n---\n\n# A\n`,
       );
     pin("gone");
     await cli("reindex");

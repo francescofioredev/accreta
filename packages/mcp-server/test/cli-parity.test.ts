@@ -229,7 +229,7 @@ beforeAll(async () => {
   head = commit(["commit", "-qam", "second"]);
   write(
     "knowledge/notes/stale.md",
-    `---\ntype: note\nsource: repo\nlast_verified_revision: ${first}\n---\n\n# Stale\n\n` +
+    `---\ntype: note\nsource: repo\nlast_verified_revision: "${first}"\n---\n\n# Stale\n\n` +
       `A claim.[^c]\n\n[^c]: repo @ ${first.slice(0, 7)} · b.md#L1\n`,
   );
   write(

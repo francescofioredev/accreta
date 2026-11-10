@@ -42,7 +42,7 @@ async function workspace(): Promise<{ docs: string; revision: string }> {
   mkdirSync(join(root, "knowledge"), { recursive: true });
   writeFileSync(
     join(root, "knowledge", "a.md"),
-    `---\ntype: note\nsource: docs\nlast_verified_revision: ${revision}\n---\n\n# A\n\n` +
+    `---\ntype: note\nsource: docs\nlast_verified_revision: "${revision}"\n---\n\n# A\n\n` +
       `A claim.[^c]\n\n[^c]: docs @ ${revision.slice(0, 7)} · a.md#L2\n`,
   );
   writeFileSync(

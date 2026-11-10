@@ -99,7 +99,7 @@ function gitProject(): { dir: string; revision: string } {
   writeFileSync(
     join(dir, "knowledge", "albedo.md"),
     `---\ntype: concept\nsource: repo\ncanonical_source: "repo:docs/a.md#L1"\n` +
-      `last_verified_revision: ${revision}\n---\n\n` +
+      `last_verified_revision: "${revision}"\n---\n\n` +
       `# Albedo\n\nThe fraction of light a surface reflects.[^a]\n\n` +
       `[^a]: repo @ ${revision} · docs/a.md#L1-L2\n`,
   );

@@ -278,11 +278,11 @@ describe("drift --base exits 1 only on what the change put in doubt", () => {
   const citing = (name: string, locator: string) =>
     page(
       name,
-      `source: docs\nlast_verified_revision: ${first}\n`,
+      `source: docs\nlast_verified_revision: "${first}"\n`,
       `\nA claim.[^c]\n\n[^c]: docs @ ${first.slice(0, 7)} · a.md#${locator}\n`,
     );
   const delegated = (name: string, revision: string) =>
-    page(name, `source: design-docs\nlast_verified_revision: ${revision}\n`);
+    page(name, `source: design-docs\nlast_verified_revision: "${revision}"\n`);
 
   /** What the action does on the base branch: `drift --json`, kept even when it exits 1. */
   async function baseReport(): Promise<string> {
@@ -366,13 +366,13 @@ describe("drift --base exits 1 only on what the change put in doubt", () => {
   });
 
   test("a page already unplaceable on the base passes; one newly unplaceable fails", async () => {
-    page("lost", `source: docs\nlast_verified_revision: ${UNKNOWN}\n`);
+    page("lost", `source: docs\nlast_verified_revision: "${UNKNOWN}"\n`);
     const base = await baseReport();
 
     expect(await drift("--base", base)).toBe(0);
     expect(await drift()).toBe(1);
 
-    page("also-lost", `source: docs\nlast_verified_revision: ${UNKNOWN}\n`);
+    page("also-lost", `source: docs\nlast_verified_revision: "${UNKNOWN}"\n`);
     expect(await drift("--json", "--base", base)).toBe(1);
     expect(JSON.parse(output.join("\n")).pages_newly_unplaceable).toBe(1);
   });
