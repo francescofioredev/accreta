@@ -71,6 +71,9 @@ test("a sentence is reported at its own line, not its paragraph's first", () => 
 test("a fence ends a definition, and a multi-line comment is skipped", () => {
   expect(texts("[^a]: x\n\n```\ncode\n```\nProse after the fence here.")).toHaveLength(1);
   expect(texts("<!-- a comment\nwith several words inside -->\n")).toEqual([]);
+  expect(texts("<!-- note\n```\n-->\nProse after the comment is long.\n")).toEqual([
+    "Prose after the comment is long.",
+  ]);
 });
 
 test("the marker is configurable", () => {

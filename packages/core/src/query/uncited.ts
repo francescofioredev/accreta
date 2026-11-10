@@ -67,6 +67,10 @@ export function uncitedSentences(body: string, marker: string): UncitedSentence[
   body.split("\n").forEach((raw, index) => {
     const line = raw.replace(/\r$/, "");
     const blank = line.trim() === "";
+    if (inComment) {
+      inComment = !line.includes("-->");
+      return;
+    }
     if (FENCE_RE.test(line)) {
       flush();
       fenced = !fenced;
@@ -75,10 +79,6 @@ export function uncitedSentences(body: string, marker: string): UncitedSentence[
       return;
     }
     if (fenced) return;
-    if (inComment) {
-      inComment = !line.includes("-->");
-      return;
-    }
     if (/^\s*<!--/.test(line) && !line.includes("-->")) {
       flush();
       inComment = true;

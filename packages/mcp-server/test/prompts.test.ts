@@ -235,6 +235,7 @@ describe("MCP prompts", () => {
     const ingest = await withClient(false, (c) => render(c, "ingest_source"));
     expect(ingest).toContain("re-open the source lines cited by each footnote you added");
     expect(ingest).toContain("never widen a range to cover it");
+    expect(ingest).toContain("ending in the inference marker");
     expect(await reverify()).toContain(
       "check every fact in each re-cited sentence, and any inference after it",
     );
