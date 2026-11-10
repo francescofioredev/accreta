@@ -263,11 +263,18 @@ export function createServer(ctx: ToolContext): McpServer {
           .min(1)
           .optional()
           .describe("Report only these finding kinds. Omit for every kind."),
+        judge: z
+          .boolean()
+          .optional()
+          .describe(
+            "Also ask the configured judge whether each readable citation's lines support its sentence. Advisory (`citation-unconfirmed`); needs a judge: block; sends the cited lines to the judge. A judged call is not paged: limit and cursor are ignored.",
+          ),
         ...pageInput("findings"),
       },
     },
-    async (input: { kinds?: (typeof LINT_FINDING_KINDS)[number][] } & PageRequest) =>
-      json(await lintTool(ctx, input)),
+    async (
+      input: { kinds?: (typeof LINT_FINDING_KINDS)[number][]; judge?: boolean } & PageRequest,
+    ) => json(await lintTool(ctx, input)),
   );
 
   register(

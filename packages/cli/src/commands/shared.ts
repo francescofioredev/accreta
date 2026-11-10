@@ -74,7 +74,7 @@ interface CommandArgs {
 export const COMMAND_ARGS: Readonly<Record<string, CommandArgs>> = {
   init: { flags: ["--preset", "--agent-file"], maxPositional: 0 },
   reindex: { flags: [], maxPositional: 0 },
-  lint: { flags: ["--json", "--limit", "--cursor"], maxPositional: 0 },
+  lint: { flags: ["--json", "--judge", "--limit", "--cursor"], maxPositional: 0 },
   // The two positionals are the values of --format and --base; drift refuses any other.
   drift: { flags: ["--strict", "--json", "--format", "--base", "--source"], maxPositional: 2 },
   doctor: { flags: [], maxPositional: 0 },

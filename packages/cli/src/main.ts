@@ -29,7 +29,9 @@ Usage: accreta <command> [arguments]
                            compose, comma-separated (--preset codebase,research)
                            --agent-file <name> names the constitution (default AGENTS.md)
   reindex                  Rebuild the index from the knowledge base
-  lint                     Report unresolvable links, missing provenance, unknown types
+  lint [--judge]           Report unresolvable links, missing provenance, unknown types.
+                           --judge also asks the configured judge whether cited lines support
+                           their sentences; advisory, never changes the exit code
   drift [--strict]         Report which pages their sources have moved out from under.
                            --strict also fails on anything left unchecked;
                            --source <id> checks that source alone
@@ -92,6 +94,7 @@ function parseArgs(argv: string[]): ParsedArgs & {
   includeInline: boolean;
   strict: boolean;
   json: boolean;
+  judge: boolean;
   limit?: string;
   cursor?: string;
   source?: string;
@@ -111,6 +114,7 @@ function parseArgs(argv: string[]): ParsedArgs & {
   let includeInline = false;
   let strict = false;
   let json = false;
+  let judge = false;
   let limit: string | undefined;
   let cursor: string | undefined;
   let source: string | undefined;
@@ -178,6 +182,10 @@ function parseArgs(argv: string[]): ParsedArgs & {
       json = flag();
       continue;
     }
+    if (arg === "--judge") {
+      judge = flag();
+      continue;
+    }
     if (arg === "--limit") {
       limit = value();
       continue;
@@ -226,6 +234,7 @@ function parseArgs(argv: string[]): ParsedArgs & {
     includeInline,
     strict,
     json,
+    judge,
     limit,
     cursor,
     source,
@@ -239,8 +248,19 @@ function parseArgs(argv: string[]): ParsedArgs & {
 export async function run(argv: string[], ctx: CommandContext): Promise<number> {
   const [command, ...rest] = argv;
   const parsed = parseArgs(rest);
-  const { positional, types, kinds, includeInline, strict, json, limit, cursor, source, set } =
-    parsed;
+  const {
+    positional,
+    types,
+    kinds,
+    includeInline,
+    strict,
+    json,
+    judge,
+    limit,
+    cursor,
+    source,
+    set,
+  } = parsed;
   const { preset, agentFile } = parsed;
 
   // Only a command this install has: `cite --help` on an older one must not look like success.
@@ -270,7 +290,7 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
     case "reindex":
       return reindex(ctx);
     case "lint":
-      return runLint(ctx, { json, limit, cursor });
+      return runLint(ctx, { json, judge, limit, cursor });
     case "drift":
       return drift(ctx, rest, strict);
     case "doctor":

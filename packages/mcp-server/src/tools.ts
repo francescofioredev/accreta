@@ -8,15 +8,18 @@ import {
   findRelated,
   getPage,
   isAdvisory,
+  JudgeConfigError,
   lintKnowledgeBase,
   namesRef,
   pageChanges,
   parseCitation,
+  resolveJudgeSettings,
   searchPages,
   UnknownRevisionError,
   type AccretaConfig,
   type CanonicalMatch,
   type Database,
+  type Judge,
   type LintFindingKind,
   type PageChange,
   type PageRequest,
@@ -26,6 +29,7 @@ import {
   type SourceAdapter,
   type UnresolvableRevision,
 } from "@accreta/core";
+import { createJudge } from "@accreta/judges";
 import {
   countUnchecked,
   detectDriftEach,
@@ -574,16 +578,43 @@ const LINT_FIELDS = [
 
 export async function lintTool(
   ctx: ToolContext,
-  input: { kinds?: LintFindingKind[] } & PageRequest = {},
+  input: { kinds?: LintFindingKind[]; judge?: boolean } & PageRequest = {},
 ) {
+  let judgeNote: string | undefined;
+  let judge: { judge: Judge; threshold: number } | undefined;
+  if (input.judge) {
+    const settings = resolveJudgeSettings(ctx.config.judge, process.env);
+    if (!settings) {
+      judgeNote =
+        "No judge is configured (no judge: block in accreta.config.yaml); linted without one.";
+    } else {
+      try {
+        const made = createJudge(ctx.config);
+        if (made) judge = { judge: made, threshold: settings.supportThreshold };
+      } catch (error) {
+        if (!(error instanceof JudgeConfigError)) throw error;
+        judgeNote = `The judge is not usable (${error.message}); linted without one.`;
+      }
+    }
+  }
   const report = await withPinnedIndex(ctx, "lint_knowledge_base", (db) =>
     lintKnowledgeBase(db, ctx.config, ctx.sources, {
       kinds: input.kinds,
-      page: { limit: input.limit, cursor: input.cursor },
+      // A judged pass is not repeated per page, and a probability must not move a cursor.
+      page: judge ? undefined : { limit: input.limit, cursor: input.cursor },
       sourceFindings: unloadedFindings(countUnchecked(db, ctx.unloadedSources)),
+      judge,
     }),
   );
+  if (report.judgeUnavailable) {
+    judgeNote = `The judge became unavailable (${report.judgeUnavailable}); the rest was not judged.`;
+  }
   return {
+    ...(input.judge && {
+      judge_note: judgeNote,
+      citations_judged: report.citationsJudged ?? 0,
+      citations_unjudged: report.citationsUnjudged ?? 0,
+    }),
     pages_checked: report.pagesChecked,
     count: report.total,
     // Citations whose source could not be questioned. A number rather than

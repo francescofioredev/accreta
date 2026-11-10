@@ -490,3 +490,60 @@ for (const [name, makeFixture] of QUESTIONABLE) {
     });
   });
 }
+
+describe("excerpt, for a judge that reads the cited lines", () => {
+  test.each(QUESTIONABLE)(
+    "%s gives the cited lines as of the current revision",
+    async (_n, make) => {
+      const f = await make();
+      await f.add({ "lines.md": "alpha\nbeta\ngamma\n" });
+      const rev = await f.adapter.revision();
+      expect(await f.adapter.excerpt?.("lines.md", "L2-L3", rev)).toEqual({
+        status: "text",
+        text: "beta\ngamma",
+      });
+    },
+  );
+
+  test.each(QUESTIONABLE)(
+    "%s answers unknown for a range past the end or a path outside",
+    async (_n, make) => {
+      const f = await make();
+      await f.add({ "lines.md": "alpha\n" });
+      const rev = await f.adapter.revision();
+      expect((await f.adapter.excerpt?.("lines.md", "L1-L9", rev))?.status).toBe("unknown");
+      expect((await f.adapter.excerpt?.("../escape.md", "L1", rev))?.status).toBe("unknown");
+      expect((await f.adapter.excerpt?.("lines.md", "block-a1", rev))?.status).toBe("unknown");
+    },
+  );
+
+  test("a directory keeps no history: an older revision is unknown, never the current text", async () => {
+    const f = await fsFixture();
+    const before = await f.adapter.revision();
+    await f.advance();
+    expect((await f.adapter.excerpt?.("chapter-07.md", "L1", before))?.status).toBe("unknown");
+  });
+
+  test("git reads the text as of the cited revision, not the working tree", async () => {
+    const f = await gitFixture();
+    const before = await f.adapter.revision();
+    await f.advance();
+    expect(await f.adapter.excerpt?.("chapter-07.md", "L1", before)).toEqual({
+      status: "text",
+      text: "one",
+    });
+  });
+
+  test("git answers unknown for a revision that is not hex", async () => {
+    const f = await gitFixture();
+    expect((await f.adapter.excerpt?.("chapter-07.md", "L1", "--output=x"))?.status).toBe(
+      "unknown",
+    );
+    expect((await f.adapter.excerpt?.("chapter-07.md", "L1", "HEAD"))?.status).toBe("unknown");
+  });
+
+  test("a delegated source has no excerpt at all", async () => {
+    const f = await delegatedFixture();
+    expect(f.adapter.excerpt).toBeUndefined();
+  });
+});

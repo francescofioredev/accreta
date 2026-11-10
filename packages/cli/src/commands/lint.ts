@@ -1,11 +1,20 @@
 import { existsSync } from "node:fs";
-import { isAdvisory, lintKnowledgeBase, openIndex } from "@accreta/core";
+import {
+  isAdvisory,
+  JudgeConfigError,
+  lintKnowledgeBase,
+  openIndex,
+  resolveJudgeSettings,
+  type Judge,
+} from "@accreta/core";
+import { createJudge } from "@accreta/judges";
 import { countUnchecked, unloadedFindings } from "@accreta/adapters";
 import { findWorkspace } from "../workspace.ts";
 import {
   DRIFT_NOTICE,
   loadSources,
   printable,
+  printableMessage,
   printJson,
   provenance,
   readPage,
@@ -28,7 +37,7 @@ const LINT_FIELDS = [
 // `drift` has the same shape for the same reason.
 export async function runLint(
   ctx: CommandContext,
-  options: { json?: boolean } & PageFlags = {},
+  options: { json?: boolean; judge?: boolean } & PageFlags = {},
 ): Promise<number> {
   const page = readPage(ctx, options);
   if (page === null) return 2;
@@ -41,12 +50,37 @@ export async function runLint(
   try {
     const loaded = loadSources(workspace);
     const sources = new Map(loaded.sources.map((adapter) => [adapter.id, adapter]));
+    let judge: Judge | null = null;
+    if (options.judge) {
+      if (!workspace.config.judge) {
+        ctx.err(
+          "No judge is configured (no judge: block in accreta.config.yaml); linting without one.",
+        );
+      } else {
+        try {
+          judge = createJudge(workspace.config);
+        } catch (error) {
+          if (!(error instanceof JudgeConfigError)) throw error;
+          ctx.err(
+            `The judge is not usable (${printableMessage(error.message)}); linting without one.`,
+          );
+        }
+      }
+    }
+    const shownPage = judge ? undefined : page;
     // Without a page every finding prints, as before paging existed; with one, as MCP pages it.
     let report: Awaited<ReturnType<typeof lintKnowledgeBase>>;
     try {
       report = await lintKnowledgeBase(db, workspace.config, sources, {
-        page,
+        page: shownPage,
         sourceFindings: unloadedFindings(countUnchecked(db, loaded.unloaded)),
+        judge: judge
+          ? {
+              judge,
+              threshold: resolveJudgeSettings(workspace.config.judge, process.env)!
+                .supportThreshold,
+            }
+          : undefined,
       });
     } catch (error) {
       return refuseCursor(ctx, error);
@@ -55,6 +89,11 @@ export async function runLint(
     const advisory = report.advisoryCount ?? 0;
     const blocking = report.total - advisory;
 
+    if (report.judgeUnavailable) {
+      ctx.err(
+        `The judge became unavailable (${printableMessage(report.judgeUnavailable)}); the rest was not judged.`,
+      );
+    }
     if (options.json) {
       printJson(ctx, {
         pages_checked: report.pagesChecked,
@@ -63,6 +102,10 @@ export async function runLint(
         citations_unchecked: report.citationsUnchecked,
         unchecked_reasons: report.uncheckedReasons,
         advisory_count: advisory,
+        ...(judge && {
+          citations_judged: report.citationsJudged ?? 0,
+          citations_unjudged: report.citationsUnjudged ?? 0,
+        }),
         findings: findings.map((f) => (isAdvisory(f.kind) ? { ...f, advisory: true } : f)),
         nextCursor: report.nextCursor,
         // An unloaded-source finding quotes sources/*.yaml.
@@ -86,7 +129,11 @@ export async function runLint(
           ].join("\n")
         : null;
 
-    const checked = `${report.citationsChecked} citation(s) checked against their source.`;
+    const checked =
+      `${report.citationsChecked} citation(s) checked against their source.` +
+      (judge
+        ? ` ${report.citationsJudged ?? 0} judged, ${report.citationsUnjudged ?? 0} not judged (text unreadable).`
+        : "");
     if (report.total === 0) {
       ctx.out(`${report.pagesChecked} page(s) checked, nothing to report.`);
       ctx.out(checked);
@@ -105,7 +152,7 @@ export async function runLint(
       for (const [kind, group] of byKind) {
         if (isAdvisory(group[0]!.kind) !== advisoryKinds) continue;
         // A page holds only some of each kind, so its count must not read as the kind's total.
-        ctx.out(`\n${kind} (${group.length}${page ? " on this page" : ""})`);
+        ctx.out(`\n${kind} (${group.length}${shownPage ? " on this page" : ""})`);
         for (const finding of group)
           ctx.out(`  ${printable(finding.path)}: ${printable(finding.detail)}`);
       }
@@ -122,7 +169,7 @@ export async function runLint(
     );
     ctx.out(checked);
     if (unchecked) ctx.out(unchecked);
-    if (page) reportPage(ctx, findings.length, report.total, "finding(s)", report.nextCursor);
+    if (shownPage) reportPage(ctx, findings.length, report.total, "finding(s)", report.nextCursor);
 
     // A non-zero exit so CI can fail on an unresolvable link.
     return blocking > 0 ? 1 : 0;

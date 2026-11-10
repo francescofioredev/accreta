@@ -70,6 +70,14 @@ export interface SourceAdapter {
     locators: readonly string[],
   ): Promise<Map<string, LocatorChange>>;
 
+  /**
+   * The text a citation points at as of `revision`. Optional, and used only to show a judge the
+   * cited lines (ADR-0011 amendment): absent, or `unknown`, means "I could not read it", never
+   * "it is wrong". Must answer `unknown` rather than the current text when the source cannot
+   * produce the text as of `revision`.
+   */
+  excerpt?(path: string, locator: string, revision: string): Promise<ExcerptResult>;
+
   /** Render a citation to a location, per the configured provenance format. */
   citation(path: string, locator?: string): string;
 
@@ -98,6 +106,18 @@ export interface SourceAdapter {
 /** What a possibly abbreviated revision names: exactly one revision, several, or none. */
 export type RevisionResolution =
   { status: "resolved"; revision: string } | { status: "ambiguous" } | { status: "unknown" };
+
+/** What `excerpt` can say: the cited text, or that it could not be read. */
+export type ExcerptResult =
+  { status: "text"; text: string } | { status: "unknown"; detail: string };
+
+/** The lines `range` names, 1-based and inclusive; null when the text is shorter than the range. */
+export function sliceLines(text: string, range: readonly [number, number]): string | null {
+  const lines = text.split("\n");
+  if (lines.at(-1) === "") lines.pop();
+  if (range[1] > lines.length) return null;
+  return lines.slice(range[0] - 1, range[1]).join("\n");
+}
 
 /** Whether the source knows `revision` but cannot resolve it to one: a ref, a name that moves. */
 export async function namesRef(adapter: SourceAdapter, revision: string): Promise<boolean> {

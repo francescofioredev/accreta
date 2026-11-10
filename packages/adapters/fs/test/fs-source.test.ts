@@ -199,6 +199,49 @@ function verify(db: Database, page: string, revision: string): void {
   ).run(page, page, revision);
 }
 
+describe("FsSource excerpt revision memo", () => {
+  const counted = (scan: () => Promise<string>) => {
+    const fs = source();
+    let scans = 0;
+    fs.revision = async () => {
+      scans++;
+      return scan();
+    };
+    return { fs, scans: () => scans };
+  };
+
+  test("a scan slower than the memo life is not repeated by the next excerpt", async () => {
+    write("a.md", "one", 1000);
+    const realNow = Date.now;
+    let clock = 1_000_000;
+    Date.now = () => clock;
+    try {
+      const { fs, scans } = counted(async () => {
+        clock += 2300;
+        return "rev";
+      });
+      await fs.excerpt("a.md", "L1", "rev");
+      await fs.excerpt("a.md", "L1", "rev");
+      expect(scans()).toBe(1);
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
+  test("a failed scan is not remembered", async () => {
+    write("a.md", "one", 1000);
+    let fail = true;
+    const { fs, scans } = counted(async () => {
+      if (fail) throw new Error("scan failed");
+      return "rev";
+    });
+    await expect(fs.excerpt("a.md", "L1", "rev")).rejects.toThrow("scan failed");
+    fail = false;
+    await fs.excerpt("a.md", "L1", "rev");
+    expect(scans()).toBe(2);
+  });
+});
+
 describe("FsSource snapshots on disk", () => {
   let state = "";
   const snapshots = () => snapshotDirFor(state, "docs");

@@ -22,8 +22,10 @@ import {
   formatCitation,
   parseLineLocator,
   resolveCitedFile,
+  sliceLines,
   UNPINNED_REVISION,
   UnknownRevisionError,
+  type ExcerptResult,
   type LocationVerdict,
   type SourceAdapter,
 } from "@accreta/core";
@@ -409,6 +411,43 @@ export class FsSource implements SourceAdapter {
     }
 
     return [...changed].toSorted();
+  }
+
+  private recent: { at: number; revision: Promise<string> } | undefined;
+
+  /** One tree hash serves a judge pass's many excerpts; a short life keeps it from outliving an edit. */
+  private recentRevision(): Promise<string> {
+    if (!this.recent || Date.now() - this.recent.at > 2000) {
+      // The clock starts once the scan is done, or a slow scan would expire its own memo.
+      const entry = { at: Number.POSITIVE_INFINITY, revision: this.revision() };
+      entry.revision.then(
+        () => {
+          entry.at = Date.now();
+        },
+        () => {
+          if (this.recent === entry) this.recent = undefined;
+        },
+      );
+      this.recent = entry;
+    }
+    return this.recent.revision;
+  }
+
+  async excerpt(path: string, locator: string, revision: string): Promise<ExcerptResult> {
+    // A directory keeps no history: only the revision it is at now can be read.
+    if (revision !== (await this.recentRevision())) {
+      return { status: "unknown", detail: `source "${this.id}" keeps no history of ${revision}` };
+    }
+    const range = parseLineLocator(locator);
+    const full = resolveCitedFile(this.root, path, this.id);
+    if (!range || typeof full !== "string" || outOfScope(path, this.extensions)) {
+      return { status: "unknown", detail: `source "${this.id}" cannot read ${path}` };
+    }
+    const text = await readFile(full, "utf-8").catch(() => null);
+    const cited = text === null ? null : sliceLines(text, range);
+    return cited === null
+      ? { status: "unknown", detail: `source "${this.id}" cannot read ${path}` }
+      : { status: "text", text: cited };
   }
 
   /**

@@ -7,8 +7,10 @@ import {
   formatCitation,
   parseLineLocator,
   resolveCitedFile,
+  sliceLines,
   UNPINNED_REVISION,
   UnknownRevisionError,
+  type ExcerptResult,
   type LocationVerdict,
   type LocatorChange,
   type RevisionResolution,
@@ -520,6 +522,25 @@ export class GitSource implements SourceAdapter {
       if (fields[i] !== "unspecified" && fields[i] !== "unset") return true;
     }
     return false;
+  }
+
+  async excerpt(path: string, locator: string, revision: string): Promise<ExcerptResult> {
+    const range = parseLineLocator(locator);
+    const unreadable: ExcerptResult = {
+      status: "unknown",
+      detail: `source "${this.id}" cannot read ${path} at ${revision}`,
+    };
+    // Hex only, so a revision can never read as an option or a path to git.
+    if (!range || !/^[0-9a-f]{7,64}$/i.test(revision)) return unreadable;
+    if (typeof resolveCitedFile(this.root, path, this.id) !== "string") return unreadable;
+    try {
+      // `./` is relative to the source root, which need not be the repository top.
+      const blob = await git(this.root, ["show", `${revision}:./${path}`]);
+      const cited = sliceLines(blob, range);
+      return cited === null ? unreadable : { status: "text", text: cited };
+    } catch {
+      return unreadable;
+    }
   }
 
   /**
