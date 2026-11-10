@@ -44,7 +44,8 @@ locator with the changed hunks is independent of everything below, and is taken 
 
 **Off by default, and advisory only.** With no judge configured, accreta behaves exactly as today.
 With one configured:
-- `lint` may report `citation-unsupported`;
+- `lint` may report `citation-unsupported` (a judge's own finding is now `citation-unconfirmed`, and
+  `citation-unsupported` comes from a recorded verdict: amendment of 2026-11-09);
 - `search_pages` may rerank;
 - `check_drift` may order touched citations by risk.
 
@@ -110,8 +111,9 @@ amendment of 2026-11-10), and lint no longer reads it back.
 
 **Advisory is now mechanical.** Core holds `ADVISORY_LINT_KINDS` (#392). `lint`'s exit code
 counts only non-advisory findings, and JSON marks each advisory finding `advisory: true` and adds
-`advisory_count`. The advisory kinds are `uncited-sentence` (#391, built in #392), and
-`citation-unconfirmed` and `citation-unsupported`, which `lint --judge` adds with #153. This is
+`advisory_count`. The advisory kinds are `uncited-sentence` (#391, built in #392) and
+`citation-unconfirmed` for band 2, which `lint --judge` adds (#401). `citation-unsupported` for
+band 3, read back from the verdict file, is to join them with #405. This is
 the "never as lint errors that fail CI by default" consequence above, made checkable.
 
 **`uncited-sentence` is off by default in v0.3** (`lint.uncited_sentences`). With it on, the
