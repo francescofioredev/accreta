@@ -169,3 +169,9 @@ replaces the wording convention ("this suggests") in constitution rule 1 and in 
 `verify_citations` prompt. Any other prose sentence without a footnote is reported as uncited by
 the advisory lint kind `uncited-sentence` when `lint.uncited_sentences` is on (off by default;
 ADR-0014, amendment of 2026-11-09).
+
+## Amendment, 2026-11-10: what makes accreta read the cited lines
+
+Decided 2026-11-10, Francesco Fiore (#153). "Only for a configured judge" means both: the
+configuration has a `judge:` block, and the command was run with `--judge`. accreta calls
+`excerpt()` only then. Neither alone reads a source.
