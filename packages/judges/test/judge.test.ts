@@ -30,8 +30,8 @@ describe("the same config on two routes", () => {
     {
       name: "local",
       opts: {},
-      config: (url: string) => `judge:\n  route: local\n  url: ${url}\n`,
-      env: () => ({}),
+      config: () => "judge:\n  route: local\n",
+      env: (url: string) => ({ ACCRETA_JUDGE_URL: url }),
     },
     {
       name: "cloudflare",
@@ -48,7 +48,7 @@ describe("the same config on two routes", () => {
         choice: () => ({ supports: 0.8, contradicts: 0.1, says_nothing: 0.1 }),
       });
       const judge = createJudge(
-        parseConfig(c.config(server.url)),
+        parseConfig(c.config()),
         { ACCRETA_JUDGE_KEY: "fake", ...c.env(server.url) },
         fast,
       );
@@ -68,8 +68,8 @@ describe("the same config on two routes", () => {
     const body = await fake();
     const url = await fake({ envelope: ["result", "result"] });
     await createJudge(
-      parseConfig(`judge:\n  route: local\n  url: ${body.url}\n  model: m-1\n`),
-      {},
+      parseConfig("judge:\n  route: local\n  model: m-1\n"),
+      { ACCRETA_JUDGE_URL: body.url },
       fast,
     )!.probe!();
     expect(body.requests[0]?.body.model).toBe("m-1");
@@ -96,34 +96,35 @@ describe("the key", () => {
     expect(server.requests[0]?.headers.authorization).toBe("Bearer k1");
   });
 
-  test("a url in the file is refused on a route that sends a key, and the key never reaches it", async () => {
+  test("a url in the file is refused on every route, and nothing is sent", async () => {
     const server = await fake();
-    expect(() =>
-      createJudge(parseConfig(`judge:\n  route: typesafe\n  url: ${server.url}\n`), {
-        ACCRETA_JUDGE_KEY: "k1",
-      }),
-    ).toThrow("ACCRETA_JUDGE_URL");
+    for (const route of ["typesafe", "cloudflare", "local"]) {
+      expect(() =>
+        createJudge(parseConfig(`judge:\n  route: ${route}\n  url: ${server.url}\n`), {
+          ACCRETA_JUDGE_KEY: "k1",
+        }),
+      ).toThrow("ACCRETA_JUDGE_URL");
+    }
     expect(server.requests).toHaveLength(0);
   });
 
-  test("on the local route a file url gets no key, an env url does", async () => {
+  test("the env url wins over a url in the file", async () => {
     const server = await fake();
-    const config = parseConfig(`judge:\n  route: local\n  url: ${server.url}\n`);
-    await createJudge(config, { ACCRETA_JUDGE_KEY: "k1" }, fast)!.probe!();
-    expect(server.requests[0]?.headers.authorization).toBeUndefined();
+    const other = await fake();
     await createJudge(
-      parseConfig("judge:\n  route: local\n"),
+      parseConfig(`judge:\n  route: local\n  url: ${other.url}\n`),
       { ACCRETA_JUDGE_KEY: "k1", ACCRETA_JUDGE_URL: server.url },
       fast,
     )!.probe!();
-    expect(server.requests[1]?.headers.authorization).toBe("Bearer k1");
+    expect(server.requests[0]?.headers.authorization).toBe("Bearer k1");
+    expect(other.requests).toHaveLength(0);
   });
 
-  test("api_key_env must be an ACCRETA_ variable", () => {
-    const config = parseConfig(
-      "judge:\n  route: local\n  url: http://x\n  api_key_env: GITHUB_TOKEN\n",
+  test("api_key_env must be an ACCRETA_JUDGE_ variable", () => {
+    const config = parseConfig("judge:\n  route: local\n  api_key_env: GITHUB_TOKEN\n");
+    expect(() => createJudge(config, { GITHUB_TOKEN: "ghp_x" })).toThrow(
+      "starting with ACCRETA_JUDGE_",
     );
-    expect(() => createJudge(config, { GITHUB_TOKEN: "ghp_x" })).toThrow("starting with ACCRETA_");
     expect(() => createJudge(config, { GITHUB_TOKEN: "ghp_x" })).not.toThrow("ghp_x");
   });
 
@@ -137,9 +138,9 @@ describe("the key", () => {
   test("is read from the variable api_key_env names and sent as a bearer", async () => {
     const server = await fake();
     const judge = createJudge(
-      parseConfig(`judge:\n  route: local\n  api_key_env: ACCRETA_MY_JUDGE_VAR\n`),
+      parseConfig(`judge:\n  route: local\n  api_key_env: ACCRETA_JUDGE_MY_VAR\n`),
       {
-        ACCRETA_MY_JUDGE_VAR: "secret-from-env",
+        ACCRETA_JUDGE_MY_VAR: "secret-from-env",
         ACCRETA_JUDGE_KEY: "other",
         ACCRETA_JUDGE_URL: server.url,
       },
@@ -151,8 +152,11 @@ describe("the key", () => {
 
   test("a local route without a key sends none", async () => {
     const server = await fake();
-    await createJudge(parseConfig(`judge:\n  route: local\n  url: ${server.url}\n`), {}, fast)!
-      .probe!();
+    await createJudge(
+      parseConfig("judge:\n  route: local\n"),
+      { ACCRETA_JUDGE_URL: server.url },
+      fast,
+    )!.probe!();
     expect(server.requests[0]?.headers.authorization).toBeUndefined();
   });
 
@@ -182,8 +186,8 @@ describe("failures", () => {
   test("a 503 is retried and then answers", async () => {
     const server = await fake({ failWith: [503, 429] });
     const judge = createJudge(
-      parseConfig(`judge:\n  route: local\n  url: ${server.url}\n`),
-      {},
+      parseConfig("judge:\n  route: local\n"),
+      { ACCRETA_JUDGE_URL: server.url },
       fast,
     );
     expect((await judge!.probe!()).model).toBe("fake-jev-1");
@@ -193,8 +197,8 @@ describe("failures", () => {
   test("retries run out", async () => {
     const server = await fake({ failWith: [503, 503, 503] });
     const judge = createJudge(
-      parseConfig(`judge:\n  route: local\n  url: ${server.url}\n`),
-      {},
+      parseConfig("judge:\n  route: local\n"),
+      { ACCRETA_JUDGE_URL: server.url },
       fast,
     );
     await expect(judge!.probe!()).rejects.toThrow("HTTP 503");
@@ -203,8 +207,8 @@ describe("failures", () => {
   test("a 400 is not retried", async () => {
     const server = await fake({ failWith: [400] });
     const judge = createJudge(
-      parseConfig(`judge:\n  route: local\n  url: ${server.url}\n`),
-      {},
+      parseConfig("judge:\n  route: local\n"),
+      { ACCRETA_JUDGE_URL: server.url },
       fast,
     );
     await expect(judge!.probe!()).rejects.toBeInstanceOf(JudgeUnavailableError);
@@ -215,7 +219,11 @@ describe("failures", () => {
     const server = await fake();
     const url = server.url;
     await server.close();
-    const judge = createJudge(parseConfig(`judge:\n  route: local\n  url: ${url}\n`), {}, fast);
+    const judge = createJudge(
+      parseConfig("judge:\n  route: local\n"),
+      { ACCRETA_JUDGE_URL: url },
+      fast,
+    );
     await expect(judge!.rank("q", candidates)).rejects.toBeInstanceOf(JudgeUnavailableError);
   });
 
@@ -224,8 +232,8 @@ describe("failures", () => {
       rawReply: { model: "m", answers: { verdict: { probabilities: { supports: 0.9 } } } },
     });
     const judge = createJudge(
-      parseConfig(`judge:\n  route: local\n  url: ${server.url}\n`),
-      {},
+      parseConfig("judge:\n  route: local\n"),
+      { ACCRETA_JUDGE_URL: server.url },
       fast,
     );
     await expect(judge!.supports("c", "t")).rejects.toThrow("not in the expected shape");
@@ -236,8 +244,8 @@ describe("what the judge sees", () => {
   test("supports sends the claim and the cited text and nothing else", async () => {
     const server = await fake();
     const judge = createJudge(
-      parseConfig(`judge:\n  route: local\n  url: ${server.url}\n`),
-      {},
+      parseConfig("judge:\n  route: local\n"),
+      { ACCRETA_JUDGE_URL: server.url },
       fast,
     );
     await judge!.supports("the claim", "the cited lines");
@@ -250,8 +258,8 @@ describe("what the judge sees", () => {
   test("rank names candidates by position, not by the page's own id", async () => {
     const server = await fake();
     const judge = createJudge(
-      parseConfig(`judge:\n  route: local\n  url: ${server.url}\n`),
-      {},
+      parseConfig("judge:\n  route: local\n"),
+      { ACCRETA_JUDGE_URL: server.url },
       fast,
     );
     await judge!.rank("q", candidates);

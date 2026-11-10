@@ -10,6 +10,7 @@ import {
   stateDirFor,
 } from "@accreta/adapters";
 import { CONFIG_FILENAME, findWorkspace } from "../workspace.ts";
+import { reportJudge } from "./doctor-judge.ts";
 import { reportMcp } from "./mcp-config.ts";
 import { printable, printableMessage, reportPreflight, type CommandContext } from "./shared.ts";
 import { compareVersions, findInstalledSkills, SKILL_NAME } from "./skill-floor.ts";
@@ -111,6 +112,8 @@ export async function doctor(ctx: CommandContext, version: string): Promise<numb
   }
 
   if (reportMcp(ctx, workspace.root)) exitCode = 1;
+
+  if ((await reportJudge(ctx, workspace)) !== 0) exitCode = 1;
 
   reportSkill(ctx, version);
 

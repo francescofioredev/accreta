@@ -35,25 +35,18 @@ export function createJudge(
     );
   }
   // A url in a cloned knowledge base must not receive the key: only the environment may move it.
-  const fileUrl = settings.url !== undefined && !settings.urlFromEnv;
-  if (fileUrl && route.keyRequired) {
+  if (settings.url !== undefined && !settings.urlFromEnv) {
     throw new JudgeConfigError(
-      `judge.url in the config file is not read on the ${name} route, which sends a key; set ACCRETA_JUDGE_URL`,
+      "judge.url in the config file is not read; set ACCRETA_JUDGE_URL to point the judge elsewhere",
     );
   }
-  const url = fileUrl ? settings.url : (settings.url ?? route.url);
-  if (!url) {
-    throw new JudgeConfigError(
-      route.keyRequired
-        ? `ACCRETA_JUDGE_URL is required for the ${name} route`
-        : `judge.url is required for the ${name} route`,
-    );
-  }
+  const url = settings.url ?? route.url;
+  if (!url) throw new JudgeConfigError(`ACCRETA_JUDGE_URL is required for the ${name} route`);
 
   if (route.modelIn === "url" && !url.includes("{model}")) {
     throw new JudgeConfigError(`judge.url for the ${name} route must contain {model}`);
   }
-  const apiKey = fileUrl ? undefined : env[settings.apiKeyEnv]?.trim() || undefined;
+  const apiKey = env[settings.apiKeyEnv]?.trim() || undefined;
   if (route.keyRequired && !apiKey) {
     throw new JudgeConfigError(`${settings.apiKeyEnv} is not set; the ${name} route needs a key`);
   }

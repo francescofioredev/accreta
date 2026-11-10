@@ -38,6 +38,7 @@
   "dependencies": {
     "@accreta/adapters": "0.2.0-rc.1",
     "@accreta/core": "0.2.0-rc.1",
+    "@accreta/judges": "0.2.0-rc.1",
     "@accreta/mcp-server": "0.2.0-rc.1",
     "smol-toml": "^1.9.0"
   },

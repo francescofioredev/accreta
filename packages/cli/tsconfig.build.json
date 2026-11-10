@@ -3,6 +3,7 @@
   "references": [
     { "path": "../core/tsconfig.build.json" },
     { "path": "../adapters/registry/tsconfig.build.json" },
+    { "path": "../judges/tsconfig.build.json" },
     { "path": "../mcp-server/tsconfig.build.json" }
   ]
 }
