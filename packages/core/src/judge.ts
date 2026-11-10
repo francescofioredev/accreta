@@ -78,6 +78,8 @@ export interface JudgeSettings {
   url?: string;
   /** The url came from `ACCRETA_JUDGE_URL`, not from the file: only then may a key go to it. */
   urlFromEnv: boolean;
+  /** The config file has a `url`, which is never read. */
+  urlInFile: boolean;
   model?: string;
   apiKeyEnv: string;
   rerankTop: number;
@@ -116,6 +118,7 @@ export function resolveJudgeSettings(
     route: text("ROUTE") ?? block.route,
     url: text("URL") ?? block.url,
     urlFromEnv: text("URL") !== undefined,
+    urlInFile: block.url !== undefined,
     model: text("MODEL") ?? block.model,
     apiKeyEnv: text("API_KEY_ENV") ?? block.apiKeyEnv ?? JUDGE_DEFAULTS.apiKeyEnv,
     rerankTop:
@@ -131,7 +134,7 @@ export function resolveJudgeSettings(
   };
   if (!settings.route) problems.push("judge.route is not set");
   // A file in a cloned knowledge base must not be able to name GITHUB_TOKEN as the key to send.
-  if (!settings.apiKeyEnv.startsWith("ACCRETA_"))
-    problems.push("the api_key_env setting must name a variable starting with ACCRETA_");
+  if (!settings.apiKeyEnv.startsWith("ACCRETA_JUDGE_"))
+    problems.push("the api_key_env setting must name a variable starting with ACCRETA_JUDGE_");
   return settings;
 }

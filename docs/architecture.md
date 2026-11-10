@@ -128,6 +128,13 @@ ordinary stemmed ranking. That covers a near miss such as `stale_serve`, and als
 Semantic search is **not built**. [ADR-0001](adr/0001-lexical-search-first.md) measured 85%
 recall@1 without it and keeps it optional and unbuilt until a benchmark says otherwise.
 
+### An optional judge
+
+A `judge:` block in `accreta.config.yaml` adds a model that answers narrow questions as
+probabilities ([ADR-0014](adr/0014-an-optional-judge-port.md)). Core holds only the `Judge`
+port; `@accreta/judges` implements it, and the CLI and MCP server build it from config the way
+they build adapters. No block, no judge, no network call. Setup and privacy: [judge.md](judge.md).
+
 ## Pages
 
 A page is markdown with YAML frontmatter:
