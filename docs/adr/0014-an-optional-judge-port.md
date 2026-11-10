@@ -104,8 +104,9 @@ whose lines cannot be read is counted in `citations_unjudged`, never a finding.
 
 **Verdicts live in a tracked file in the knowledge base** (path in config), one line per verdict,
 keyed by page, footnote, citation text and a hash of the sentence. The file is not part of the
-index, which stays derived (ADR-0004). `accreta verdict` and an MCP tool are to write it. Any
-edit to the sentence or re-pin of the citation voids the verdict, and lint no longer reads it back.
+index, which stays derived (ADR-0004). `accreta verdict` and an MCP tool are to write it. An edit
+to the sentence or a re-pin of the citation voids the verdict (the key names the pinned revision:
+amendment of 2026-11-10), and lint no longer reads it back.
 
 **Advisory is now mechanical.** Core holds `ADVISORY_LINT_KINDS` (#392). `lint`'s exit code
 counts only non-advisory findings, and JSON marks each advisory finding `advisory: true` and adds
@@ -123,24 +124,25 @@ is measured. The inference marker it checks for is recorded in ADR-0011's amendm
 Decided 2026-11-10, Francesco Fiore (#393, #153).
 
 - **On every route, keyed or keyless, the judge URL can be overridden only by
-  `ACCRETA_JUDGE_URL`**, never by `judge.url` in `accreta.config.yaml`. Preset routes keep their
-  fixed hosts. A `url:` in a cloned configuration would otherwise decide where the judge key, and
-  the cited lines, are sent (ADR-0011, amendment of 2026-11-09). #393 applies the rule to keyed
-  routes; #153 extends it to keyless ones.
-- **`judge.api_key_env` accepts only names that start with `ACCRETA_JUDGE_`.** A cloned
-  configuration could otherwise name any variable in the environment and send its value to the
-  judge host.
+  `ACCRETA_JUDGE_URL`**, never by `judge.url` in `accreta.config.yaml`. A preset route uses its
+  fixed host unless `ACCRETA_JUDGE_URL` is set. A `url:` in a cloned configuration would
+  otherwise decide where the judge key (on a keyed route), the claim and its cited lines are sent
+  (ADR-0011, amendment of 2026-11-09). #393 applies the rule to keyed routes; #153 extends it to
+  keyless ones.
+- **`judge.api_key_env` accepts only names that start with `ACCRETA_JUDGE_`.** #393 requires the
+  `ACCRETA_` prefix; #153 narrows it. A cloned configuration could otherwise send the value of
+  another `ACCRETA_` variable to the judge host.
 
-## Amendment, 2026-11-10: what a verdict records, and who may write one
+## Amendment, 2026-11-10: what a verdict records, and how the MCP tool writes one
 
 Decided 2026-11-10, Francesco Fiore (#153).
 
 - **Each line of the verdict file records its writer, the model and the date.** Lint's band 3
   output shows all three, as band 2's detail names the judge and the model.
 - **The verdict key names the pinned revision explicitly**, beside page, footnote, citation text
-  and the sentence hash. A re-pin voids the verdict whatever the footnote format, including one
-  whose citation text carries no revision.
+  and the sentence hash, so a re-pin of the citation changes the key.
 - **The MCP verdict tool is gated like `update_verified_revision`**: off unless
   `ACCRETA_ALLOW_WRITES=1`, then a dry run whose confirm token the second call must return
-  ([architecture](../architecture.md)).
+  ([architecture](../architecture.md)). The gate covers the MCP tool only: any commit to the
+  knowledge base can add a verdict line.
 - **ADR-0004 is not amended here.** Whether it needs a note on the verdict file is #398.
