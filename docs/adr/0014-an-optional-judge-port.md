@@ -84,24 +84,29 @@ RFCs and on code.
 ## Amendment, 2026-11-09: citation support in three bands
 
 Decided 2026-11-09, Francesco Fiore: Gate 0 for the three bands, questions A2 and A4 for the
-verdict file and the `uncited-sentence` default (#153). `lint --judge` sorts each footnote whose
-cited lines can be read (ADR-0011, amendment of 2026-11-09):
+verdict file and the `uncited-sentence` default (#153). Citation support has three bands. Bands 1
+and 2 cover each footnote whose cited lines `lint --judge` can read (ADR-0011, amendment of
+2026-11-09):
 
 - **Band 1.** The judge gives p(supports) at or above τ (`judge.support.threshold`, default 0.73,
   the SciFact calibration in [T2](../research/2026-09-jev/experiments/t2-citation-support.md)).
   No finding.
 - **Band 2.** Below τ: advisory `citation-unconfirmed`, whose detail names the judge, the model,
-  the probability and τ. The agent's `verify_citations` pass re-reads these footnotes first. accreta
-  never calls a stronger model itself: the agent's pass is that tier.
-- **Band 3.** The agent's recorded verdict, read back by lint. A recorded "unsupported" yields
-  advisory `citation-unsupported`. A recorded "supported" silences band 2 for that sentence,
-  citation and revision.
+  the probability and τ. The agent's `verify_citations` pass re-reads these footnotes first.
+  accreta never calls a stronger model itself: the agent's pass is that tier.
+- **Band 3.** A verdict recorded in the verdict file, read back by lint. A recorded "unsupported"
+  yields advisory `citation-unsupported`. A recorded "supported" silences band 2 while the
+  verdict's key still matches.
 
-A citation whose lines cannot be read is counted in `citations_unjudged`, never a finding.
+This replaces "`lint` may report `citation-unsupported`" above: a judge's own finding is
+`citation-unconfirmed`, and `citation-unsupported` comes only from a recorded verdict. A citation
+whose lines cannot be read is counted in `citations_unjudged`, never a finding.
 
 **Verdicts live in a tracked file in the knowledge base** (path in config), one line per verdict,
-keyed by page, footnote, citation text and a hash of the sentence. `accreta verdict` and an MCP
-write tool write it. Any edit to the sentence or re-pin of the citation voids the verdict.
+keyed by page, footnote, citation text and a hash of the sentence. The file is not part of the
+index, which stays derived (ADR-0004). `accreta verdict` and an MCP tool write it. A verdict holds
+only while its key still matches the page: an edit to the sentence or a re-pin of the citation
+changes the key, and lint no longer reads it back.
 
 **Advisory is now mechanical.** Core holds `ADVISORY_LINT_KINDS`. `lint`'s exit code counts only
 non-advisory findings, and JSON marks each advisory finding `advisory: true` and adds
@@ -111,8 +116,8 @@ above, made checkable.
 
 **`uncited-sentence` is off by default in v0.3** (`lint.uncited_sentences`). With it on, the
 10-page climate demo gives 21 advisory findings (#392). The default is decided after the noise
-is measured on larger knowledge bases. The inference marker it checks for is recorded in
-ADR-0011's amendment of 2026-11-09.
+is measured. The inference marker it checks for is recorded in ADR-0011's amendment of
+2026-11-09.
 
 ## Amendment, 2026-11-10: a keyed route's URL comes only from the environment
 
