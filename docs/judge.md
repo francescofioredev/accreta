@@ -7,8 +7,8 @@ network call and behaves as it does without this feature.
 
 ## Privacy
 
-**Page text leaves your machine.** Reranking sends each candidate's title and summary to the
-judge; checking a citation sends the claim and the cited lines. Do not enable a judge on a
+**Page text leaves your machine.** Reranking sends each candidate's title and the first 600 characters
+of its body to the judge; checking a citation sends the claim and the cited lines. Do not enable a judge on a
 knowledge base whose content may not go to the route you choose.
 
 ## Configure
@@ -45,6 +45,23 @@ Two rules keep a cloned knowledge base from taking your key somewhere else:
 
 A `local` server that wants a key is reached the same way: set `ACCRETA_JUDGE_URL` and the key
 variable in the shell. A `url:` in the file is never used to reach it.
+
+## Rerank
+
+`accreta search <query> --rerank` and `search_pages` with `rerank: true` ask the judge to reorder
+the hits. One call carries the first `rerank.top` hits (default 20, at most 50) as title and body
+start; the hits come back highest probability first, the rest after them in search order. A
+`--limit` is applied after the reorder, so a hit from below it can be promoted into it. Each
+judged hit carries `judge`, `model` and `probability` (`--json`, and the MCP result); text output
+prints `judged p=…`.
+
+Reranking is advisory. With no `judge:` block, an unusable one or an unreachable judge, the
+search order stands, the exit code is 0, and one warning says why (`rerank_note` in JSON and MCP).
+Without the flag nothing is sent. Searching without a judge is unchanged.
+
+The study this follows measured paraphrase recall@1 rising from 70.0% to 86.0% on a catalogue of
+RFCs (`docs/research/2026-09-jev/experiments/t4-wiki-navigation.md`). That is the study's figure
+on its own corpus, not a measurement of yours.
 
 ## Keys, least privilege
 

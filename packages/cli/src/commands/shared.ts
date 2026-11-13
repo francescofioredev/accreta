@@ -81,7 +81,7 @@ export const COMMAND_ARGS: Readonly<Record<string, CommandArgs>> = {
   doctor: { flags: [], maxPositional: 0 },
   source: { flags: ["--set"], maxPositional: 3 },
   search: {
-    flags: ["--type", "--source", "--limit", "--json"],
+    flags: ["--type", "--source", "--limit", "--json", "--rerank"],
     maxPositional: Infinity,
     pending: { "--cursor": "#183" },
   },

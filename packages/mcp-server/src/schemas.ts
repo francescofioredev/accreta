@@ -22,8 +22,20 @@ export const searchPagesOutput = z.object({
       snippet: z.string(),
       last_verified_revision: z.string().nullable(),
       matched_aliases: z.array(z.string()).optional(),
+      judge: z.string().optional().describe("Only on a reranked hit: the route that judged it."),
+      model: z.string().optional().describe("Only on a reranked hit: the model that judged it."),
+      probability: z
+        .number()
+        .optional()
+        .describe("Only on a reranked hit: P(this is the page the query asks for), 0 to 1."),
     }),
   ),
+  rerank_note: z
+    .string()
+    .optional()
+    .describe(
+      "Only when rerank was asked and could not be done: why, and that the order is the search's.",
+    ),
   _provenance: provenance(),
 });
 

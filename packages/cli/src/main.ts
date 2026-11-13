@@ -39,7 +39,8 @@ Usage: accreta <command> [arguments]
   doctor                   Report what is wired up, and what cannot be checked from here
   source add <type> <id>   Write a source declaration (--set key=value, repeatable)
   search <query>           Full-text search (--type <type>, repeatable; --source <id>;
-                           --limit <n>, 1-50, default 20)
+                           --limit <n>, 1-50, default 20; --rerank asks the configured
+                           judge to reorder the hits, see docs/judge.md)
   show <path|wikilink>     Print a page
   consumers <path>         Links in and out of this page, by any field (← declared
                            elsewhere, → declared here; the field, not the arrow,
@@ -102,6 +103,7 @@ function parseArgs(argv: string[]): ParsedArgs & {
   strict: boolean;
   json: boolean;
   judge: boolean;
+  rerank: boolean;
   limit?: string;
   cursor?: string;
   source?: string;
@@ -123,6 +125,7 @@ function parseArgs(argv: string[]): ParsedArgs & {
   let strict = false;
   let json = false;
   let judge = false;
+  let rerank = false;
   let limit: string | undefined;
   let cursor: string | undefined;
   let source: string | undefined;
@@ -195,6 +198,10 @@ function parseArgs(argv: string[]): ParsedArgs & {
       judge = flag();
       continue;
     }
+    if (arg === "--rerank") {
+      rerank = flag();
+      continue;
+    }
     if (arg === "--limit") {
       limit = value();
       continue;
@@ -248,6 +255,7 @@ function parseArgs(argv: string[]): ParsedArgs & {
     strict,
     json,
     judge,
+    rerank,
     limit,
     cursor,
     source,
@@ -321,6 +329,7 @@ export async function run(argv: string[], ctx: CommandContext): Promise<number> 
         source,
         limit,
         json,
+        rerank: parsed.rerank,
       });
     case "show":
       return show(ctx, positional[0] ?? "", { json });
