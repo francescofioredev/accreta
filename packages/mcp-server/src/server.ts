@@ -156,7 +156,7 @@ export function createServer(ctx: ToolContext): McpServer {
           .boolean()
           .optional()
           .describe(
-            "Reorder the hits with the configured judge (needs a judge: block). Sends each hit's title and the start of its body to the judge, which is a service outside this machine. Reranked hits carry judge, model and probability; if the judge cannot answer, rerank_note says so and the order is the search's.",
+            "Reorder the hits with the configured judge (needs a judge: block). Sends each hit's title and the start of its body to the configured judge route. Reranked hits carry judge, model and probability; if the judge cannot answer, rerank_note says so and the order is the search's.",
           ),
       },
       outputSchema: searchPagesOutput,
